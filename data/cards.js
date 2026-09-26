@@ -4,16 +4,21 @@
 //   'exhaust' = removed from combat entirely
 // retain: true means the card always stays in hand at end of turn.
 //
+// animation: 'slash' (default) | 'heavy' | 'pierce' | 'magic'
+//
 // liveValues(state, ctx) → { key: "value to render in green" }
 // ctx = { attacker, target, allTargets }
 // Empty string hides the placeholder.
 
 // --- Damage math shared by player AND enemy cards ---
-export function damageFromContext(attacker, target, base, strengthMultiplier = 1) {
+// `isSpell` swaps the flat stat bonus from Strength → Focus.
+export function damageFromContext(attacker, target, base, strengthMultiplier = 1, isSpell = false) {
   if (!attacker || !target) return null;
   const scale = attacker.damageScale ?? 1;
-  const strBonus = (attacker.statuses?.strength || 0) * (strengthMultiplier ?? 1);
-  let dmg = (base * scale) + strBonus;
+  const flatBonus = isSpell
+    ? (attacker.statuses?.focus || 0)
+    : (attacker.statuses?.strength || 0) * (strengthMultiplier ?? 1);
+  let dmg = (base * scale) + flatBonus;
   if (attacker.statuses?.weak) dmg *= 0.75;
   if (target.statuses?.vulnerable) dmg *= 1.5;
   return Math.max(0, Math.floor(dmg));
@@ -23,20 +28,26 @@ export function damageFromContext(attacker, target, base, strengthMultiplier = 1
 export function liveDamage(base, opts = {}) {
   return (s, ctx) => {
     if (!ctx || !ctx.attacker || !ctx.target) return { live: '' };
-    const v = damageFromContext(ctx.attacker, ctx.target, base, opts.mult ?? 1);
+    const v = damageFromContext(
+      ctx.attacker, ctx.target, base,
+      opts.mult ?? 1,
+      opts.spell ?? false,
+    );
     if (v == null || v === base) return { live: '' };
     return { live: ` (${v})` };
   };
 }
 
 // Helper for AoE: shows per-target and total.
-export function liveAoE(base) {
+export function liveAoE(base, opts = {}) {
   return (s, ctx) => {
     if (!ctx || !ctx.attacker || !ctx.target) return { live: '' };
+    const spell = opts.spell ?? false;
     const living = (s.enemies || []).filter(e => e.hp > 0);
     if (living.length === 0) return { live: '' };
-    const per = damageFromContext(ctx.attacker, ctx.target, base);
-    const total = living.reduce((sum, e) => sum + damageFromContext(ctx.attacker, e, base), 0);
+    const per = damageFromContext(ctx.attacker, ctx.target, base, 1, spell);
+    const total = living.reduce(
+      (sum, e) => sum + damageFromContext(ctx.attacker, e, base, 1, spell), 0);
     if (living.length === 1 && per === base) return { live: '' };
     if (living.length === 1) return { live: ` (${per})` };
     return { live: ` (${per} each, ${total} total)` };
@@ -74,6 +85,7 @@ export const CARDS = {
   neutralize: {
     id: 'neutralize', name: 'Neutralize', cost: 0, rarity: 'starter',
     type: 'attack', target: 'enemy', destination: 'exhaust',
+    animation: 'pierce',
     text: 'Deal 3 damage.{live} Apply 1 Weak. Exhaust.',
     effects: [
       { kind: 'damage', amount: 3 },
@@ -88,6 +100,7 @@ export const CARDS = {
   cleave: {
     id: 'cleave', name: 'Cleave', cost: 1, rarity: 'common',
     type: 'attack', target: 'all-enemies', destination: 'exhaust',
+    animation: 'heavy',
     text: 'Deal 8 damage to all enemies.{live} Exhaust.',
     effects: [{ kind: 'damage', amount: 8 }],
     liveValues: liveAoE(8),
@@ -95,6 +108,7 @@ export const CARDS = {
   'body-slam': {
     id: 'body-slam', name: 'Body Slam', cost: 1, rarity: 'common',
     type: 'attack', target: 'enemy', destination: 'discard',
+    animation: 'heavy',
     text: 'Deal damage equal to your Block.{live}',
     effects: [{ kind: 'damageEqualToBlock' }],
     liveValues: (s, ctx) => {
@@ -121,6 +135,7 @@ export const CARDS = {
   'pommel-strike': {
     id: 'pommel-strike', name: 'Pommel Strike', cost: 1, rarity: 'common',
     type: 'attack', target: 'enemy', destination: 'discard',
+    animation: 'pierce',
     text: 'Deal 9 damage.{live} Draw 1.',
     effects: [
       { kind: 'damage', amount: 9 },
@@ -131,6 +146,7 @@ export const CARDS = {
   'twin-strike': {
     id: 'twin-strike', name: 'Twin Strike', cost: 1, rarity: 'common',
     type: 'attack', target: 'enemy', destination: 'exhaust',
+    animation: 'pierce',
     text: 'Deal 5 damage twice.{live} Exhaust.',
     effects: [
       { kind: 'damage', amount: 5 },
@@ -153,6 +169,7 @@ export const CARDS = {
   'quick-slash': {
     id: 'quick-slash', name: 'Quick Slash', cost: 1, rarity: 'common',
     type: 'attack', target: 'enemy', destination: 'discard',
+    animation: 'pierce',
     text: 'Deal 8 damage.{live} Draw 2.',
     effects: [
       { kind: 'damage', amount: 8 },
@@ -163,6 +180,7 @@ export const CARDS = {
   clothesline: {
     id: 'clothesline', name: 'Clothesline', cost: 2, rarity: 'common',
     type: 'attack', target: 'enemy', destination: 'exhaust',
+    animation: 'heavy',
     text: 'Deal 12 damage.{live} Apply 2 Weak. Exhaust.',
     effects: [
       { kind: 'damage', amount: 12 },
@@ -173,6 +191,7 @@ export const CARDS = {
   'heavy-blade': {
     id: 'heavy-blade', name: 'Heavy Blade', cost: 2, rarity: 'common',
     type: 'attack', target: 'enemy', destination: 'exhaust',
+    animation: 'heavy',
     text: 'Deal 14 damage. Strength counts 3×.{live} Exhaust.',
     effects: [{ kind: 'damage', amount: 14, strengthMultiplier: 3 }],
     liveValues: liveDamage(14, { mult: 3 }),
@@ -191,7 +210,8 @@ export const CARDS = {
       if (!living.length) return { live: '' };
       const perHit = damageFromContext(ctx.attacker, ctx.target, 6);
       const perTarget = perHit * 2;
-      const total = living.reduce((sum, e) => sum + damageFromContext(ctx.attacker, e, 6) * 2, 0);
+      const total = living.reduce(
+        (sum, e) => sum + damageFromContext(ctx.attacker, e, 6) * 2, 0);
       if (living.length === 1 && perTarget === 12) return { live: '' };
       if (living.length === 1) return { live: ` (${perTarget})` };
       return { live: ` (${perTarget} each, ${total} total)` };
@@ -200,6 +220,7 @@ export const CARDS = {
   headbutt: {
     id: 'headbutt', name: 'Headbutt', cost: 1, rarity: 'common',
     type: 'attack', target: 'enemy', destination: 'exhaust',
+    animation: 'heavy',
     text: 'Deal 9 damage.{live} Put a random card from your discard pile on top of your draw pile. Exhaust.',
     effects: [
       { kind: 'damage', amount: 9 },
@@ -210,11 +231,12 @@ export const CARDS = {
   'perfected-strike': {
     id: 'perfected-strike', name: 'Perfected Strike', cost: 1, rarity: 'common',
     type: 'attack', target: 'enemy', destination: 'discard',
+    animation: 'heavy',
     text: 'Deal {damage} damage. +2 damage per card with "Strike" in your deck.{live}',
     effects: [{ kind: 'perfectedStrike', base: 6, perStrike: 2 }],
     liveValues: (s, ctx) => {
-      if (!s.run?.deckIds) return { damage: '6', live: '' };
-      const strikes = s.run.deckIds.filter(id => id.includes('strike')).length;
+      if (!s.run?.deck) return { damage: '6', live: '' };
+      const strikes = s.run.deck.filter(c => c.defId.includes('strike')).length;
       const base = 6 + 2 * strikes;
       const computed = ctx?.attacker && ctx?.target
         ? damageFromContext(ctx.attacker, ctx.target, base)
@@ -249,6 +271,7 @@ export const CARDS = {
   uppercut: {
     id: 'uppercut', name: 'Uppercut', cost: 2, rarity: 'common',
     type: 'attack', target: 'enemy', destination: 'exhaust',
+    animation: 'heavy',
     text: 'Deal 13 damage.{live} Apply 2 Weak and 2 Vulnerable. Exhaust.',
     effects: [
       { kind: 'damage', amount: 13 },
@@ -283,6 +306,82 @@ export const CARDS = {
   },
 
   // ================================================================
+  // SPELLS — scale with Focus, not Strength
+  // ================================================================
+  'arcane-bolt': {
+    id: 'arcane-bolt', name: 'Arcane Bolt', cost: 1, rarity: 'common',
+    type: 'spell', target: 'enemy', destination: 'discard',
+    animation: 'magic',
+    text: 'Deal 8 damage.{live}',
+    effects: [{ kind: 'damage', amount: 8 }],
+    liveValues: liveDamage(8, { spell: true }),
+  },
+  'frost-shard': {
+    id: 'frost-shard', name: 'Frost Shard', cost: 1, rarity: 'common',
+    type: 'spell', target: 'enemy', destination: 'discard',
+    animation: 'magic',
+    text: 'Deal 5 damage.{live} Apply 1 Weak.',
+    effects: [
+      { kind: 'damage', amount: 5 },
+      { kind: 'applyStatus', status: 'weak', amount: 1 },
+    ],
+    liveValues: liveDamage(5, { spell: true }),
+  },
+  ember: {
+    id: 'ember', name: 'Ember', cost: 1, rarity: 'common',
+    type: 'spell', target: 'enemy', destination: 'exhaust',
+    animation: 'magic',
+    text: 'Deal 5 damage.{live} Apply 2 Vulnerable. Exhaust.',
+    effects: [
+      { kind: 'damage', amount: 5 },
+      { kind: 'applyStatus', status: 'vulnerable', amount: 2 },
+    ],
+    liveValues: liveDamage(5, { spell: true }),
+  },
+  'arcane-focus': {
+    id: 'arcane-focus', name: 'Arcane Focus', cost: 0, rarity: 'common',
+    type: 'skill', target: 'self', destination: 'exhaust',
+    text: 'Gain 1 Focus. Draw 1. Exhaust.',
+    effects: [
+      { kind: 'applyStatus', status: 'focus', amount: 1 },
+      { kind: 'draw', amount: 1 },
+    ],
+  },
+  fireball: {
+    id: 'fireball', name: 'Fireball', cost: 2, rarity: 'uncommon',
+    type: 'spell', target: 'all-enemies', destination: 'discard',
+    animation: 'magic',
+    text: 'Deal 9 damage to all enemies.{live}',
+    effects: [{ kind: 'damage', amount: 9 }],
+    liveValues: liveAoE(9, { spell: true }),
+  },
+  attunement: {
+    id: 'attunement', name: 'Attunement', cost: 1, rarity: 'uncommon',
+    type: 'power', target: 'self', destination: 'exhaust',
+    text: 'Gain 2 Focus.',
+    effects: [{ kind: 'applyStatus', status: 'focus', amount: 2 }],
+  },
+  'soul-siphon': {
+    id: 'soul-siphon', name: 'Soul Siphon', cost: 2, rarity: 'rare',
+    type: 'spell', target: 'enemy', destination: 'exhaust',
+    animation: 'magic',
+    text: 'Deal 12 damage.{live} Heal 4 HP. Exhaust.',
+    effects: [
+      { kind: 'damage', amount: 12 },
+      { kind: 'heal', amount: 4 },
+    ],
+    liveValues: liveDamage(12, { spell: true }),
+  },
+  'void-rift': {
+    id: 'void-rift', name: 'Void Rift', cost: 3, rarity: 'rare',
+    type: 'spell', target: 'enemy', destination: 'exhaust',
+    animation: 'magic',
+    text: 'Deal 26 damage.{live} Exhaust.',
+    effects: [{ kind: 'damage', amount: 26 }],
+    liveValues: liveDamage(26, { spell: true }),
+  },
+
+  // ================================================================
   // EXHAUST PILE GAMBLERS
   // ================================================================
   'grave-robber': {
@@ -300,6 +399,7 @@ export const CARDS = {
   'necromancers-pact': {
     id: 'necromancers-pact', name: "Necromancer's Pact", cost: 2, rarity: 'rare',
     type: 'attack', target: 'enemy', destination: 'exhaust',
+    animation: 'magic',
     text: 'Exhaust a random card in your discard pile. Deal damage equal to its damage. Exhaust.',
     effects: [{ kind: 'necromancersPact' }],
   },
@@ -310,6 +410,7 @@ export const CARDS = {
   'forked-strike': {
     id: 'forked-strike', name: 'Forked Strike', cost: 1, rarity: 'common',
     type: 'attack', target: 'enemy', destination: 'discard', retain: true,
+    animation: 'pierce',
     text: 'Deal 7 damage.{live} Retain.',
     effects: [{ kind: 'damage', amount: 7 }],
     liveValues: liveDamage(7),
@@ -323,6 +424,7 @@ export const CARDS = {
   rebound: {
     id: 'rebound', name: 'Rebound', cost: 1, rarity: 'common',
     type: 'attack', target: 'enemy', destination: 'discard', retain: true,
+    animation: 'pierce',
     text: 'Deal 9 damage.{live} Retain.',
     effects: [{ kind: 'damage', amount: 9 }],
     liveValues: liveDamage(9),
@@ -378,6 +480,7 @@ export const CARDS = {
   'fiend-fire': {
     id: 'fiend-fire', name: 'Fiend Fire', cost: 2, rarity: 'rare',
     type: 'attack', target: 'enemy', destination: 'discard',
+    animation: 'magic',
     text: 'Put all cards in your hand into your discard pile. Deal 2 damage per card discarded.{live}',
     effects: [{ kind: 'fiendFire', amount: 2 }],
     liveValues: (s, ctx) => {
@@ -479,6 +582,7 @@ export const CARDS = {
   'blood-for-blood': {
     id: 'blood-for-blood', name: 'Blood for Blood', cost: 3, rarity: 'common',
     type: 'attack', target: 'enemy', destination: 'exhaust',
+    animation: 'heavy',
     text: 'Costs 1 less per 8 HP lost this combat. Deal 18 damage.{live} Exhaust.',
     effects: [{ kind: 'damage', amount: 18 }],
     costReduction: { kind: 'hpLost', per: 8, min: 0 },
@@ -525,8 +629,9 @@ export const CARDS = {
   whirlwind: {
     id: 'whirlwind', name: 'Whirlwind', cost: -1, rarity: 'rare',
     type: 'attack', target: 'all-enemies', destination: 'exhaust',
+    animation: 'heavy',
     text: 'Deal 5 damage to ALL enemies X times.{live} Costs all your Energy. Exhaust.',
-    effects: [{ kind: 'whirlwind', amount: 5 }],
+    effects: [{ kind: 'damage', amount: 5 }],
     xCost: true,
     liveValues: (s, ctx) => {
       if (!ctx?.attacker || !ctx?.target) return { live: '' };
@@ -535,7 +640,8 @@ export const CARDS = {
       const living = (s.enemies || []).filter(e => e.hp > 0);
       if (!living.length) return { live: '' };
       const perTarget = damageFromContext(ctx.attacker, ctx.target, 5) * energy;
-      const total = living.reduce((sum, e) => sum + damageFromContext(ctx.attacker, e, 5) * energy, 0);
+      const total = living.reduce(
+        (sum, e) => sum + damageFromContext(ctx.attacker, e, 5) * energy, 0);
       if (living.length === 1) return { live: ` (${perTarget})` };
       return { live: ` (${perTarget} each, ${total} total)` };
     },
@@ -547,6 +653,7 @@ export const CARDS = {
   'last-stand': {
     id: 'last-stand', name: 'Last Stand', cost: 1, rarity: 'rare',
     type: 'attack', target: 'enemy', destination: 'exhaust',
+    animation: 'heavy',
     endsTurn: true,
     text: 'End your turn. Deal 6 damage plus 1 per card in your hand.{live}',
     effects: [{ kind: 'lastStand', base: 6 }],
@@ -561,6 +668,7 @@ export const CARDS = {
   reaper: {
     id: 'reaper', name: 'Reaper', cost: 2, rarity: 'rare',
     type: 'attack', target: 'all-enemies', destination: 'exhaust',
+    animation: 'magic',
     text: 'Deal 4 damage to all enemies.{live} Heal HP equal to unblocked damage dealt. Exhaust.',
     effects: [{ kind: 'reaper', amount: 4 }],
     liveValues: liveAoE(4),
@@ -586,6 +694,7 @@ export const CARDS = {
   bludgeon: {
     id: 'bludgeon', name: 'Bludgeon', cost: 3, rarity: 'rare',
     type: 'attack', target: 'enemy', destination: 'exhaust',
+    animation: 'heavy',
     text: 'Deal 32 damage.{live} Exhaust.',
     effects: [{ kind: 'damage', amount: 32 }],
     liveValues: liveDamage(32),
