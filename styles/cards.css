@@ -98,10 +98,29 @@
   box-shadow: 0 4px 12px rgba(0,0,0,.35);
 }
 
+/* ============================================================
+   CARD TYPES
+   ============================================================ */
+
 .card.type-attack { --type-color: #ff6b6b; }
 .card.type-skill  { --type-color: #6fb3ff; }
 .card.type-power  { --type-color: #c9a3ff; }
+.card.type-spell  { --type-color: #a78bfa; }
 .card.type-status { --type-color: #6b7280; }
+
+.card.type-spell {
+  background: linear-gradient(180deg, #241f3a, #18142a);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(167, 139, 250, 0.2) inset;
+}
+
+.card.type-spell::after { box-shadow: 0 0 12px rgba(167, 139, 250, .8); }
+.card.type-spell .cname  { color: #c9b8ff; }
+
+/* ============================================================
+   RARITY
+   ============================================================ */
 
 .card.rarity-starter { border-color: #4a5262; }
 
@@ -123,6 +142,10 @@
   background: linear-gradient(180deg, #2c2a30, #1e1c22);
   filter: grayscale(.4);
 }
+
+/* ============================================================
+   STATES
+   ============================================================ */
 
 .card.pending {
   border-color: #ff8f6b;
@@ -191,6 +214,10 @@
     filter: drop-shadow(0 0 30px rgba(255,143,107,0));
   }
 }
+
+/* ============================================================
+   CARD CONTENT
+   ============================================================ */
 
 .cost {
   background: radial-gradient(circle at 30% 30%, #ffe699, #ffb800);
