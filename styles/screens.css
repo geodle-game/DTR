@@ -238,6 +238,7 @@
 .status.vulnerable { color: #ff9b6b; border-color: #5a3a2a; }
 .status.weak       { color: #ff6b9b; border-color: #5a2a3a; }
 .status.strength   { color: #ffd166; border-color: #5a4a2a; }
+.status.focus      { color: #a78bfa; border-color: #4a3a5a; }
 
 .target-hint {
   text-align: center;
