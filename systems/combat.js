@@ -216,8 +216,15 @@ function applyEffect(eff, targets, card, source) {
   switch (eff.kind) {
     case 'damage': {
       const bonus = enchantDamageBonus(card, source);
+      const def = CARDS[card.defId] || ENEMY_CARDS[card.defId];
+      const isSpell = def?.type === 'spell';
       for (const t of targets) {
-        const r = dealDamage(source, t, eff.amount + bonus, eff.strengthMultiplier);
+        const r = dealDamage(
+          source, t,
+          eff.amount + bonus,
+          eff.strengthMultiplier,
+          { isSpell },
+        );
         pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}).`);
       }
       break;
@@ -225,10 +232,12 @@ function applyEffect(eff, targets, card, source) {
 
     case 'damageRandom': {
       const bonus = enchantDamageBonus(card, source);
+      const def = CARDS[card.defId] || ENEMY_CARDS[card.defId];
+      const isSpell = def?.type === 'spell';
       const pool = livingEnemies();
       if (!pool.length) break;
       const t = pool[Math.floor(state.rng() * pool.length)];
-      const r = dealDamage(source, t, eff.amount + bonus);
+      const r = dealDamage(source, t, eff.amount + bonus, undefined, { isSpell });
       pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}).`);
       break;
     }
@@ -720,10 +729,15 @@ function applyEffect(eff, targets, card, source) {
   }
 }
 
-export function dealDamage(attacker, target, base, strengthMultiplier) {
+export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}) {
+  const isSpell = opts.isSpell === true;
+
   const scale = attacker.damageScale ?? 1;
-  const strBonus = outgoingFlatBonus(attacker) * (strengthMultiplier ?? 1);
-  let dmg = (base * scale) + strBonus;
+  const flatBonus = isSpell
+    ? outgoingFlatBonus(attacker, true)
+    : outgoingFlatBonus(attacker) * (strengthMultiplier ?? 1);
+
+  let dmg = (base * scale) + flatBonus;
   dmg *= outgoingMultiplier(attacker);
   dmg *= incomingMultiplier(target);
 
