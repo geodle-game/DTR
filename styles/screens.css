@@ -380,7 +380,7 @@
 .victory-title.loss { color: #e05c5c; text-shadow: 0 0 20px rgba(224,92,92,.5); }
 
 /* ============================================================
-   DEATH / RESURRECTION OVERLAY
+   DEATH
    ============================================================ */
 
 .victory-overlay:has(.death-text) {
@@ -442,10 +442,6 @@
 
 .death-btn { margin-top: 8px; }
 
-/* ============================================================
-   DEATH — pagination
-   ============================================================ */
-
 .death-page {
   display: flex;
   flex-direction: column;
@@ -506,7 +502,7 @@
 }
 
 /* ============================================================
-   MAIN MENU / SPLASH SCREEN
+   MAIN MENU
    ============================================================ */
 
 .main-menu {
@@ -604,7 +600,7 @@
   letter-spacing: .1em;
   text-transform: uppercase;
   margin-top: 8px;
-  margin-bottom: 24px;
+  margin-bottom: 8px;
 }
 
 @media (max-width: 600px) {
@@ -1071,3 +1067,31 @@
 .gold-coin.coin-3 { background-image: url('../assets/coin3.png'); }
 .gold-coin.coin-4 { background-image: url('../assets/coin4.png'); }
 .gold-coin.coin-5 { background-image: url('../assets/coin5.png'); }
+
+/* ============================================================
+   MULTIPLAYER
+   ============================================================ */
+
+.mp-textarea {
+  width: 100%;
+  max-width: 600px;
+  box-sizing: border-box;
+  background: #0e0f13;
+  border: 1px solid #3a4250;
+  border-radius: 10px;
+  color: #c8cdd7;
+  padding: 12px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  resize: vertical;
+  word-break: break-all;
+  margin-top: 6px;
+  -webkit-appearance: none;
+}
+
+.mp-textarea:focus {
+  outline: none;
+  border-color: #8f6bff;
+  box-shadow: 0 0 0 3px rgba(143,107,255,.25);
+}
