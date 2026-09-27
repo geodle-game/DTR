@@ -11,6 +11,7 @@ import { rollShop } from '../data/shop.js';
 import { bannerForCombat } from '../data/banners.js';
 import { rollEnchant, getEnchant } from '../data/enchants.js';
 import { BOSSES } from '../data/bosses/index.js';
+import { clearSave } from './save.js';
 
 const BOSS_LORE = {};
 for (const bossModule of BOSSES) {
@@ -158,9 +159,8 @@ export function newRun(seed = Date.now()) {
 export function chooseRelic(relicId) {
   state.run.relic = relicId;
   state.run.relics = [relicId];
-  // 15-card starter deck: 3 Strikes, 2 Defends, 10 rolled from the pool.
-  // Bash, Neutralize, and uncommons are all rollable thanks to the
-  // updated rarity filter in cards.js.
+  // 15-card starter deck. Bash and Neutralize are in the 'starter'
+  // rarity pool and roll naturally at ~30% per slot.
   state.run.deck = randomStartingDeck(state.rng, 15).map(makeDeckEntry);
   state.screen = 'deckView';
 }
@@ -472,10 +472,12 @@ export function claimActReward() {
 }
 
 export function finishRun() {
+  clearSave();
   state.screen = 'victory';
 }
 
 export function returnToMainMenu() {
+  clearSave();
   state.screen = 'mainMenu';
   state.run = null;
   state.combat = null;
