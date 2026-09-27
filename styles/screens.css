@@ -413,12 +413,6 @@
   line-height: 1.7;
   color: #c8cdd7;
   font-family: Georgia, "Times New Roman", serif;
-  animation: deathFadeIn 1.2s ease-out;
-}
-
-@keyframes deathFadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
 }
 
 .death-text p { margin: 0; }
@@ -447,6 +441,69 @@
 }
 
 .death-btn { margin-top: 8px; }
+
+/* ============================================================
+   DEATH — pagination
+   ============================================================ */
+
+.death-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: center;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #c8cdd7;
+  animation: deathPageIn .55s ease-out;
+}
+
+@keyframes deathPageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.death-page p { margin: 0; }
+
+.death-page .death-emphasis {
+  color: #ffd166;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  font-size: 14px;
+  text-shadow: 0 0 20px rgba(255, 209, 102, .7);
+  animation: deathPulse 2.4s ease-in-out infinite;
+}
+
+.death-page .death-last {
+  color: #c9a3ff;
+  font-style: italic;
+  margin-top: 8px;
+  font-size: 16px;
+  letter-spacing: .02em;
+}
+
+.death-page-dots {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+
+.death-page-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(201, 163, 255, 0.25);
+  transition: background .25s ease, transform .25s ease, box-shadow .25s ease;
+}
+
+.death-page-dot.active {
+  background: #ffd166;
+  transform: scale(1.5);
+  box-shadow: 0 0 12px rgba(255, 209, 102, 0.9);
+}
 
 /* ============================================================
    MAIN MENU / SPLASH SCREEN
