@@ -18,6 +18,9 @@ import {
   spawnFloatText,
   spawnBlockEffect,
 } from './animations.js';
+import {
+  autoSave, hasSave, loadSave, restoreRun, clearSave,
+} from '../systems/save.js';
 import { CARDS } from '../data/cards.js';
 import { RELICS } from '../data/relics.js';
 import { ENEMY_CARDS } from '../data/enemy-cards.js';
@@ -57,6 +60,10 @@ export function render() {
   if (state.overlays?.exhaust) renderCardPileOverlay(app, 'Exhausted', state.exhaustPile);
 
   if (state.bossLore) renderBossLore(app);
+
+  // Auto-save on any safe screen. Silently no-ops during combat,
+  // on the main menu, and after a run ends.
+  autoSave(state);
 }
 
 // ---------------- Main menu / splash screen ----------------
@@ -147,14 +154,39 @@ function renderMainMenu(app) {
   `;
   inner.appendChild(lore);
 
-  const btn = document.createElement('button');
-  btn.className = 'btn main-menu-btn';
-  btn.textContent = 'Begin';
-  btn.addEventListener('click', () => {
-    newRun();
-    render();
-  });
-  inner.appendChild(btn);
+  if (hasSave()) {
+    const continueBtn = document.createElement('button');
+    continueBtn.className = 'btn main-menu-btn';
+    continueBtn.textContent = 'Continue';
+    continueBtn.addEventListener('click', () => {
+      const save = loadSave();
+      if (!save) { render(); return; }
+      restoreRun(state, save);
+      render();
+    });
+    inner.appendChild(continueBtn);
+
+    const newRunBtn = document.createElement('button');
+    newRunBtn.className = 'btn main-menu-btn';
+    newRunBtn.textContent = 'New Run';
+    newRunBtn.title = 'Starting a new run will delete your current save.';
+    newRunBtn.addEventListener('click', () => {
+      if (!confirm('Start a new run? Your current progress will be lost.')) return;
+      clearSave();
+      newRun();
+      render();
+    });
+    inner.appendChild(newRunBtn);
+  } else {
+    const btn = document.createElement('button');
+    btn.className = 'btn main-menu-btn';
+    btn.textContent = 'Begin';
+    btn.addEventListener('click', () => {
+      newRun();
+      render();
+    });
+    inner.appendChild(btn);
+  }
 
   wrap.appendChild(inner);
   app.appendChild(wrap);
@@ -422,6 +454,21 @@ function renderMap(app) {
   `;
   wrap.appendChild(header);
   wrap.appendChild(topButtons());
+
+  const actions = document.createElement('div');
+  actions.className = 'map-actions';
+
+  const saveMenuBtn = document.createElement('button');
+  saveMenuBtn.className = 'icon-btn';
+  saveMenuBtn.textContent = 'Save & Menu';
+  saveMenuBtn.title = 'Your run is auto-saved. Return to main menu.';
+  saveMenuBtn.addEventListener('click', () => {
+    autoSave(state);
+    state.screen = 'mainMenu';
+    render();
+  });
+  actions.appendChild(saveMenuBtn);
+  wrap.appendChild(actions);
 
   const board = document.createElement('div');
   board.className = 'map-board';
@@ -1260,29 +1307,22 @@ function endBanner() {
 // ============================================================
 
 const DEATH_PAGES = [
-  // ---- Page 1: The taking ----
   [
     { text: 'The dungeon reaches for you. Cold. Patient. Certain.' },
     { text: 'You feel it take the cards first. Then the memories of the people who taught you to hold them. Then your name.' },
     { text: 'And then — the room goes quiet, and you understand.' },
     { text: 'You are becoming part of it.', cls: 'death-emphasis' },
   ],
-
-  // ---- Page 2: The weight ----
   [
     { text: 'One more voice inside the dark. One more Drawn who walked in and did not walk out. You can feel the others. Hundreds of them. Thousands. Every hero who ever made it this far and then stopped.' },
     { text: 'If it takes you, there is no one else. The Drawn are hunted the moment they are found. There is no second hero waiting in the wings. There is no army coming to finish what you could not.' },
     { text: 'If the dungeon consumes you, the world ends with you.', cls: 'death-emphasis' },
   ],
-
-  // ---- Page 3: The turn ----
   [
     { text: 'But — you remember them.' },
     { text: 'The people who taught you how to hold a card. The village that sent you off with nothing but hope. Everyone still breathing above you who will not survive the week if you fall here.' },
     { text: 'You are filled with determination.', cls: 'death-emphasis' },
   ],
-
-  // ---- Page 4: The pull ----
   [
     { text: 'Your hand closes around the amulet at your chest — the last gift your family gave you before you left. A small thing. Worn smooth by other hands long before yours.' },
     { text: 'It is warm. It has always been warm.' },
