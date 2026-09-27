@@ -8,9 +8,11 @@ export function rollCoins(rng, kind) {
 }
 
 export function rollCardChoices(rng, count = 3) {
+  // Include 'starter' and 'uncommon' rarities so Bash, Neutralize, and
+  // the spell pool (Fireball, Attunement) can appear as rewards.
   const pool = Object.keys(CARDS).filter(id => {
     const r = CARDS[id].rarity;
-    return r === 'common' || r === 'rare';
+    return r === 'starter' || r === 'common' || r === 'uncommon' || r === 'rare';
   });
   const out = [];
   const copy = pool.slice();
