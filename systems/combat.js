@@ -257,6 +257,7 @@ function applyEffect(eff, targets, card, source) {
           dealt,
           blocked,
           animation: state.currentAnimation || 'slash',
+          isSpell: false,
         });
 
         if (t === state.player) {
@@ -762,6 +763,7 @@ export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}
     dealt,
     blocked,
     animation: state.currentAnimation || 'slash',
+    isSpell,
   });
 
   if (target === state.player) {
