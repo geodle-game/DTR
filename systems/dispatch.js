@@ -1,30 +1,121 @@
 // ============================================================
 // systems/dispatch.js
-// Single entry point for every player-initiated state change.
-// In single-player, dispatch() is called directly from the UI.
-// In multiplayer, dispatch() is wrapped by net.submitAction() so
-// the Host can stamp actions with a sequence number first.
 // ============================================================
 
 import {
-  state, startNode, claimReward, takeRewardCard, skipRewardCard,
+  state, newRun, chooseRelic, confirmDeck, startNode, backToMap,
+  claimReward, takeRewardCard, skipRewardCard,
   pickEventChoice, buyShopCard, buyShopHeal,
   restHeal, restEnchantStart, applyEnchant, skipEnchant,
-  chooseRelic, confirmDeck, nextAct, claimActReward,
+  returnToMainMenu, nextAct, claimActReward,
   takeActRewardCard, skipActRewardCard, takeActRewardRelic,
-  pickTreasureRelic, skipTreasure, returnToMainMenu,
+  finishRun, pickTreasureRelic, skipTreasure,
 } from './state.js';
 import {
-  playCard, selectCardForPlay, beginEnemyTurn, resolveEnemyTurn,
+  playCard, beginEnemyTurn, resolveEnemyTurn,
 } from './combat.js';
+import {
+  getMode, sendAction, sendSnapshot, onAction, onSnapshot,
+} from './net.js';
+import { snapshotState, restoreSnapshot } from './snapshot.js';
+import { render } from '../ui/render.js';
+import { animateHits } from '../ui/animations.js';
+
+// ============================================================
+// Public API
+// ============================================================
 
 export function dispatch(action) {
+  const mode = getMode();
+
+  // Guest: forward to host, don't apply locally.
+  if (mode === 'guest') {
+    sendAction(action);
+    return;
+  }
+
+  // Single or host: apply locally.
+  applyAction(action);
+
+  // Host: broadcast resulting state.
+  if (mode === 'host') {
+    sendSnapshot(snapshotState());
+  }
+
+  render();
+}
+
+// ============================================================
+// Wire up network callbacks
+// ============================================================
+
+onAction(action => {
+  // Host receives an action from the guest.
+  state.lastHits = [];
+  applyAction(action);
+  sendSnapshot(snapshotState());
+  render();
+  if (state.lastHits?.length) {
+    const hits = state.lastHits;
+    state.lastHits = [];
+    animateHits(hits);
+  }
+});
+
+onSnapshot(snap => {
+  // Guest receives a full state from the host.
+  const hits = (snap.lastHits || []).slice();
+  restoreSnapshot(snap);
+  render();
+  if (hits.length) setTimeout(() => animateHits(hits), 30);
+});
+
+// ============================================================
+// Action handlers
+// ============================================================
+
+function applyAction(action) {
   switch (action.type) {
+    // ---- Run lifecycle ----
+    case 'NEW_RUN':
+      newRun(action.seed);
+      break;
+
+    case 'CHOOSE_RELIC':
+      chooseRelic(action.relicId);
+      break;
+
+    case 'CONFIRM_DECK':
+      confirmDeck();
+      break;
+
+    case 'RETURN_TO_MAIN_MENU':
+      returnToMainMenu();
+      break;
+
+    // ---- Map ----
+    case 'START_NODE':
+      startNode(action.nodeId);
+      break;
+
+    case 'BACK_TO_MAP':
+      backToMap();
+      break;
+
     // ---- Combat ----
     case 'PLAY_CARD': {
       const card = state.hand.find(c => c.uid === action.cardUid);
       if (!card) return false;
       return playCard(card, action.targetUid ?? null);
+    }
+
+    case 'END_TURN': {
+      if (state.turn !== 'player' || state.over) return false;
+      state.pendingCardUid = null;
+      beginEnemyTurn();
+      if (state.over) return true;
+      resolveEnemyTurn();
+      return true;
     }
 
     case 'SELECT_ENEMY':
@@ -39,118 +130,37 @@ export function dispatch(action) {
       state.pendingCardUid = null;
       return true;
 
-    case 'END_TURN':
-      // In multiplayer, this is gated by the Host checking whether
-      // all players have pressed it. In single-player, it just runs.
-      beginEnemyTurn();
-      resolveEnemyTurn();
-      return true;
-
-    case 'END_TURN_PHASE_ONLY':
-      // For multiplayer: advance to enemy phase, but let the Host
-      // decide when to actually resolve.
-      beginEnemyTurn();
-      return true;
-
-    // ---- Map ----
-    case 'START_NODE':
-      startNode(action.nodeId);
-      return true;
-
-    case 'BACK_TO_MAP':
-      // handled inside state.js, no-op here
-      return true;
-
-    // ---- Relic / Deck selection ----
-    case 'CHOOSE_RELIC':
-      chooseRelic(action.relicId);
-      return true;
-
-    case 'CONFIRM_DECK':
-      confirmDeck();
-      return true;
-
     // ---- Rewards ----
-    case 'CLAIM_REWARD':
-      claimReward();
-      return true;
-
-    case 'TAKE_REWARD_CARD':
-      takeRewardCard(action.defId);
-      return true;
-
-    case 'SKIP_REWARD_CARD':
-      skipRewardCard();
-      return true;
-
-    case 'TAKE_ACT_REWARD_CARD':
-      takeActRewardCard(action.defId);
-      return true;
-
-    case 'SKIP_ACT_REWARD_CARD':
-      skipActRewardCard();
-      return true;
-
-    case 'TAKE_ACT_REWARD_RELIC':
-      takeActRewardRelic(action.relicId);
-      return true;
-
-    case 'CLAIM_ACT_REWARD':
-      claimActReward();
-      return true;
-
-    // ---- Treasure ----
-    case 'PICK_TREASURE_RELIC':
-      pickTreasureRelic(action.relicId);
-      return true;
-
-    case 'SKIP_TREASURE':
-      skipTreasure();
-      return true;
-
-    // ---- Events ----
-    case 'PICK_EVENT_CHOICE':
-      pickEventChoice(action.index);
-      return true;
+    case 'CLAIM_REWARD':       claimReward(); break;
+    case 'TAKE_REWARD_CARD':   takeRewardCard(action.defId); break;
+    case 'SKIP_REWARD_CARD':   skipRewardCard(); break;
+    case 'PICK_EVENT_CHOICE':  pickEventChoice(action.index); break;
 
     // ---- Shop ----
-    case 'BUY_SHOP_CARD':
-      buyShopCard(action.index);
-      return true;
-
-    case 'BUY_SHOP_HEAL':
-      buyShopHeal();
-      return true;
+    case 'BUY_SHOP_CARD':      buyShopCard(action.index); break;
+    case 'BUY_SHOP_HEAL':      buyShopHeal(); break;
 
     // ---- Rest ----
-    case 'REST_HEAL':
-      restHeal();
-      return true;
-
-    case 'REST_ENCHANT_START':
-      restEnchantStart();
-      return true;
-
-    case 'APPLY_ENCHANT':
-      applyEnchant(action.index);
-      return true;
-
-    case 'SKIP_ENCHANT':
-      skipEnchant();
-      return true;
+    case 'REST_HEAL':          restHeal(); break;
+    case 'REST_ENCHANT_START': restEnchantStart(); break;
+    case 'APPLY_ENCHANT':      applyEnchant(action.index); break;
+    case 'SKIP_ENCHANT':       skipEnchant(); break;
 
     // ---- Act transition ----
-    case 'NEXT_ACT':
-      nextAct();
-      return true;
+    case 'NEXT_ACT':           nextAct(); break;
+    case 'CLAIM_ACT_REWARD':   claimActReward(); break;
+    case 'TAKE_ACT_REWARD_CARD':   takeActRewardCard(action.defId); break;
+    case 'SKIP_ACT_REWARD_CARD':   skipActRewardCard(); break;
+    case 'TAKE_ACT_REWARD_RELIC':  takeActRewardRelic(action.relicId); break;
 
-    // ---- Run management ----
-    case 'RETURN_TO_MAIN_MENU':
-      returnToMainMenu();
-      return true;
+    // ---- Treasure ----
+    case 'PICK_TREASURE_RELIC': pickTreasureRelic(action.relicId); break;
+    case 'SKIP_TREASURE':       skipTreasure(); break;
+
+    // ---- End ----
+    case 'FINISH_RUN':          finishRun(); break;
 
     default:
       console.warn('Unknown action:', action.type);
-      return false;
   }
 }
