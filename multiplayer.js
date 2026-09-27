@@ -1,29 +1,88 @@
 // ============================================================
 // multiplayer.js — standalone multiplayer test
-// TURN-enabled, joiner retry loop, stale-connection takeover,
-// wake lock for mobile.
+// TURN-enabled, multi-provider ICE, joiner retry, wake lock.
 // ============================================================
 
 const ROOM_PREFIX = 'dtr-mp-test-v1-';
 const ROOM_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ROOM_LEN = 6;
 
-// Public free TURN servers. Guarantees a relay fallback when
-// direct P2P (STUN) fails, which is nearly always the case when
-// one peer is on cellular / behind CGNAT.
-const ICE_SERVERS = [
+// Public free TURN servers. Stacked — WebRTC tries all of them
+// in parallel, so any single reachable one is enough.
+//
+// 1. Open Relay (Metered)      — 20 GB/month free, ports 80/443
+// 2. Backups.cz                — community run, very stable
+// 3. AnyFirewall               — old but rarely blocked
+// 4. Elixir-WebRTC Rel         — dynamic credentials, see below
+//
+// Elixir-WebRTC needs fresh credentials every 3 hours. We fetch
+// them at startup and cache. If the fetch fails, we still have
+// the other three providers as fallback.
+const STATIC_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+
+  // --- Open Relay (Metered) ---
   { urls: 'turn:openrelay.metered.ca:80',
     username: 'openrelayproject', credential: 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443',
     username: 'openrelayproject', credential: 'openrelayproject' },
   { urls: 'turns:openrelay.metered.ca:443?transport=tcp',
     username: 'openrelayproject', credential: 'openrelayproject' },
+
+  // --- Backups.cz ---
+  { urls: 'turn:relay.backups.cz',
+    username: 'webrtc', credential: 'webrtc' },
+  { urls: 'turn:relay.backups.cz?transport=tcp',
+    username: 'webrtc', credential: 'webrtc' },
+
+  // --- AnyFirewall ---
+  { urls: 'turn:turn.anyfirewall.com:443?transport=tcp',
+    username: 'webrtc', credential: 'webrtc' },
+
+  // --- Bistri (often unreachable, but harmless to include) ---
+  { urls: 'turn:turn.bistri.com:80',
+    username: 'homeo', credential: 'homeo' },
 ];
 
-const CONNECT_TIMEOUT_MS = 8000;
-const MAX_ATTEMPTS = 4;
+const CONNECT_TIMEOUT_MS = 15000;
+const MAX_ATTEMPTS = 5;
+
+// ------------------------------------------------------------
+// Elixir-WebRTC dynamic credentials
+// ------------------------------------------------------------
+
+let DYNAMIC_ICE_SERVERS = [];
+let dynamicIcePromise = null;
+
+async function loadDynamicIceServers() {
+  if (dynamicIcePromise) return dynamicIcePromise;
+  dynamicIcePromise = (async () => {
+    try {
+      const username = 'dtr' + Math.floor(Math.random() * 900000 + 100000);
+      const url = `https://turn.elixir-webrtc.org/?service=turn&username=${username}`;
+      const res = await fetch(url, { method: 'POST' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      // data = { password, ttl, uris: ["turn:167.235.241.140:3478?transport=udp"], username }
+      const servers = (data.uris || []).map(uri => ({
+        urls: uri,
+        username: data.username,
+        credential: data.password,
+      }));
+      console.log('[ice] Elixir-WebRTC credentials loaded:', servers.length, 'server(s)');
+      return servers;
+    } catch (e) {
+      console.warn('[ice] Elixir-WebRTC fetch failed:', e.message);
+      return [];
+    }
+  })();
+  return dynamicIcePromise;
+}
+
+// Kick off the fetch immediately so it's ready by the time
+// the user clicks Host or Join.
+loadDynamicIceServers().then(servers => { DYNAMIC_ICE_SERVERS = servers; });
 
 // ------------------------------------------------------------
 // Wake lock — stops the mobile screen from sleeping mid-connect
@@ -91,10 +150,18 @@ function setStatus(text, kind = '') {
   app.statusKind = kind;
 }
 
+function buildIceServers() {
+  return [...STATIC_ICE_SERVERS, ...DYNAMIC_ICE_SERVERS];
+}
+
 function makePeer(idOrOptions) {
   const opts = {
     debug: 0,
-    config: { iceServers: ICE_SERVERS },
+    config: {
+      iceServers: buildIceServers(),
+      iceTransportPolicy: 'all',
+      iceCandidatePoolSize: 10,
+    },
   };
   return idOrOptions ? new Peer(idOrOptions, opts) : new Peer(opts);
 }
@@ -117,6 +184,7 @@ function hostGame() {
   app.roomCode = generateRoomCode();
   const peerId = peerIdForCode(app.roomCode);
   logLine(`Creating peer with ID: ${peerId}`, 'host');
+  logLine(`ICE providers: ${buildIceServers().length}`, 'host');
   setStatus(`Connecting to PeerJS cloud…`);
   render();
 
@@ -139,15 +207,12 @@ function hostGame() {
   app.peer.on('connection', (conn) => {
     logLine(`↪ Incoming connection from ${conn.peer}`, 'host');
 
-    // If we already have an OPEN connection, reject duplicates.
     if (app.conn && app.conn.open) {
       logLine('Already connected — rejecting duplicate.', 'host');
       try { conn.close(); } catch {}
       return;
     }
 
-    // If we have a previous connection that never opened, close it and
-    // accept the fresh one. This handles the joiner's retry loop.
     if (app.conn && !app.conn.open) {
       logLine('Replacing stale connection attempt.', 'host');
       try { app.conn.close(); } catch {}
@@ -227,6 +292,7 @@ function joinGame(rawCode) {
   app.roomCode = code;
   setStatus('Connecting to PeerJS cloud…');
   logLine('Creating anonymous peer…', 'joiner');
+  logLine(`ICE providers: ${buildIceServers().length}`, 'joiner');
   render();
 
   try {
@@ -250,7 +316,6 @@ function joinGame(rawCode) {
       attempt++;
       logLine(`Attempt ${attempt}/${MAX_ATTEMPTS} — dialing ${target}`, 'joiner');
 
-      // Clean up any previous attempt before opening a new one.
       if (app.conn) {
         try { app.conn.close(); } catch {}
         app.conn = null;
@@ -285,7 +350,6 @@ function joinGame(rawCode) {
         logLine(`Conn error: ${err?.message || err}`, 'joiner');
       });
 
-      // If it hasn't opened within CONNECT_TIMEOUT_MS, retry.
       setTimeout(() => {
         if (opened) return;
         if (attempt < MAX_ATTEMPTS) {
@@ -435,7 +499,6 @@ function copyRoomCode() {
       await navigator.clipboard.writeText(app.roomCode);
       logLine('Room code copied.', myId());
     } catch {
-      // Fallback for iOS Safari, which restricts clipboard in some contexts.
       try {
         const tmp = document.createElement('textarea');
         tmp.value = app.roomCode;
