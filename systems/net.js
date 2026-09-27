@@ -1,299 +1,128 @@
 // ============================================================
 // systems/net.js
-//
-// Host-authoritative multiplayer over PeerJS.
-//
-// - Host runs the game simulation. Applies every action.
-// - Joiners send actions to Host, receive stamped actions back.
-// - Every action carries:
-//       clientTimestamp   — client's local performance.now()
-//       hostReceivedAt    — host's local performance.now() when received
-//       sequence          — Host's monotonic counter (authoritative order)
-//
-// - Clients apply actions in sequence order. Timestamps are only
-//   used by the Host to break ties for actions arriving within a
-//   short window (<120ms), which is rare and doesn't matter much.
 // ============================================================
 
-import { state } from './state.js';
-import { dispatch } from './dispatch.js';
-import { render } from '../ui/render.js';
+const ICE_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ],
+};
 
-const ROOM_PREFIX = 'drawn-to-ruin-v1-';
-const TIE_WINDOW_MS = 120;
-
-let peer = null;
-let mode = 'single';     // 'single' | 'host' | 'joiner'
-let hostConn = null;     // Host's connection to its joiner
-let joinConn = null;     // Joiner's connection to its host
-let sequence = 0;
-let lastAppliedSequence = 0;
-
-// Pending actions awaiting Host sort on the Host side.
-// Not used on joiner side (they get pre-sorted messages).
-let inbox = [];
-let flushTimer = null;
+let mode = 'single';       // 'single' | 'host' | 'guest'
+let pc = null;
+let dc = null;
+let onActionCb = null;
+let onSnapshotCb = null;
+let onStatusCb = null;
 
 export function getMode() { return mode; }
 export function isHost() { return mode === 'host'; }
-export function isJoiner() { return mode === 'joiner'; }
-export function isOnline() { return mode !== 'single'; }
+export function isGuest() { return mode === 'guest'; }
+export function isMultiplayer() { return mode !== 'single'; }
+export function setMode(m) { mode = m; }
 
-// ============================================================
-// HOST
-// ============================================================
+export function onStatus(cb) { onStatusCb = cb; }
+function status(text, kind) { if (onStatusCb) onStatusCb(text, kind); }
 
-export function hostGame() {
-  if (typeof Peer === 'undefined') {
-    console.error('PeerJS not loaded. Add the <script> to index.html.');
-    return null;
-  }
+function encodeBlob(obj) {
+  return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+}
+function decodeBlob(str) {
+  return JSON.parse(decodeURIComponent(escape(atob(String(str).replace(/\s+/g, '')))));
+}
+
+function waitForIceComplete(p, timeoutMs = 5000) {
+  return new Promise(resolve => {
+    if (p.iceGatheringState === 'complete') return resolve();
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    p.addEventListener('icegatheringstatechange', () => {
+      if (p.iceGatheringState === 'complete') finish();
+    });
+    setTimeout(finish, timeoutMs);
+  });
+}
+
+function makePeerConnection() {
+  const p = new RTCPeerConnection(ICE_CONFIG);
+  p.addEventListener('iceconnectionstatechange', () => {
+    status('ICE: ' + p.iceConnectionState,
+      p.iceConnectionState === 'connected' ? 'ok' :
+      p.iceConnectionState === 'failed' ? 'err' : '');
+  });
+  p.addEventListener('connectionstatechange', () => {
+    status('conn: ' + p.connectionState,
+      p.connectionState === 'connected' ? 'ok' :
+      p.connectionState === 'failed' ? 'err' : '');
+  });
+  return p;
+}
+
+function wireDataChannel(channel) {
+  dc = channel;
+  dc.addEventListener('open', () => status('Data channel open', 'ok'));
+  dc.addEventListener('message', e => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    if (msg.type === 'ACTION' && onActionCb) onActionCb(msg.action);
+    if (msg.type === 'SNAPSHOT' && onSnapshotCb) onSnapshotCb(msg.snapshot);
+  });
+  dc.addEventListener('close', () => status('Data channel closed', 'err'));
+  dc.addEventListener('error', e => status('dc error: ' + (e.message || ''), 'err'));
+}
+
+export async function hostStart() {
   mode = 'host';
-  const roomCode = randomRoomCode();
-
-  peer = new Peer(ROOM_PREFIX + roomCode);
-
-  peer.on('open', () => {
-    console.log('[net] Hosting room:', roomCode);
-    state.roomCode = roomCode;
-    state.peerStatus = 'waiting';
-    render();
-  });
-
-  peer.on('connection', (conn) => {
-    if (hostConn) { conn.close(); return; }
-    hostConn = conn;
-    setupHostConnection(conn);
-  });
-
-  peer.on('error', (err) => {
-    console.error('[net] Host error:', err);
-    state.peerStatus = 'error';
-    state.peerError = err.message || String(err);
-    render();
-  });
-
-  return roomCode;
-}
-
-function setupHostConnection(conn) {
-  conn.on('open', () => {
-    console.log('[net] Joiner connected');
-    state.peerStatus = 'connected';
-    render();
-    // Send authoritative state snapshot on connect.
-    conn.send({
-      type: 'SNAPSHOT',
-      state: serializeForWire(state),
-      sequence,
-    });
-  });
-
-  conn.on('data', (msg) => {
-    if (msg.type === 'ACTION') {
-      enqueueAction({
-        action: msg.action,
-        clientTimestamp: msg.clientTimestamp,
-        hostReceivedAt: performance.now(),
-      });
-    }
-  });
-
-  conn.on('close', () => {
-    console.log('[net] Joiner disconnected');
-    hostConn = null;
-    state.peerStatus = 'waiting';
-    render();
+  pc = makePeerConnection();
+  const channel = pc.createDataChannel('game', { ordered: true });
+  wireDataChannel(channel);
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await waitForIceComplete(pc);
+  return encodeBlob({
+    kind: 'offer',
+    sdp: pc.localDescription.sdp,
+    type: pc.localDescription.type,
   });
 }
 
-function enqueueAction(entry) {
-  inbox.push(entry);
-  if (flushTimer) return;
-  // Batch actions that arrive within TIE_WINDOW_MS so we can sort
-  // them by client timestamp rather than arrival order.
-  flushTimer = setTimeout(flushInbox, TIE_WINDOW_MS);
+export async function hostAcceptAnswer(blobStr) {
+  const data = decodeBlob(blobStr);
+  if (data.kind !== 'answer') throw new Error('not an answer blob');
+  await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp });
 }
 
-function flushInbox() {
-  flushTimer = null;
-  if (inbox.length === 0) return;
-
-  // Sort by client timestamp; if two clients' clocks disagree
-  // wildly, arrival order on the Host wins (stable sort).
-  inbox.sort((a, b) => {
-    const dt = (a.clientTimestamp ?? 0) - (b.clientTimestamp ?? 0);
-    if (Math.abs(dt) > TIE_WINDOW_MS * 4) return dt;
-    return (a.hostReceivedAt ?? 0) - (b.hostReceivedAt ?? 0);
-  });
-
-  for (const entry of inbox) {
-    sequence += 1;
-    const stamped = {
-      type: 'ACTION',
-      action: entry.action,
-      clientTimestamp: entry.clientTimestamp,
-      hostReceivedAt: entry.hostReceivedAt,
-      sequence,
-    };
-    // Host applies the action locally.
-    dispatch(entry.action);
-    // Then broadcasts it to the joiner with the authority stamp.
-    if (hostConn) hostConn.send(stamped);
-    render();
-  }
-  inbox = [];
-}
-
-// ============================================================
-// JOINER
-// ============================================================
-
-export function joinGame(roomCode) {
-  if (typeof Peer === 'undefined') {
-    console.error('PeerJS not loaded.');
-    return;
-  }
-  mode = 'joiner';
-  peer = new Peer();
-
-  peer.on('open', () => {
-    console.log('[net] Looking up room:', roomCode);
-    joinConn = peer.connect(ROOM_PREFIX + roomCode.toUpperCase());
-
-    joinConn.on('open', () => {
-      console.log('[net] Connected to host');
-      state.peerStatus = 'connected';
-      state.roomCode = roomCode.toUpperCase();
-      render();
-    });
-
-    joinConn.on('data', handleJoinerMessage);
-
-    joinConn.on('close', () => {
-      console.log('[net] Host disconnected');
-      state.peerStatus = 'disconnected';
-      render();
-    });
-  });
-
-  peer.on('error', (err) => {
-    console.error('[net] Join error:', err);
-    state.peerStatus = 'error';
-    state.peerError = err.message || String(err);
-    render();
+export async function guestStart(offerBlobStr) {
+  mode = 'guest';
+  pc = makePeerConnection();
+  pc.addEventListener('datachannel', e => wireDataChannel(e.channel));
+  const data = decodeBlob(offerBlobStr);
+  if (data.kind !== 'offer') throw new Error('not an offer blob');
+  await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp });
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  await waitForIceComplete(pc);
+  return encodeBlob({
+    kind: 'answer',
+    sdp: pc.localDescription.sdp,
+    type: pc.localDescription.type,
   });
 }
 
-function handleJoinerMessage(msg) {
-  if (msg.type === 'SNAPSHOT') {
-    restoreFromWire(state, msg.state);
-    sequence = msg.sequence;
-    lastAppliedSequence = msg.sequence;
-    render();
-    return;
-  }
-
-  if (msg.type === 'ACTION') {
-    // Only apply if we haven't seen it yet.
-    if (msg.sequence > lastAppliedSequence) {
-      dispatch(msg.action);
-      lastAppliedSequence = msg.sequence;
-      render();
-    }
-    return;
-  }
+export function isChannelOpen() {
+  return dc && dc.readyState === 'open';
 }
 
-// ============================================================
-// SUBMIT (called from UI for every player action)
-// ============================================================
-
-export function submitAction(action) {
-  if (mode === 'single') {
-    dispatch(action);
-    render();
-    return true;
-  }
-
-  const clientTimestamp = performance.now();
-
-  if (mode === 'host') {
-    // Host: apply immediately, broadcast with a sequence stamp.
-    sequence += 1;
-    const stamped = {
-      type: 'ACTION',
-      action,
-      clientTimestamp,
-      hostReceivedAt: clientTimestamp,
-      sequence,
-    };
-    dispatch(action);
-    if (hostConn) hostConn.send(stamped);
-    render();
-    return true;
-  }
-
-  if (mode === 'joiner') {
-    if (!joinConn) return false;
-    // Joiner: send to host, don't apply locally.
-    joinConn.send({ type: 'ACTION', action, clientTimestamp });
-    return true;
-  }
-
-  return false;
+export function sendAction(action) {
+  if (!isChannelOpen()) return;
+  dc.send(JSON.stringify({ type: 'ACTION', action }));
 }
 
-// ============================================================
-// HELPERS
-// ============================================================
-
-function randomRoomCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let s = '';
-  for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
-  return s;
+export function sendSnapshot(snapshot) {
+  if (!isChannelOpen()) return;
+  dc.send(JSON.stringify({ type: 'SNAPSHOT', snapshot }));
 }
 
-function serializeForWire(s) {
-  // Deep clone the network-relevant subset.
-  // We deliberately drop transient UI fields (newlyDrawn set, lastHits, etc.)
-  return JSON.parse(JSON.stringify({
-    run: s.run,
-    player: s.player,
-    enemies: s.enemies,
-    drawPile: s.drawPile,
-    hand: s.hand,
-    discardPile: s.discardPile,
-    exhaustPile: s.exhaustPile,
-    energy: s.energy,
-    maxEnergy: s.maxEnergy,
-    turn: s.turn,
-    screen: s.screen,
-    combatKind: s.combatKind,
-    combatBanner: s.combatBanner,
-    lastEncounterId: s.lastEncounterId,
-    selectedEnemyId: s.selectedEnemyId,
-    reward: s.reward,
-    actReward: s.actReward,
-    treasure: s.treasure,
-    event: s.event,
-    shop: s.shop,
-    rest: s.rest,
-    pendingEnchant: s.pendingEnchant,
-    over: s.over,
-    result: s.result,
-  }));
-}
-
-function restoreFromWire(s, snapshot) {
-  Object.assign(s, snapshot);
-  s.newlyDrawn = new Set();
-  s.lastHits = [];
-  s.overlays = { deck: false, relics: false, draw: false, discard: false, exhaust: false };
-  s.previewCardUid = null;
-  s.pendingCardUid = null;
-  s.currentAnimation = null;
-  s.bossLore = null;
-  s.deathPage = s.deathPage ?? 0;
-}
+export function onAction(cb) { onActionCb = cb; }
+export function onSnapshot(cb) { onSnapshotCb = cb; }
