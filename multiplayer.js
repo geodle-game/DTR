@@ -1,119 +1,51 @@
 // ============================================================
-// multiplayer.js — standalone multiplayer test
-// TURN-enabled, multi-provider ICE, joiner retry, wake lock.
+// multiplayer.js — manual signaling (copy/paste handshake)
+//
+// No server. No PeerJS. No accounts.
+//
+// How it works:
+//   1. Host generates an "offer" blob. Shows it in a textarea.
+//   2. Host sends that text to the guest however they want
+//      (text message, AirDrop, WhatsApp, pass the phone).
+//   3. Guest pastes the offer, generates an "answer" blob,
+//      shows it back.
+//   4. Host pastes the answer. Data channel opens.
+//
+// Both devices must be on the same network for reliable results.
+// STUN is included so cross-network sometimes works, but no
+// guarantee without TURN.
 // ============================================================
 
-const ROOM_PREFIX = 'dtr-mp-test-v1-';
-const ROOM_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const ROOM_LEN = 6;
+const ICE_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ],
+};
 
-// Public free TURN servers. Stacked — WebRTC tries all of them
-// in parallel, so any single reachable one is enough.
-//
-// 1. Open Relay (Metered)      — 20 GB/month free, ports 80/443
-// 2. Backups.cz                — community run, very stable
-// 3. AnyFirewall               — old but rarely blocked
-// 4. Elixir-WebRTC Rel         — dynamic credentials, see below
-//
-// Elixir-WebRTC needs fresh credentials every 3 hours. We fetch
-// them at startup and cache. If the fetch fails, we still have
-// the other three providers as fallback.
-const STATIC_ICE_SERVERS = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-
-  // --- Open Relay (Metered) ---
-  { urls: 'turn:openrelay.metered.ca:80',
-    username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443',
-    username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turns:openrelay.metered.ca:443?transport=tcp',
-    username: 'openrelayproject', credential: 'openrelayproject' },
-
-  // --- Backups.cz ---
-  { urls: 'turn:relay.backups.cz',
-    username: 'webrtc', credential: 'webrtc' },
-  { urls: 'turn:relay.backups.cz?transport=tcp',
-    username: 'webrtc', credential: 'webrtc' },
-
-  // --- AnyFirewall ---
-  { urls: 'turn:turn.anyfirewall.com:443?transport=tcp',
-    username: 'webrtc', credential: 'webrtc' },
-
-  // --- Bistri (often unreachable, but harmless to include) ---
-  { urls: 'turn:turn.bistri.com:80',
-    username: 'homeo', credential: 'homeo' },
-];
-
-const CONNECT_TIMEOUT_MS = 15000;
-const MAX_ATTEMPTS = 5;
-
-// ------------------------------------------------------------
-// Elixir-WebRTC dynamic credentials
-// ------------------------------------------------------------
-
-let DYNAMIC_ICE_SERVERS = [];
-let dynamicIcePromise = null;
-
-async function loadDynamicIceServers() {
-  if (dynamicIcePromise) return dynamicIcePromise;
-  dynamicIcePromise = (async () => {
-    try {
-      const username = 'dtr' + Math.floor(Math.random() * 900000 + 100000);
-      const url = `https://turn.elixir-webrtc.org/?service=turn&username=${username}`;
-      const res = await fetch(url, { method: 'POST' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      // data = { password, ttl, uris: ["turn:167.235.241.140:3478?transport=udp"], username }
-      const servers = (data.uris || []).map(uri => ({
-        urls: uri,
-        username: data.username,
-        credential: data.password,
-      }));
-      console.log('[ice] Elixir-WebRTC credentials loaded:', servers.length, 'server(s)');
-      return servers;
-    } catch (e) {
-      console.warn('[ice] Elixir-WebRTC fetch failed:', e.message);
-      return [];
-    }
-  })();
-  return dynamicIcePromise;
-}
-
-// Kick off the fetch immediately so it's ready by the time
-// the user clicks Host or Join.
-loadDynamicIceServers().then(servers => { DYNAMIC_ICE_SERVERS = servers; });
-
-// ------------------------------------------------------------
-// Wake lock — stops the mobile screen from sleeping mid-connect
-// ------------------------------------------------------------
-
-let wakeLock = null;
-async function requestWakeLock() {
-  if (!('wakeLock' in navigator)) return;
-  if (wakeLock) return;
-  try {
-    wakeLock = await navigator.wakeLock.request('screen');
-    wakeLock.addEventListener('release', () => { wakeLock = null; });
-  } catch {}
-}
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && !wakeLock) requestWakeLock();
-});
+const LOG_MAX = 200;
 
 // ------------------------------------------------------------
 // State
 // ------------------------------------------------------------
 
 const app = {
-  screen: 'lobby',
-  role: null,
+  screen: 'lobby',       // 'lobby' | 'host' | 'guest' | 'game'
+  role: null,            // 'host' | 'guest'
   status: '',
   statusKind: '',
-  peer: null,
-  conn: null,
-  connected: false,
-  roomCode: '',
+
+  pc: null,
+  dc: null,
+  myId: Math.random().toString(36).slice(2, 8),
+
+  hostStep: 0,           // 0=idle, 1=offer shown, 2=answer pasted
+  guestStep: 0,          // 0=idle, 1=offer pasted, 2=answer shown
+
+  localBlob: '',         // the offer (host) or answer (guest) we generated
+  pastedBlob: '',        // the text the user pasted back
+
+  // Game state (host-authoritative)
   enemyHp: 100,
   enemyMaxHp: 100,
   energy: 3,
@@ -122,26 +54,15 @@ const app = {
   phase: 'players',
   endedBy: new Set(),
   log: [],
-  logPulseUntil: 0,
+  t0: performance.now(),
 };
 
-function myId() { return app.role === 'host' ? 'host' : 'joiner'; }
-
-function generateRoomCode() {
-  let s = '';
-  for (let i = 0; i < ROOM_LEN; i++) s += ROOM_CHARS[Math.floor(Math.random() * ROOM_CHARS.length)];
-  return s;
-}
-function peerIdForCode(code) { return ROOM_PREFIX + code; }
-function normalizeCode(raw) {
-  return String(raw || '').toUpperCase().replace(/[^A-Z2-9]/g, '').slice(0, ROOM_LEN);
-}
-
 function logLine(text, kind = '') {
-  app.log.push({ text, kind, at: performance.now() });
-  if (app.log.length > 60) app.log.shift();
-  app.logPulseUntil = performance.now() + 600;
-  console.log('[mp]', text);
+  const ts = ((performance.now() - app.t0) / 1000).toFixed(2);
+  const entry = { text: `[${ts}] ${text}`, kind, at: performance.now() };
+  app.log.push(entry);
+  if (app.log.length > LOG_MAX) app.log.shift();
+  console.log('[mp]', entry.text);
   renderLogOnly();
 }
 
@@ -150,251 +71,221 @@ function setStatus(text, kind = '') {
   app.statusKind = kind;
 }
 
-function buildIceServers() {
-  return [...STATIC_ICE_SERVERS, ...DYNAMIC_ICE_SERVERS];
+// ------------------------------------------------------------
+// Blob encoding
+//
+// SDP is a long text. We JSON the full {sdp, ice[]} and base64 it
+// so it's one copy-paste chunk instead of two.
+//
+// We wait for ICE gathering to complete before generating the
+// blob, so all candidates are baked in. Gathering takes ~1-3s
+// on same-network.
+// ------------------------------------------------------------
+
+function encodeBlob(obj) {
+  const json = JSON.stringify(obj);
+  // btoa fails on unicode; encodeURIComponent to be safe.
+  return btoa(unescape(encodeURIComponent(json)));
 }
 
-function makePeer(idOrOptions) {
-  const opts = {
-    debug: 0,
-    config: {
-      iceServers: buildIceServers(),
-      iceTransportPolicy: 'all',
-      iceCandidatePoolSize: 10,
-    },
-  };
-  return idOrOptions ? new Peer(idOrOptions, opts) : new Peer(opts);
+function decodeBlob(str) {
+  const cleaned = String(str).replace(/\s+/g, '');
+  const json = decodeURIComponent(escape(atob(cleaned)));
+  return JSON.parse(json);
 }
 
-// ============================================================
-// HOST
-// ============================================================
-
-function hostGame() {
-  if (typeof Peer === 'undefined') {
-    setStatus('PeerJS failed to load. Check connection / adblock.', 'error');
-    logLine('✗ typeof Peer === "undefined"', 'host');
-    render();
-    return;
-  }
-
-  requestWakeLock();
-
-  app.role = 'host';
-  app.roomCode = generateRoomCode();
-  const peerId = peerIdForCode(app.roomCode);
-  logLine(`Creating peer with ID: ${peerId}`, 'host');
-  logLine(`ICE providers: ${buildIceServers().length}`, 'host');
-  setStatus(`Connecting to PeerJS cloud…`);
-  render();
-
-  try {
-    app.peer = makePeer(peerId);
-  } catch (e) {
-    logLine('✗ new Peer() threw: ' + e.message, 'host');
-    setStatus('Could not create peer: ' + e.message, 'error');
-    render();
-    return;
-  }
-
-  app.peer.on('open', (id) => {
-    logLine(`✓ Peer open: ${id}`, 'host');
-    app.screen = 'waiting';
-    setStatus('Waiting for a player to join…', 'ok');
-    render();
-  });
-
-  app.peer.on('connection', (conn) => {
-    logLine(`↪ Incoming connection from ${conn.peer}`, 'host');
-
-    if (app.conn && app.conn.open) {
-      logLine('Already connected — rejecting duplicate.', 'host');
-      try { conn.close(); } catch {}
-      return;
-    }
-
-    if (app.conn && !app.conn.open) {
-      logLine('Replacing stale connection attempt.', 'host');
-      try { app.conn.close(); } catch {}
-    }
-
-    app.conn = conn;
-    wireHostConnection(conn);
-  });
-
-  app.peer.on('disconnected', () => {
-    logLine('⚠ Signaling server disconnected. Reconnecting…', 'host');
-    setTimeout(() => {
-      try { app.peer.reconnect(); } catch {}
-    }, 500);
-  });
-
-  app.peer.on('error', (err) => {
-    const t = err?.type || 'error';
-    logLine(`✗ Peer error: ${t} — ${err?.message || ''}`, 'host');
-    const msg = t === 'unavailable-id'
-      ? 'Room code collision. Refresh and try again.'
-      : t === 'network'
-        ? 'Cannot reach PeerJS cloud. Check your internet.'
-        : t === 'server-error'
-          ? 'PeerJS cloud is having issues. Wait a minute and retry.'
-          : `Peer error: ${t}`;
-    setStatus(msg, 'error');
-    render();
+function waitForIceComplete(pc, timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    if (pc.iceGatheringState === 'complete') return resolve();
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    pc.addEventListener('icegatheringstatechange', () => {
+      if (pc.iceGatheringState === 'complete') finish();
+    });
+    // Some browsers never fire 'complete' — bail after the timeout.
+    setTimeout(finish, timeoutMs);
   });
 }
 
-function wireHostConnection(conn) {
-  conn.on('open', () => {
-    logLine('✓ Data channel open.', 'host');
-    app.connected = true;
+// ------------------------------------------------------------
+// WebRTC setup
+// ------------------------------------------------------------
+
+function buildPeerConnection() {
+  const pc = new RTCPeerConnection(ICE_CONFIG);
+
+  pc.addEventListener('iceconnectionstatechange', () => {
+    logLine('ICE: ' + pc.iceConnectionState,
+      pc.iceConnectionState === 'connected' ? 'ok' :
+      pc.iceConnectionState === 'failed' ? 'err' : '');
+  });
+  pc.addEventListener('connectionstatechange', () => {
+    logLine('conn: ' + pc.connectionState,
+      pc.connectionState === 'connected' ? 'ok' :
+      pc.connectionState === 'failed' ? 'err' : '');
+  });
+  pc.addEventListener('icecandidateerror', (e) => {
+    // Common and mostly harmless — the browser tries many candidates.
+    // Only log if it's a TURN error (code 701).
+    if (e.errorCode === 701) logLine('ICE candidate error: ' + e.errorText, 'warn');
+  });
+
+  return pc;
+}
+
+function wireDataChannel(dc) {
+  app.dc = dc;
+
+  dc.addEventListener('open', () => {
+    logLine('✓ Data channel OPEN', 'ok');
     app.screen = 'game';
-    setStatus('Opponent connected!', 'ok');
-    send({ type: 'HELLO', role: 'host', snapshot: snapshotGame() });
+    setStatus('Connected!', 'ok');
+
+    // Host pushes initial state.
+    if (app.role === 'host') {
+      sendMsg({ type: 'STATE', snapshot: snapshotGame() });
+    }
     render();
   });
 
-  conn.on('data', (msg) => handleMessage(msg));
+  dc.addEventListener('message', (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    handleGameMessage(msg);
+  });
 
-  conn.on('close', () => {
-    logLine('Connection closed.', 'host');
-    app.connected = false;
-    setStatus('Opponent disconnected.', 'error');
+  dc.addEventListener('close', () => {
+    logLine('Data channel closed', 'err');
+    setStatus('Disconnected.', 'error');
     render();
   });
 
-  conn.on('error', (err) => {
-    logLine(`Connection error: ${err?.message || err}`, 'host');
-    render();
-  });
+  dc.addEventListener('error', (e) => logLine('dc error: ' + (e.message || ''), 'err'));
 }
 
-// ============================================================
-// JOINER
-// ============================================================
+function sendMsg(msg) {
+  if (!app.dc || app.dc.readyState !== 'open') return;
+  try { app.dc.send(JSON.stringify(msg)); }
+  catch (e) { logLine('send error: ' + e.message, 'err'); }
+}
 
-function joinGame(rawCode) {
-  const code = normalizeCode(rawCode);
-  if (code.length !== ROOM_LEN) {
-    setStatus('Room code must be 6 characters.', 'error');
+// ------------------------------------------------------------
+// Host flow
+// ------------------------------------------------------------
+
+async function startHost() {
+  app.role = 'host';
+  app.screen = 'host';
+  app.hostStep = 1;
+  app.localBlob = '';
+  app.pastedBlob = '';
+  setStatus('Generating offer…', 'wait');
+  render();
+
+  app.pc = buildPeerConnection();
+  const dc = app.pc.createDataChannel('game', { ordered: true });
+  wireDataChannel(dc);
+
+  const offer = await app.pc.createOffer();
+  await app.pc.setLocalDescription(offer);
+  logLine('Offer created, gathering ICE…', '');
+
+  await waitForIceComplete(app.pc, 5000);
+  logLine('ICE gathering done', 'ok');
+
+  const blob = encodeBlob({
+    kind: 'offer',
+    sdp: app.pc.localDescription.sdp,
+    type: app.pc.localDescription.type,
+  });
+  app.localBlob = blob;
+  logLine(`Offer ready (${blob.length} chars)`, 'ok');
+  setStatus('Offer ready. Send it to your guest.', 'ok');
+  render();
+}
+
+async function hostAcceptAnswer() {
+  if (!app.pastedBlob.trim()) {
+    setStatus('Paste the answer text first.', 'error');
     render();
     return;
   }
-  if (typeof Peer === 'undefined') {
-    setStatus('PeerJS failed to load.', 'error');
+  try {
+    const data = decodeBlob(app.pastedBlob);
+    if (data.kind !== 'answer') throw new Error('Not an answer blob');
+    await app.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp });
+    logLine('✓ Answer accepted — negotiating…', 'ok');
+    setStatus('Connecting…', 'wait');
+    app.hostStep = 2;
+    render();
+  } catch (e) {
+    logLine('✗ Bad answer: ' + e.message, 'err');
+    setStatus('Could not parse the answer. Check it was copied fully.', 'error');
+    render();
+  }
+}
+
+// ------------------------------------------------------------
+// Guest flow
+// ------------------------------------------------------------
+
+function startGuest() {
+  app.role = 'guest';
+  app.screen = 'guest';
+  app.guestStep = 1;
+  app.localBlob = '';
+  app.pastedBlob = '';
+  setStatus('Paste the offer from the host.', '');
+  render();
+}
+
+async function guestAcceptOffer() {
+  if (!app.pastedBlob.trim()) {
+    setStatus('Paste the offer text first.', 'error');
     render();
     return;
   }
-
-  requestWakeLock();
-
-  app.role = 'joiner';
-  app.roomCode = code;
-  setStatus('Connecting to PeerJS cloud…');
-  logLine('Creating anonymous peer…', 'joiner');
-  logLine(`ICE providers: ${buildIceServers().length}`, 'joiner');
+  setStatus('Reading offer…', 'wait');
   render();
 
   try {
-    app.peer = makePeer(null);
+    const data = decodeBlob(app.pastedBlob);
+    if (data.kind !== 'offer') throw new Error('Not an offer blob');
+
+    app.pc = buildPeerConnection();
+    app.pc.addEventListener('datachannel', (e) => {
+      logLine('◀ Host data channel received', '');
+      wireDataChannel(e.channel);
+    });
+
+    await app.pc.setRemoteDescription({ type: 'offer', sdp: data.sdp });
+    logLine('Offer accepted — creating answer…', '');
+
+    const answer = await app.pc.createAnswer();
+    await app.pc.setLocalDescription(answer);
+    await waitForIceComplete(app.pc, 5000);
+    logLine('ICE gathering done', 'ok');
+
+    const blob = encodeBlob({
+      kind: 'answer',
+      sdp: app.pc.localDescription.sdp,
+      type: app.pc.localDescription.type,
+    });
+    app.localBlob = blob;
+    logLine(`Answer ready (${blob.length} chars)`, 'ok');
+    setStatus('Answer ready. Send it back to the host.', 'ok');
+    app.guestStep = 2;
+    render();
   } catch (e) {
-    logLine('✗ new Peer() threw: ' + e.message, 'joiner');
-    setStatus('Could not create peer: ' + e.message, 'error');
+    logLine('✗ Bad offer: ' + e.message, 'err');
+    setStatus('Could not parse the offer. Check it was copied fully.', 'error');
     render();
-    return;
   }
-
-  app.peer.on('open', (id) => {
-    logLine(`✓ My peer ID: ${id}`, 'joiner');
-    const target = peerIdForCode(code);
-    setStatus(`Connecting to ${code}…`);
-    render();
-
-    let attempt = 0;
-
-    function tryConnect() {
-      attempt++;
-      logLine(`Attempt ${attempt}/${MAX_ATTEMPTS} — dialing ${target}`, 'joiner');
-
-      if (app.conn) {
-        try { app.conn.close(); } catch {}
-        app.conn = null;
-      }
-
-      const conn = app.peer.connect(target, { reliable: true });
-      app.conn = conn;
-
-      let opened = false;
-
-      conn.on('open', () => {
-        opened = true;
-        logLine('✓ Data channel open.', 'joiner');
-        app.connected = true;
-        app.screen = 'game';
-        setStatus('Connected to host!', 'ok');
-        render();
-      });
-
-      conn.on('data', (msg) => handleMessage(msg));
-
-      conn.on('close', () => {
-        if (opened) {
-          logLine('Host disconnected.', 'joiner');
-          app.connected = false;
-          setStatus('Host disconnected.', 'error');
-          render();
-        }
-      });
-
-      conn.on('error', (err) => {
-        logLine(`Conn error: ${err?.message || err}`, 'joiner');
-      });
-
-      setTimeout(() => {
-        if (opened) return;
-        if (attempt < MAX_ATTEMPTS) {
-          logLine('Timed out — retrying…', 'joiner');
-          try { conn.close(); } catch {}
-          tryConnect();
-        } else {
-          logLine('✗ All attempts failed.', 'joiner');
-          setStatus('Could not connect after ' + MAX_ATTEMPTS + ' tries. Try again.', 'error');
-          render();
-        }
-      }, CONNECT_TIMEOUT_MS);
-    }
-
-    tryConnect();
-  });
-
-  app.peer.on('disconnected', () => {
-    logLine('⚠ Signaling server disconnected.', 'joiner');
-  });
-
-  app.peer.on('error', (err) => {
-    const t = err?.type || 'error';
-    logLine(`✗ Peer error: ${t} — ${err?.message || ''}`, 'joiner');
-    const msg = t === 'peer-unavailable'
-      ? `No room found with code ${code}. Is the host still on the page?`
-      : t === 'network'
-        ? 'Cannot reach PeerJS cloud. Check your internet.'
-        : t === 'server-error'
-          ? 'PeerJS cloud is having issues. Wait and retry.'
-          : `Peer error: ${t}`;
-    setStatus(msg, 'error');
-    render();
-  });
 }
 
-// ============================================================
-// Messaging
-// ============================================================
-
-function send(msg) {
-  if (!app.conn || !app.conn.open) return;
-  try { app.conn.send(msg); }
-  catch (e) { logLine('Send failed: ' + e.message, myId()); }
-}
+// ------------------------------------------------------------
+// Game messages
+// ------------------------------------------------------------
 
 function snapshotGame() {
   return {
@@ -409,53 +300,59 @@ function applySnapshot(s) {
   app.turn = s.turn; app.phase = s.phase;
 }
 
-function handleMessage(msg) {
-  if (!msg || typeof msg !== 'object') return;
-  if (msg.type === 'HELLO') {
-    if (app.role === 'joiner' && msg.snapshot) {
-      applySnapshot(msg.snapshot);
-      logLine(`Joined room. Turn ${app.turn}.`, 'joiner');
-    }
-    render();
-    return;
+function handleGameMessage(msg) {
+  switch (msg.type) {
+    case 'STATE':
+      if (app.role === 'guest' && msg.snapshot) {
+        applySnapshot(msg.snapshot);
+        logLine(`Got state from host. Turn ${app.turn}.`, 'ok');
+      }
+      render();
+      return;
+    case 'ACTION':
+      applyRemoteAction(msg.action, msg.senderId);
+      render();
+      return;
+    case 'RESET':
+      resetGame(false);
+      logLine('Opponent reset.', '');
+      render();
+      return;
   }
-  if (msg.type === 'ACTION') { applyRemoteAction(msg.action, msg.senderId); render(); return; }
-  if (msg.type === 'RESET')  { resetGame(false); logLine('Opponent reset.', app.role); render(); return; }
 }
-
-// ============================================================
-// Game actions
-// ============================================================
 
 function applyRemoteAction(action, senderId) {
   switch (action.type) {
     case 'ATTACK': {
       const dmg = action.amount ?? 10;
       app.enemyHp = Math.max(0, app.enemyHp - dmg);
-      logLine(`${labelFor(senderId)} attacked for ${dmg}.`, senderId);
+      logLine(`${String(senderId).slice(0, 6)} attacked for ${dmg}.`, '');
       break;
     }
-    case 'END_TURN': handleEndTurn(senderId); break;
+    case 'END_TURN':
+      handleEndTurn(senderId);
+      break;
   }
 }
-function labelFor(id) { return id === 'host' ? 'Host' : id === 'joiner' ? 'Joiner' : '???'; }
 
 function doAttack() {
-  if (!app.connected || app.phase !== 'players') return;
-  if (app.energy < 1) { logLine('Not enough energy.', myId()); render(); return; }
+  if (!app.dc || app.dc.readyState !== 'open') return;
+  if (app.phase !== 'players') return;
+  if (app.energy < 1) return;
   app.energy -= 1;
-  const action = { type: 'ATTACK', amount: 10 };
-  applyRemoteAction(action, myId());
-  send({ type: 'ACTION', action, senderId: myId() });
+  const action = { type: 'ATTACK', amount: 10, senderId: app.myId };
+  applyRemoteAction(action, app.myId);
+  sendMsg({ type: 'ACTION', action });
   render();
 }
 
 function doEndTurn() {
-  if (!app.connected || app.phase !== 'players') return;
-  if (app.endedBy.has(myId())) return;
-  const action = { type: 'END_TURN' };
-  handleEndTurn(myId());
-  send({ type: 'ACTION', action, senderId: myId() });
+  if (!app.dc || app.dc.readyState !== 'open') return;
+  if (app.phase !== 'players') return;
+  if (app.endedBy.has(app.myId)) return;
+  const action = { type: 'END_TURN', senderId: app.myId };
+  handleEndTurn(app.myId);
+  sendMsg({ type: 'ACTION', action });
   render();
 }
 
@@ -463,64 +360,79 @@ function handleEndTurn(senderId) {
   if (app.phase !== 'players') return;
   if (app.endedBy.has(senderId)) return;
   app.endedBy.add(senderId);
-  logLine(`${labelFor(senderId)} ended their turn.`, senderId);
+  logLine(`${String(senderId).slice(0, 6)} ended turn.`, '');
   if (app.endedBy.size >= 2) startEnemyPhase();
 }
 
 function startEnemyPhase() {
   app.phase = 'enemy';
   app.endedBy.clear();
-  logLine(`Turn ${app.turn} — enemy phase.`, 'host');
+  logLine(`Turn ${app.turn} — enemy phase.`, '');
   render();
   setTimeout(() => {
     if (app.phase !== 'enemy') return;
     app.turn += 1;
     app.energy = app.maxEnergy;
     app.phase = 'players';
-    logLine(`Turn ${app.turn} — players.`, 'host');
+    logLine(`Turn ${app.turn} — players.`, '');
     render();
   }, 1000);
 }
 
-function doReset(broadcast = true) { resetGame(broadcast); render(); }
+function doReset(broadcast = true) {
+  resetGame(broadcast);
+  render();
+}
 function resetGame(broadcast) {
   app.enemyHp = 100; app.enemyMaxHp = 100;
   app.energy = 3; app.maxEnergy = 3;
   app.turn = 1; app.phase = 'players';
   app.endedBy.clear();
   app.log = [];
-  logLine('Test reset.', myId());
-  if (broadcast && app.connected) send({ type: 'RESET' });
+  logLine('Reset.', '');
+  if (broadcast && app.dc && app.dc.readyState === 'open') sendMsg({ type: 'RESET' });
 }
 
-function copyRoomCode() {
-  const doCopy = async () => {
+// ------------------------------------------------------------
+// Clipboard helpers
+// ------------------------------------------------------------
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
     try {
-      await navigator.clipboard.writeText(app.roomCode);
-      logLine('Room code copied.', myId());
+      const t = document.createElement('textarea');
+      t.value = text;
+      t.style.position = 'fixed';
+      t.style.opacity = '0';
+      document.body.appendChild(t);
+      t.select();
+      document.execCommand('copy');
+      document.body.removeChild(t);
+      return true;
     } catch {
-      try {
-        const tmp = document.createElement('textarea');
-        tmp.value = app.roomCode;
-        tmp.style.position = 'fixed';
-        tmp.style.opacity = '0';
-        document.body.appendChild(tmp);
-        tmp.select();
-        document.execCommand('copy');
-        document.body.removeChild(tmp);
-        logLine('Room code copied.', myId());
-      } catch {
-        logLine('Copy failed — long-press to select.', myId());
-      }
+      return false;
     }
-    render();
-  };
-  doCopy();
+  }
 }
 
-// ============================================================
+async function pasteIntoTextarea(ta) {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) {
+      ta.value = text;
+      ta.dispatchEvent(new Event('input'));
+    }
+  } catch {
+    ta.focus();
+  }
+}
+
+// ------------------------------------------------------------
 // Rendering
-// ============================================================
+// ------------------------------------------------------------
 
 const root = document.getElementById('mp-root');
 
@@ -529,10 +441,13 @@ function render() {
   const frame = document.createElement('div');
   frame.className = 'mp-frame';
   frame.appendChild(el('h1', { class: 'mp-title' }, 'DRAWN TO RUIN'));
-  frame.appendChild(el('p', { class: 'mp-subtitle' }, 'multiplayer test'));
-  if (app.screen === 'lobby')        frame.appendChild(renderLobby());
-  else if (app.screen === 'waiting') frame.appendChild(renderWaiting());
-  else                               frame.appendChild(renderGame());
+  frame.appendChild(el('p', { class: 'mp-subtitle' }, 'manual handshake multiplayer'));
+
+  if (app.screen === 'lobby')      frame.appendChild(renderLobby());
+  else if (app.screen === 'host')  frame.appendChild(renderHost());
+  else if (app.screen === 'guest') frame.appendChild(renderGuest());
+  else                             frame.appendChild(renderGame());
+
   root.appendChild(frame);
 }
 
@@ -564,107 +479,182 @@ function statusEl() {
   return el('div', { class: 'mp-status' + (app.statusKind ? ' ' + app.statusKind : '') }, app.status);
 }
 
+function logBoxEl() {
+  const box = el('div', { class: 'mp-log' });
+  for (const entry of app.log) {
+    box.appendChild(el('div', { class: 'mp-log-line' + (entry.kind ? ' ' + entry.kind : '') }, entry.text));
+  }
+  if (app.log.length === 0) box.appendChild(el('div', { class: 'mp-log-line' }, 'Log will appear here.'));
+  return box;
+}
+
 function renderLobby() {
   const card = el('div', { class: 'mp-card' });
-  const row = el('div', { class: 'mp-row' });
+  card.appendChild(el('h2', {}, 'Choose a role'));
 
-  const hostCol = el('div', { class: 'mp-col' });
-  hostCol.appendChild(el('h2', {}, 'Host'));
-  hostCol.appendChild(el('p', {}, 'Create a room. Share the code with your opponent.'));
-  const hostBtn = el('button', { class: 'mp-btn' }, 'Host Game');
-  hostBtn.addEventListener('click', hostGame);
-  hostCol.appendChild(hostBtn);
-  row.appendChild(hostCol);
+  const choice = el('div', { class: 'mp-choice' });
 
-  const joinCol = el('div', { class: 'mp-col' });
-  joinCol.appendChild(el('h2', {}, 'Join'));
-  joinCol.appendChild(el('p', {}, 'Enter the room code.'));
+  const hostBtn = el('button', { class: 'mp-btn' }, 'Host (create offer)');
+  hostBtn.addEventListener('click', startHost);
+  choice.appendChild(hostBtn);
 
-  const input = document.createElement('input');
-  input.className = 'mp-input';
-  input.type = 'text';
-  input.placeholder = 'ABC123';
-  input.maxLength = ROOM_LEN;
-  input.autocomplete = 'off';
-  input.spellcheck = false;
-  input.autocapitalize = 'characters';
-  input.value = app.roomCode || '';
-  input.addEventListener('input', () => { input.value = normalizeCode(input.value); app.roomCode = input.value; });
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinGame(input.value); });
-  joinCol.appendChild(input);
+  const guestBtn = el('button', { class: 'mp-btn secondary' }, 'Guest (paste offer)');
+  guestBtn.addEventListener('click', startGuest);
+  choice.appendChild(guestBtn);
 
-  const joinBtn = el('button', { class: 'mp-btn' }, 'Join Game');
-  joinBtn.addEventListener('click', () => joinGame(input.value));
-  joinCol.appendChild(joinBtn);
-  row.appendChild(joinCol);
-
-  card.appendChild(row);
+  card.appendChild(choice);
+  card.appendChild(el('p', {},
+    'Host creates a code blob. Send it to the guest. Guest replies with an answer blob. Paste it back. Connection opens.'));
 
   const status = statusEl();
   if (status) card.appendChild(status);
 
-  const logBox = el('div', { class: 'mp-log' });
-  for (const entry of app.log) {
-    logBox.appendChild(el('div', { class: 'mp-log-line' + (entry.kind ? ' ' + entry.kind : '') }, entry.text));
-  }
-  if (app.log.length === 0) logBox.appendChild(el('div', { class: 'mp-log-line' }, 'Diagnostics will appear here.'));
-  card.appendChild(logBox);
-
+  card.appendChild(logBoxEl());
   return card;
 }
 
-function renderWaiting() {
+// ---------- Host screen ----------
+
+function renderHost() {
+  const wrap = el('div', {});
+
+  // Step 1: offer
+  const s1 = stepCard(1, 'Send this to the guest', app.hostStep >= 1);
+  s1.body.appendChild(el('div', { class: 'mp-step-body' },
+    'Copy this text and send it to your guest (any messaging app works).'));
+  const offerTa = mkTextarea(app.localBlob, true);
+  s1.body.appendChild(offerTa);
+  const offerBtnRow = el('div', { class: 'mp-choice' });
+  const copyOfferBtn = el('button', { class: 'mp-btn secondary' }, 'Copy Offer');
+  copyOfferBtn.addEventListener('click', async () => {
+    const ok = await copyText(app.localBlob);
+    logLine(ok ? 'Offer copied.' : 'Copy failed — select and copy manually.', ok ? 'ok' : 'err');
+    render();
+  });
+  offerBtnRow.appendChild(copyOfferBtn);
+  s1.body.appendChild(offerBtnRow);
+  wrap.appendChild(s1.el);
+
+  // Step 2: answer
+  const s2 = stepCard(2, 'Paste the guest\'s reply', app.hostStep >= 1);
+  s2.body.appendChild(el('div', { class: 'mp-step-body' },
+    'Paste the answer text your guest sent back, then click Accept.'));
+  const answerTa = mkTextarea('', false);
+  answerTa.addEventListener('input', () => { app.pastedBlob = answerTa.value; });
+  s2.body.appendChild(answerTa);
+  const pasteAcceptRow = el('div', { class: 'mp-choice' });
+  const pasteBtn = el('button', { class: 'mp-btn secondary' }, 'Paste');
+  pasteBtn.addEventListener('click', async () => {
+    await pasteIntoTextarea(answerTa);
+    app.pastedBlob = answerTa.value;
+  });
+  pasteAcceptRow.appendChild(pasteBtn);
+  const acceptBtn = el('button', { class: 'mp-btn' }, 'Accept Answer');
+  acceptBtn.addEventListener('click', hostAcceptAnswer);
+  pasteAcceptRow.appendChild(acceptBtn);
+  s2.body.appendChild(pasteAcceptRow);
+  wrap.appendChild(s2.el);
+
+  if (app.status) {
+    const s = statusEl();
+    wrap.appendChild(s);
+  }
+  wrap.appendChild(logBoxEl());
+
   const card = el('div', { class: 'mp-card' });
-  card.appendChild(el('h2', {
-    style: { textAlign: 'center', color: '#c9a3ff', margin: '0 0 12px',
-             fontSize: '13px', letterSpacing: '.12em', textTransform: 'uppercase', fontWeight: '600' },
-  }, 'Room Code'));
-
-  const codeRow = el('div', { class: 'mp-code' });
-  codeRow.appendChild(el('span', {}, app.roomCode));
-  card.appendChild(codeRow);
-
-  const copyBtn = el('button', { class: 'mp-btn secondary' }, 'Copy Code');
-  copyBtn.style.width = '100%';
-  copyBtn.style.marginTop = '12px';
-  copyBtn.addEventListener('click', copyRoomCode);
-  card.appendChild(copyBtn);
-
-  card.appendChild(el('div', { class: 'mp-waiting', style: { marginTop: '12px' } },
-    'Waiting for a player to join…'));
-
-  const cancel = el('button', { class: 'mp-btn secondary' }, 'Cancel');
-  cancel.style.marginTop = '12px';
-  cancel.style.width = '100%';
-  cancel.addEventListener('click', () => location.reload());
-  card.appendChild(cancel);
-
-  const status = statusEl();
-  if (status) card.appendChild(status);
-
-  const logBox = el('div', { class: 'mp-log', style: { marginTop: '12px' } });
-  for (const entry of app.log) {
-    logBox.appendChild(el('div', { class: 'mp-log-line' + (entry.kind ? ' ' + entry.kind : '') }, entry.text));
-  }
-  card.appendChild(logBox);
-
+  card.appendChild(wrap);
   return card;
 }
+
+// ---------- Guest screen ----------
+
+function renderGuest() {
+  const wrap = el('div', {});
+
+  const s1 = stepCard(1, 'Paste the host\'s offer', app.guestStep >= 1);
+  s1.body.appendChild(el('div', { class: 'mp-step-body' },
+    'Paste the offer text the host sent you, then click Generate Reply.'));
+  const offerTa = mkTextarea(app.pastedBlob, false);
+  offerTa.addEventListener('input', () => { app.pastedBlob = offerTa.value; });
+  s1.body.appendChild(offerTa);
+  const pasteGenRow = el('div', { class: 'mp-choice' });
+  const pasteBtn = el('button', { class: 'mp-btn secondary' }, 'Paste');
+  pasteBtn.addEventListener('click', async () => {
+    await pasteIntoTextarea(offerTa);
+    app.pastedBlob = offerTa.value;
+  });
+  pasteGenRow.appendChild(pasteBtn);
+  const genBtn = el('button', { class: 'mp-btn' }, 'Generate Reply');
+  genBtn.addEventListener('click', guestAcceptOffer);
+  pasteGenRow.appendChild(genBtn);
+  s1.body.appendChild(pasteGenRow);
+  wrap.appendChild(s1.el);
+
+  // Step 2: show answer
+  if (app.guestStep === 2 && app.localBlob) {
+    const s2 = stepCard(2, 'Send this back to the host', true);
+    s2.body.appendChild(el('div', { class: 'mp-step-body' },
+      'Copy this text and send it back to the host. They\'ll paste it and the connection will open.'));
+    const answerTa = mkTextarea(app.localBlob, true);
+    s2.body.appendChild(answerTa);
+    const copyBtn = el('button', { class: 'mp-btn secondary' }, 'Copy Reply');
+    copyBtn.style.width = '100%';
+    copyBtn.addEventListener('click', async () => {
+      const ok = await copyText(app.localBlob);
+      logLine(ok ? 'Reply copied.' : 'Copy failed.', ok ? 'ok' : 'err');
+      render();
+    });
+    s2.body.appendChild(copyBtn);
+    wrap.appendChild(s2.el);
+  }
+
+  if (app.status) {
+    const s = statusEl();
+    wrap.appendChild(s);
+  }
+  wrap.appendChild(logBoxEl());
+
+  const card = el('div', { class: 'mp-card' });
+  card.appendChild(wrap);
+  return card;
+}
+
+function stepCard(num, title, active) {
+  const outer = el('div', { class: 'mp-step' + (active ? ' active' : '') });
+  const header = el('div', { class: 'mp-step-title' });
+  header.appendChild(el('span', {}, ''));
+  const numEl = el('span', { class: 'mp-step-num' }, String(num));
+  header.firstChild.appendChild(numEl);
+  header.firstChild.appendChild(document.createTextNode(title));
+  outer.appendChild(header);
+  const body = el('div', {});
+  outer.appendChild(body);
+  return { el: outer, body };
+}
+
+function mkTextarea(value, readonly) {
+  const ta = document.createElement('textarea');
+  ta.className = 'mp-textarea';
+  ta.value = value;
+  ta.readOnly = !!readonly;
+  ta.spellcheck = false;
+  ta.autocapitalize = 'off';
+  ta.autocorrect = 'off';
+  ta.addEventListener('focus', () => { setTimeout(() => ta.select(), 10); });
+  return ta;
+}
+
+// ---------- Game screen ----------
 
 function renderGame() {
   const wrap = el('div', { class: 'mp-game' });
 
   const head = el('div', { class: 'mp-game-head' });
-  const badge = el('div', {
-    class: 'mp-badge ' + (app.connected ? (app.role === 'host' ? 'host' : 'joiner') : 'disconnected'),
-  }, app.connected ? (app.role === 'host' ? 'HOST' : 'JOINER') : 'DISCONNECTED');
-  head.appendChild(badge);
   head.appendChild(el('div', {
-    style: { fontFamily: 'monospace', letterSpacing: '.2em', color: '#8b93a1', fontSize: '12px' },
-  }, `Room ${app.roomCode}`));
+    class: 'mp-badge ' + (app.role === 'host' ? 'host' : 'joiner'),
+  }, app.role === 'host' ? 'HOST' : 'GUEST'));
   const resetBtn = el('button', { class: 'mp-btn secondary' }, 'Reset');
-  resetBtn.style.padding = '8px 14px';
-  resetBtn.style.fontSize = '13px';
+  resetBtn.style.cssText = 'padding:8px 14px;font-size:13px;width:auto;margin:0;';
   resetBtn.addEventListener('click', () => doReset(true));
   head.appendChild(resetBtn);
   wrap.appendChild(head);
@@ -689,28 +679,26 @@ function renderGame() {
 
   const controls = el('div', { class: 'mp-controls' });
   const attackBtn = el('button', { class: 'mp-btn' }, 'Attack  (-1 Energy)');
-  attackBtn.disabled = !app.connected || app.phase !== 'players' || app.energy < 1;
+  attackBtn.disabled = !app.dc || app.dc.readyState !== 'open' || app.phase !== 'players' || app.energy < 1;
   attackBtn.addEventListener('click', doAttack);
   controls.appendChild(attackBtn);
   const endBtn = el('button', { class: 'mp-btn' }, 'End Turn');
-  endBtn.disabled = !app.connected || app.phase !== 'players' || app.endedBy.has(myId());
+  endBtn.disabled = !app.dc || app.dc.readyState !== 'open' || app.phase !== 'players' || app.endedBy.has(app.myId);
   endBtn.addEventListener('click', doEndTurn);
   controls.appendChild(endBtn);
   wrap.appendChild(controls);
 
   if (app.phase === 'enemy') {
     wrap.appendChild(el('div', { class: 'mp-waiting' }, 'Enemy turn…'));
-  } else if (app.endedBy.has(myId()) && app.endedBy.size < 2) {
+  } else if (app.endedBy.has(app.myId) && app.endedBy.size < 2) {
     wrap.appendChild(el('div', { class: 'mp-waiting' }, 'Waiting for the other player…'));
   }
 
-  const logBox = el('div', { class: 'mp-log' });
-  for (const entry of app.log) {
-    logBox.appendChild(el('div', { class: 'mp-log-line' + (entry.kind ? ' ' + entry.kind : '') }, entry.text));
-  }
-  wrap.appendChild(logBox);
+  wrap.appendChild(logBoxEl());
 
-  return wrap;
+  const card = el('div', { class: 'mp-card' });
+  card.appendChild(wrap);
+  return card;
 }
 
 function statBlock(label, value, kindCls) {
