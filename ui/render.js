@@ -1161,6 +1161,7 @@ function cardFace(defId, { disabled = false, small = false, big = false, enchant
 
   el.innerHTML = `
     <div class="cost">${def.unplayable ? '–' : def.cost}</div>
+    ${def.type === 'spell' ? '<div class="spell-icon"></div>' : ''}
     <div class="cname">${def.name}</div>
     <div class="ctext">${text}</div>
     ${enchantDef ? `
@@ -1213,6 +1214,10 @@ function bottomBar() {
   return bar;
 }
 
+// ============================================================
+// END-OF-COMBAT BANNER
+// ============================================================
+
 function endBanner() {
   const overlay = document.createElement('div');
   overlay.className = 'victory-overlay';
@@ -1243,63 +1248,94 @@ function endBanner() {
     }
     card.appendChild(btn);
   } else {
-    const text = document.createElement('div');
-    text.className = 'death-text';
-    text.innerHTML = `
-      <p>The dungeon reaches for you. Cold. Patient. Certain.</p>
-
-      <p>You feel it take the cards first. Then the memories of the people
-      who taught you to hold them. Then your name.</p>
-
-      <p>And then — the room goes quiet, and you understand.</p>
-
-      <p class="death-emphasis">You are becoming part of it.</p>
-
-      <p>One more voice inside the dark. One more Drawn who walked in and
-      did not walk out. You can feel the others. Hundreds of them. Thousands.
-      Every hero who ever made it this far and then stopped.</p>
-
-      <p>If it takes you, there is no one else. The Drawn are hunted the
-      moment they are found. There is no second hero waiting in the wings.
-      There is no army coming to finish what you could not.</p>
-
-      <p class="death-emphasis">If the dungeon consumes you,
-      the world ends with you.</p>
-
-      <p>But — you remember them.</p>
-
-      <p>The people who taught you how to hold a card. The village that
-      sent you off with nothing but hope. Everyone still breathing above
-      you who will not survive the week if you fall here.</p>
-
-      <p class="death-emphasis">You are filled with determination.</p>
-
-      <p>Your hand closes around the amulet at your chest — the last gift
-      your family gave you before you left. A small thing. Worn smooth by
-      other hands long before yours.</p>
-
-      <p>It is warm. It has always been warm.</p>
-
-      <p>You pull.</p>
-
-      <p class="death-emphasis">A burst of light.</p>
-
-      <p class="death-last">You are back at the beginning.</p>
-    `;
-    card.appendChild(text);
-
-    const btn = document.createElement('button');
-    btn.className = 'btn death-btn';
-    btn.textContent = 'Return to the Beginning';
-    btn.addEventListener('click', () => {
-      returnToMainMenu();
-      render();
-    });
-    card.appendChild(btn);
+    renderDeathPage(card);
   }
 
   overlay.appendChild(card);
   return overlay;
+}
+
+// ============================================================
+// DEATH — paginated reveal
+// ============================================================
+
+const DEATH_PAGES = [
+  // ---- Page 1: The taking ----
+  [
+    { text: 'The dungeon reaches for you. Cold. Patient. Certain.' },
+    { text: 'You feel it take the cards first. Then the memories of the people who taught you to hold them. Then your name.' },
+    { text: 'And then — the room goes quiet, and you understand.' },
+    { text: 'You are becoming part of it.', cls: 'death-emphasis' },
+  ],
+
+  // ---- Page 2: The weight ----
+  [
+    { text: 'One more voice inside the dark. One more Drawn who walked in and did not walk out. You can feel the others. Hundreds of them. Thousands. Every hero who ever made it this far and then stopped.' },
+    { text: 'If it takes you, there is no one else. The Drawn are hunted the moment they are found. There is no second hero waiting in the wings. There is no army coming to finish what you could not.' },
+    { text: 'If the dungeon consumes you, the world ends with you.', cls: 'death-emphasis' },
+  ],
+
+  // ---- Page 3: The turn ----
+  [
+    { text: 'But — you remember them.' },
+    { text: 'The people who taught you how to hold a card. The village that sent you off with nothing but hope. Everyone still breathing above you who will not survive the week if you fall here.' },
+    { text: 'You are filled with determination.', cls: 'death-emphasis' },
+  ],
+
+  // ---- Page 4: The pull ----
+  [
+    { text: 'Your hand closes around the amulet at your chest — the last gift your family gave you before you left. A small thing. Worn smooth by other hands long before yours.' },
+    { text: 'It is warm. It has always been warm.' },
+    { text: 'You pull.' },
+    { text: 'A burst of light.', cls: 'death-emphasis' },
+    { text: 'You are back at the beginning.', cls: 'death-last' },
+  ],
+];
+
+function renderDeathPage(card) {
+  const pageIndex = state.deathPage ?? 0;
+  const isLast = pageIndex >= DEATH_PAGES.length - 1;
+  const paragraphs = DEATH_PAGES[pageIndex];
+
+  const wrap = document.createElement('div');
+  wrap.className = 'death-text';
+  wrap.style.animation = 'none';
+
+  const page = document.createElement('div');
+  page.className = 'death-page';
+  for (const p of paragraphs) {
+    const el = document.createElement('p');
+    if (p.cls) el.className = p.cls;
+    el.textContent = p.text;
+    page.appendChild(el);
+  }
+  wrap.appendChild(page);
+
+  const dots = document.createElement('div');
+  dots.className = 'death-page-dots';
+  for (let i = 0; i < DEATH_PAGES.length; i++) {
+    const dot = document.createElement('span');
+    dot.className = 'death-page-dot' + (i === pageIndex ? ' active' : '');
+    dots.appendChild(dot);
+  }
+  wrap.appendChild(dots);
+
+  card.appendChild(wrap);
+
+  const btn = document.createElement('button');
+  btn.className = 'btn death-btn';
+  btn.textContent = isLast ? 'Return to the Beginning' : 'Continue';
+  btn.addEventListener('click', () => {
+    if (isLast) {
+      state.deathPage = 0;
+      returnToMainMenu();
+      render();
+    } else {
+      state.deathPage = pageIndex + 1;
+      render();
+    }
+  });
+  card.appendChild(btn);
 }
 
 function renderGameOver(app) {
