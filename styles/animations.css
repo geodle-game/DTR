@@ -54,7 +54,84 @@
 
 
 /* ============================================================
-   2b. BLOCK PNG
+   2b. SPELL BOOK — appears above caster during a spell windup
+   ============================================================ */
+
+.spell-book-cast {
+  position: fixed;
+  width: 110px;
+  height: 110px;
+  margin-left: -55px;
+  margin-top:  -55px;
+  pointer-events: none;
+  z-index: 9100;
+  transform-origin: center center;
+  opacity: 0;
+  animation: spellBookCast 320ms cubic-bezier(.2, .9, .3, 1.15) forwards;
+  filter:
+    drop-shadow(0 0 14px rgba(167, 139, 250, 1))
+    drop-shadow(0 0 30px rgba(140, 100, 255, .65))
+    drop-shadow(0 4px 8px rgba(0, 0, 0, .5));
+  will-change: transform, opacity, filter;
+}
+
+@keyframes spellBookCast {
+  0% {
+    opacity: 0;
+    transform: scale(.15) rotate(-40deg) translateY(30px);
+  }
+  22% {
+    opacity: 1;
+    transform: scale(1.05) rotate(-12deg) translateY(0);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.18) rotate(0deg) translateY(-10px);
+    filter:
+      drop-shadow(0 0 22px rgba(200, 180, 255, 1))
+      drop-shadow(0 0 44px rgba(167, 139, 250, .85))
+      drop-shadow(0 4px 8px rgba(0, 0, 0, .5));
+  }
+  72% {
+    opacity: 1;
+    transform: scale(1.08) rotate(6deg) translateY(-18px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.9) rotate(0deg) translateY(-44px);
+    filter:
+      drop-shadow(0 0 40px rgba(200, 180, 255, 1))
+      drop-shadow(0 0 80px rgba(167, 139, 250, .6));
+  }
+}
+
+.spell-book-ring {
+  position: fixed;
+  width: 70px;
+  height: 70px;
+  margin-left: -35px;
+  margin-top:  -35px;
+  border-radius: 50%;
+  border: 2px solid rgba(167, 139, 250, .95);
+  pointer-events: none;
+  z-index: 9099;
+  box-shadow:
+    0 0 26px rgba(167, 139, 250, .85),
+    0 0 55px rgba(140, 100, 255, .45) inset;
+  animation: spellBookRing 440ms cubic-bezier(.15, .8, .3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes spellBookRing {
+  0%   { opacity: 0; transform: scale(.35); }
+  22%  { opacity: 1; transform: scale(1); }
+  60%  { opacity: .65; transform: scale(2.1); }
+  100% { opacity: 0; transform: scale(3.4); }
+}
+
+
+/* ============================================================
+   2c. BLOCK PNG
    ============================================================ */
 
 .block-effect {
