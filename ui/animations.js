@@ -5,6 +5,10 @@
 
 import { spawnImpactBurst } from './effects.js';
 
+// Preload the spell book so it's cached before the first spell is cast.
+const _spellBookPreload = new Image();
+_spellBookPreload.src = 'assets/spell-book.png';
+
 const rng = () => Math.random();
 
 const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
@@ -114,15 +118,18 @@ export function spawnSpellBook(casterEl, { duration = 320, dirX = 1 } = {}) {
   const cx = r.left + r.width / 2;
   const cy = r.top + r.height / 2;
 
-  const img = document.createElement('img');
-  img.src = 'assets/spell-book.png';
-  img.className = 'spell-book-cast';
-  img.style.left = cx + 'px';
-  img.style.top  = cy + 'px';
-  img.style.animationDuration = duration + 'ms';
-  img.style.transform = `scaleX(${dirX >= 0 ? 1 : -1})`;
-  document.body.appendChild(img);
+  // Book — a div with background-image so it has a visible fallback
+  // color even if the PNG hasn't loaded yet.
+  const book = document.createElement('div');
+  book.className = 'spell-book-cast';
+  book.style.left = cx + 'px';
+  book.style.top  = cy + 'px';
+  book.style.animationDuration = duration + 'ms';
+  book.style.backgroundImage = 'url(assets/spell-book.png)';
+  book.style.setProperty('--flip', dirX >= 0 ? '1' : '-1');
+  document.body.appendChild(book);
 
+  // Charging ring behind the book
   const ring = document.createElement('div');
   ring.className = 'spell-book-ring';
   ring.style.left = cx + 'px';
@@ -131,11 +138,11 @@ export function spawnSpellBook(casterEl, { duration = 320, dirX = 1 } = {}) {
   document.body.appendChild(ring);
 
   setTimeout(() => {
-    img.remove();
+    book.remove();
     ring.remove();
   }, duration + 260);
 
-  return img;
+  return book;
 }
 
 // ============================================================
