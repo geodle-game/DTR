@@ -10,12 +10,15 @@ export function makeEnemyCard(defId) {
 
 export function makeRng(seed) {
   let s = (seed >>> 0) || 1;
-  return function next() {
+  const next = function next() {
     s ^= s << 13; s >>>= 0;
     s ^= s >>> 17;
     s ^= s << 5;  s >>>= 0;
     return s / 0xffffffff;
   };
+  next.getState = () => s;
+  next.setState = (v) => { s = (v >>> 0) || 1; };
+  return next;
 }
 
 export function shuffle(arr, rng = Math.random) {
