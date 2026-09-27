@@ -1,6 +1,7 @@
 // ============================================================
 // multiplayer.js — standalone multiplayer test
-// TURN-enabled for reliable cross-device connections.
+// TURN-enabled, joiner retry loop, stale-connection takeover,
+// wake lock for mobile.
 // ============================================================
 
 const ROOM_PREFIX = 'dtr-mp-test-v1-';
@@ -8,7 +9,7 @@ const ROOM_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ROOM_LEN = 6;
 
 // Public free TURN servers. Guarantees a relay fallback when
-// direct P2P (STUN) fails — which is nearly always the case when
+// direct P2P (STUN) fails, which is nearly always the case when
 // one peer is on cellular / behind CGNAT.
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -20,6 +21,30 @@ const ICE_SERVERS = [
   { urls: 'turns:openrelay.metered.ca:443?transport=tcp',
     username: 'openrelayproject', credential: 'openrelayproject' },
 ];
+
+const CONNECT_TIMEOUT_MS = 8000;
+const MAX_ATTEMPTS = 4;
+
+// ------------------------------------------------------------
+// Wake lock — stops the mobile screen from sleeping mid-connect
+// ------------------------------------------------------------
+
+let wakeLock = null;
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  if (wakeLock) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !wakeLock) requestWakeLock();
+});
+
+// ------------------------------------------------------------
+// State
+// ------------------------------------------------------------
 
 const app = {
   screen: 'lobby',
@@ -86,6 +111,8 @@ function hostGame() {
     return;
   }
 
+  requestWakeLock();
+
   app.role = 'host';
   app.roomCode = generateRoomCode();
   const peerId = peerIdForCode(app.roomCode);
@@ -111,18 +138,30 @@ function hostGame() {
 
   app.peer.on('connection', (conn) => {
     logLine(`↪ Incoming connection from ${conn.peer}`, 'host');
-    if (app.conn) {
-      logLine('Already have a connection — rejecting.', 'host');
+
+    // If we already have an OPEN connection, reject duplicates.
+    if (app.conn && app.conn.open) {
+      logLine('Already connected — rejecting duplicate.', 'host');
       try { conn.close(); } catch {}
       return;
     }
+
+    // If we have a previous connection that never opened, close it and
+    // accept the fresh one. This handles the joiner's retry loop.
+    if (app.conn && !app.conn.open) {
+      logLine('Replacing stale connection attempt.', 'host');
+      try { app.conn.close(); } catch {}
+    }
+
     app.conn = conn;
     wireHostConnection(conn);
   });
 
   app.peer.on('disconnected', () => {
     logLine('⚠ Signaling server disconnected. Reconnecting…', 'host');
-    try { app.peer.reconnect(); } catch {}
+    setTimeout(() => {
+      try { app.peer.reconnect(); } catch {}
+    }, 500);
   });
 
   app.peer.on('error', (err) => {
@@ -182,6 +221,8 @@ function joinGame(rawCode) {
     return;
   }
 
+  requestWakeLock();
+
   app.role = 'joiner';
   app.roomCode = code;
   setStatus('Connecting to PeerJS cloud…');
@@ -200,13 +241,70 @@ function joinGame(rawCode) {
   app.peer.on('open', (id) => {
     logLine(`✓ My peer ID: ${id}`, 'joiner');
     const target = peerIdForCode(code);
-    logLine(`Dialing host: ${target}`, 'joiner');
     setStatus(`Connecting to ${code}…`);
     render();
 
-    const conn = app.peer.connect(target, { reliable: true });
-    app.conn = conn;
-    wireJoinerConnection(conn);
+    let attempt = 0;
+
+    function tryConnect() {
+      attempt++;
+      logLine(`Attempt ${attempt}/${MAX_ATTEMPTS} — dialing ${target}`, 'joiner');
+
+      // Clean up any previous attempt before opening a new one.
+      if (app.conn) {
+        try { app.conn.close(); } catch {}
+        app.conn = null;
+      }
+
+      const conn = app.peer.connect(target, { reliable: true });
+      app.conn = conn;
+
+      let opened = false;
+
+      conn.on('open', () => {
+        opened = true;
+        logLine('✓ Data channel open.', 'joiner');
+        app.connected = true;
+        app.screen = 'game';
+        setStatus('Connected to host!', 'ok');
+        render();
+      });
+
+      conn.on('data', (msg) => handleMessage(msg));
+
+      conn.on('close', () => {
+        if (opened) {
+          logLine('Host disconnected.', 'joiner');
+          app.connected = false;
+          setStatus('Host disconnected.', 'error');
+          render();
+        }
+      });
+
+      conn.on('error', (err) => {
+        logLine(`Conn error: ${err?.message || err}`, 'joiner');
+      });
+
+      // If it hasn't opened within CONNECT_TIMEOUT_MS, retry.
+      setTimeout(() => {
+        if (opened) return;
+        if (attempt < MAX_ATTEMPTS) {
+          logLine('Timed out — retrying…', 'joiner');
+          try { conn.close(); } catch {}
+          tryConnect();
+        } else {
+          logLine('✗ All attempts failed.', 'joiner');
+          setStatus('Could not connect after ' + MAX_ATTEMPTS + ' tries. Try again.', 'error');
+          render();
+        }
+      }, CONNECT_TIMEOUT_MS);
+    }
+
+    tryConnect();
+  });
+
+  app.peer.on('disconnected', () => {
+    logLine('⚠ Signaling server disconnected.', 'joiner');
   });
 
   app.peer.on('error', (err) => {
@@ -220,30 +318,6 @@ function joinGame(rawCode) {
           ? 'PeerJS cloud is having issues. Wait and retry.'
           : `Peer error: ${t}`;
     setStatus(msg, 'error');
-    render();
-  });
-}
-
-function wireJoinerConnection(conn) {
-  conn.on('open', () => {
-    logLine('✓ Data channel open.', 'joiner');
-    app.connected = true;
-    app.screen = 'game';
-    setStatus('Connected to host!', 'ok');
-    render();
-  });
-
-  conn.on('data', (msg) => handleMessage(msg));
-
-  conn.on('close', () => {
-    logLine('Host disconnected.', 'joiner');
-    app.connected = false;
-    setStatus('Host disconnected.', 'error');
-    render();
-  });
-
-  conn.on('error', (err) => {
-    logLine(`Connection error: ${err?.message || err}`, 'joiner');
     render();
   });
 }
@@ -305,6 +379,7 @@ function labelFor(id) { return id === 'host' ? 'Host' : id === 'joiner' ? 'Joine
 function doAttack() {
   if (!app.connected || app.phase !== 'players') return;
   if (app.energy < 1) { logLine('Not enough energy.', myId()); render(); return; }
+  app.energy -= 1;
   const action = { type: 'ATTACK', amount: 10 };
   applyRemoteAction(action, myId());
   send({ type: 'ACTION', action, senderId: myId() });
@@ -355,9 +430,29 @@ function resetGame(broadcast) {
 }
 
 function copyRoomCode() {
-  try { navigator.clipboard.writeText(app.roomCode); logLine('Room code copied.', myId()); }
-  catch { logLine('Copy failed — long-press the code to select.', myId()); }
-  render();
+  const doCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(app.roomCode);
+      logLine('Room code copied.', myId());
+    } catch {
+      // Fallback for iOS Safari, which restricts clipboard in some contexts.
+      try {
+        const tmp = document.createElement('textarea');
+        tmp.value = app.roomCode;
+        tmp.style.position = 'fixed';
+        tmp.style.opacity = '0';
+        document.body.appendChild(tmp);
+        tmp.select();
+        document.execCommand('copy');
+        document.body.removeChild(tmp);
+        logLine('Room code copied.', myId());
+      } catch {
+        logLine('Copy failed — long-press to select.', myId());
+      }
+    }
+    render();
+  };
+  doCopy();
 }
 
 // ============================================================
