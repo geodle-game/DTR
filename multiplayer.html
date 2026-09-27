@@ -13,35 +13,36 @@
       color: #e8eaee;
       font-family: system-ui, -apple-system, sans-serif;
       font-size: 15px;
+      -webkit-text-size-adjust: 100%;
     }
     #mp-root {
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 32px 20px;
+      padding: 24px 16px;
     }
     .mp-frame {
       width: 100%;
       max-width: 780px;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 18px;
     }
     .mp-title {
       margin: 0;
       text-align: center;
       font-family: Georgia, "Times New Roman", serif;
-      font-size: 32px;
+      font-size: 30px;
       letter-spacing: .12em;
       color: #ffd166;
       text-shadow: 0 0 24px rgba(255,209,102,.5);
     }
     .mp-subtitle {
-      margin: -12px 0 0;
+      margin: -10px 0 0;
       text-align: center;
       color: #8b93a1;
-      font-size: 13px;
+      font-size: 12px;
       letter-spacing: .08em;
       text-transform: uppercase;
     }
@@ -49,24 +50,20 @@
       background: linear-gradient(180deg, #232833, #1a1e26);
       border: 1px solid #3a4250;
       border-radius: 14px;
-      padding: 20px 24px;
+      padding: 20px;
       box-shadow: 0 12px 40px rgba(0,0,0,.5);
     }
-    .mp-row {
-      display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
-    }
+    .mp-row { display: flex; gap: 20px; flex-wrap: wrap; }
     .mp-col {
       flex: 1;
-      min-width: 260px;
+      min-width: 240px;
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
     .mp-col h2 {
       margin: 0;
-      font-size: 16px;
+      font-size: 14px;
       letter-spacing: .08em;
       text-transform: uppercase;
       color: #c9a3ff;
@@ -83,16 +80,17 @@
       color: white;
       border: none;
       border-radius: 10px;
-      padding: 12px 20px;
+      padding: 14px 20px;
       font-weight: 700;
-      font-size: 14px;
+      font-size: 15px;
       cursor: pointer;
       box-shadow: 0 4px 14px rgba(143,107,255,.35);
       font-family: inherit;
       transition: transform .08s ease, filter .08s ease;
       letter-spacing: .04em;
+      -webkit-tap-highlight-color: transparent;
     }
-    .mp-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .mp-btn:hover { filter: brightness(1.08); }
     .mp-btn:active { transform: translateY(1px); }
     .mp-btn:disabled {
       background: #262b34;
@@ -107,23 +105,20 @@
       color: #c9a3ff;
       box-shadow: 0 4px 14px rgba(0,0,0,.4);
     }
-    .mp-btn.danger {
-      background: linear-gradient(180deg, #c05050, #903030);
-      box-shadow: 0 4px 14px rgba(200,80,80,.35);
-    }
     .mp-input {
       background: #14161a;
       border: 1px solid #3a4250;
       color: #e8eaee;
-      padding: 12px 16px;
+      padding: 14px 16px;
       border-radius: 10px;
-      font-size: 18px;
+      font-size: 22px;
       font-family: monospace;
       letter-spacing: .3em;
       text-align: center;
       text-transform: uppercase;
       width: 100%;
       box-sizing: border-box;
+      -webkit-appearance: none;
     }
     .mp-input:focus {
       outline: none;
@@ -133,12 +128,13 @@
     .mp-status {
       text-align: center;
       font-size: 13px;
-      padding: 8px 12px;
+      padding: 10px 12px;
       border-radius: 8px;
       background: rgba(0,0,0,.35);
       border: 1px solid #2a2f3a;
       color: #b8bdc7;
       letter-spacing: .04em;
+      margin-top: 12px;
     }
     .mp-status.error {
       color: #ff8a8a;
@@ -155,21 +151,22 @@
       align-items: center;
       justify-content: center;
       gap: 12px;
-      padding: 16px;
+      padding: 18px 16px;
       background: rgba(143,107,255,.1);
       border: 2px solid #8f6bff;
       border-radius: 12px;
       font-family: monospace;
-      font-size: 36px;
-      letter-spacing: .4em;
+      font-size: 32px;
+      letter-spacing: .35em;
       color: #ffd166;
       text-shadow: 0 0 24px rgba(255,209,102,.6);
       font-weight: 800;
+      word-break: break-all;
+      text-align: center;
     }
     .mp-code-copy {
-      padding: 6px 12px;
+      padding: 8px 12px;
       font-size: 12px;
-      letter-spacing: .06em;
       border-radius: 6px;
       background: #2a2438;
       color: #c9a3ff;
@@ -177,21 +174,17 @@
       cursor: pointer;
       font-family: inherit;
       font-weight: 600;
+      -webkit-tap-highlight-color: transparent;
     }
     .mp-code-copy:hover { background: #3a3058; }
 
-    /* ---------- Game view ---------- */
-    .mp-game {
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-    }
+    .mp-game { display: flex; flex-direction: column; gap: 16px; }
     .mp-game-head {
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
-      gap: 12px;
+      gap: 10px;
     }
     .mp-badge {
       display: inline-flex;
@@ -204,32 +197,20 @@
       letter-spacing: .1em;
       text-transform: uppercase;
     }
-    .mp-badge.host {
-      background: rgba(143,107,255,.2);
-      border: 1px solid #8f6bff;
-      color: #c9a3ff;
-    }
-    .mp-badge.joiner {
-      background: rgba(107,255,158,.15);
-      border: 1px solid #6bff9e;
-      color: #6bff9e;
-    }
-    .mp-badge.disconnected {
-      background: rgba(200,80,80,.2);
-      border: 1px solid #c05050;
-      color: #ff8a8a;
-    }
+    .mp-badge.host { background: rgba(143,107,255,.2); border: 1px solid #8f6bff; color: #c9a3ff; }
+    .mp-badge.joiner { background: rgba(107,255,158,.15); border: 1px solid #6bff9e; color: #6bff9e; }
+    .mp-badge.disconnected { background: rgba(200,80,80,.2); border: 1px solid #c05050; color: #ff8a8a; }
     .mp-enemy {
       background: linear-gradient(180deg, #3a1f1f, #241414);
       border: 2px solid #8a4040;
       border-radius: 14px;
-      padding: 20px 24px;
+      padding: 18px 20px;
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
     .mp-enemy-name {
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 800;
       letter-spacing: .06em;
       color: #ff9b6b;
@@ -247,7 +228,6 @@
       height: 100%;
       background: linear-gradient(90deg, #e05c5c, #ff8a6b);
       transition: width .4s ease;
-      box-shadow: 0 0 20px rgba(224,92,92,.5) inset;
     }
     .mp-hp-text {
       position: absolute;
@@ -261,10 +241,9 @@
       letter-spacing: .06em;
     }
     .mp-stats {
-      display: flex;
-      gap: 20px;
-      justify-content: center;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+      gap: 12px;
       padding: 16px;
       background: linear-gradient(180deg, #232833, #1a1e26);
       border: 1px solid #3a4250;
@@ -275,47 +254,39 @@
       flex-direction: column;
       align-items: center;
       gap: 4px;
-      min-width: 90px;
     }
     .mp-stat-label {
-      font-size: 11px;
+      font-size: 10px;
       text-transform: uppercase;
       letter-spacing: .1em;
       color: #8b93a1;
     }
     .mp-stat-value {
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 800;
       color: #c9a3ff;
-      letter-spacing: .02em;
     }
     .mp-stat-value.gold { color: #ffd166; }
     .mp-stat-value.green { color: #6bff9e; }
     .mp-controls {
-      display: flex;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 12px;
-      justify-content: center;
-      flex-wrap: wrap;
-    }
-    .mp-controls .mp-btn {
-      min-width: 160px;
-      padding: 14px 20px;
-      font-size: 15px;
     }
     .mp-log {
-      background: rgba(0,0,0,.35);
+      background: rgba(0,0,0,.5);
       border: 1px solid #2a2f3a;
       border-radius: 10px;
-      padding: 12px 16px;
+      padding: 12px 14px;
       font-family: monospace;
-      font-size: 12px;
-      line-height: 1.7;
+      font-size: 11px;
+      line-height: 1.6;
       color: #b8bdc7;
-      max-height: 180px;
+      max-height: 200px;
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
-    .mp-log-line { opacity: .8; }
-    .mp-log-line.recent { opacity: 1; color: #c9a3ff; }
+    .mp-log-line { opacity: .85; word-break: break-word; }
     .mp-log-line.host { color: #c9a3ff; }
     .mp-log-line.joiner { color: #6bff9e; }
     .mp-waiting {
@@ -329,6 +300,11 @@
     @keyframes mpPulse {
       0%, 100% { opacity: .55; }
       50% { opacity: 1; }
+    }
+    @media (max-width: 600px) {
+      .mp-title { font-size: 24px; }
+      .mp-code { font-size: 24px; letter-spacing: .25em; }
+      .mp-controls { grid-template-columns: 1fr; }
     }
   </style>
 </head>
