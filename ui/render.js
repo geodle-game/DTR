@@ -1,17 +1,13 @@
 import {
-  state, chooseRelic, confirmDeck, newRun, startNode, backToMap,
-  claimReward, takeRewardCard, skipRewardCard,
-  pickEventChoice, buyShopCard, buyShopHeal,
-  restHeal, restEnchantStart, applyEnchant, skipEnchant, newCombat,
+  state,
   toggleDeckOverlay, toggleRelicOverlay,
   toggleDrawOverlay, toggleDiscardOverlay, toggleExhaustOverlay,
-  closeOverlays, dismissBossLore, returnToMainMenu,
-  nextAct, claimActReward, takeActRewardCard, skipActRewardCard,
-  takeActRewardRelic, finishRun,
-  pickTreasureRelic, skipTreasure,
+  closeOverlays, dismissBossLore,
 } from '../systems/state.js';
+import { dispatch } from '../systems/dispatch.js';
+import { getMode, isGuest } from '../systems/net.js';
 import {
-  canPlay, playCard, selectCardForPlay, beginEnemyTurn, resolveEnemyTurn,
+  canPlay, selectCardForPlay, costOf,
 } from '../systems/combat.js';
 import {
   animateHits,
@@ -21,6 +17,9 @@ import {
 import {
   autoSave, hasSave, loadSave, restoreRun, clearSave,
 } from '../systems/save.js';
+import {
+  hostStart, hostAcceptAnswer, guestStart, onStatus, isChannelOpen,
+} from '../systems/net.js';
 import { CARDS } from '../data/cards.js';
 import { RELICS } from '../data/relics.js';
 import { ENEMY_CARDS } from '../data/enemy-cards.js';
@@ -30,6 +29,39 @@ import { getEnchant } from '../data/enchants.js';
 
 const LONG_PRESS_MS = 450;
 const DRAG_THRESHOLD = 14;
+
+// ------------------------------------------------------------
+// Dispatch wrappers — same call signatures as the old imports
+// so nothing else in this file needs to change.
+// ------------------------------------------------------------
+const chooseRelic         = (id)  => dispatch({ type: 'CHOOSE_RELIC', relicId: id });
+const confirmDeck         = ()    => dispatch({ type: 'CONFIRM_DECK' });
+const newRun              = (seed) => dispatch({ type: 'NEW_RUN', seed });
+const startNode           = (id)  => dispatch({ type: 'START_NODE', nodeId: id });
+const backToMap           = ()    => dispatch({ type: 'BACK_TO_MAP' });
+const claimReward         = ()    => dispatch({ type: 'CLAIM_REWARD' });
+const takeRewardCard      = (id)  => dispatch({ type: 'TAKE_REWARD_CARD', defId: id });
+const skipRewardCard      = ()    => dispatch({ type: 'SKIP_REWARD_CARD' });
+const pickEventChoice     = (i)   => dispatch({ type: 'PICK_EVENT_CHOICE', index: i });
+const buyShopCard         = (i)   => dispatch({ type: 'BUY_SHOP_CARD', index: i });
+const buyShopHeal         = ()    => dispatch({ type: 'BUY_SHOP_HEAL' });
+const restHeal            = ()    => dispatch({ type: 'REST_HEAL' });
+const restEnchantStart    = ()    => dispatch({ type: 'REST_ENCHANT_START' });
+const applyEnchant        = (i)   => dispatch({ type: 'APPLY_ENCHANT', index: i });
+const skipEnchant         = ()    => dispatch({ type: 'SKIP_ENCHANT' });
+const returnToMainMenu    = ()    => dispatch({ type: 'RETURN_TO_MAIN_MENU' });
+const nextAct             = ()    => dispatch({ type: 'NEXT_ACT' });
+const claimActReward      = ()    => dispatch({ type: 'CLAIM_ACT_REWARD' });
+const takeActRewardCard   = (id)  => dispatch({ type: 'TAKE_ACT_REWARD_CARD', defId: id });
+const skipActRewardCard   = ()    => dispatch({ type: 'SKIP_ACT_REWARD_CARD' });
+const takeActRewardRelic  = (id)  => dispatch({ type: 'TAKE_ACT_REWARD_RELIC', relicId: id });
+const finishRun           = ()    => dispatch({ type: 'FINISH_RUN' });
+const pickTreasureRelic   = (id)  => dispatch({ type: 'PICK_TREASURE_RELIC', relicId: id });
+const skipTreasure        = ()    => dispatch({ type: 'SKIP_TREASURE' });
+
+// ============================================================
+// Main render entry
+// ============================================================
 
 export function render() {
   const app = document.getElementById('app');
@@ -50,6 +82,8 @@ export function render() {
     case 'rest':        renderRest(app);        break;
     case 'enchantPick': renderEnchantPick(app); break;
     case 'victory':     renderVictory(app);     break;
+    case 'mpHost':      renderMpHost(app);      break;
+    case 'mpGuest':     renderMpGuest(app);     break;
     default:            renderGameOver(app);
   }
 
@@ -61,12 +95,12 @@ export function render() {
 
   if (state.bossLore) renderBossLore(app);
 
-  // Auto-save on any safe screen. Silently no-ops during combat,
-  // on the main menu, and after a run ends.
   autoSave(state);
 }
 
-// ---------------- Main menu / splash screen ----------------
+// ============================================================
+// Main menu
+// ============================================================
 
 function renderMainMenu(app) {
   const wrap = document.createElement('div');
@@ -174,25 +208,32 @@ function renderMainMenu(app) {
       if (!confirm('Start a new run? Your current progress will be lost.')) return;
       clearSave();
       newRun();
-      render();
     });
     inner.appendChild(newRunBtn);
   } else {
     const btn = document.createElement('button');
     btn.className = 'btn main-menu-btn';
     btn.textContent = 'Begin';
-    btn.addEventListener('click', () => {
-      newRun();
-      render();
-    });
+    btn.addEventListener('click', () => newRun());
     inner.appendChild(btn);
   }
+
+  const mpBtn = document.createElement('button');
+  mpBtn.className = 'btn main-menu-btn';
+  mpBtn.textContent = 'Multiplayer';
+  mpBtn.addEventListener('click', () => {
+    state.screen = 'mpHost';
+    render();
+  });
+  inner.appendChild(mpBtn);
 
   wrap.appendChild(inner);
   app.appendChild(wrap);
 }
 
-// ---------------- Boss lore modal ----------------
+// ============================================================
+// Boss lore modal
+// ============================================================
 
 function renderBossLore(app) {
   const overlay = document.createElement('div');
@@ -222,7 +263,9 @@ function renderBossLore(app) {
   app.appendChild(overlay);
 }
 
-// ---------------- Card text resolution ----------------
+// ============================================================
+// Card text resolution
+// ============================================================
 
 function resolveCardText(def, ctx) {
   let text = def.text;
@@ -288,6 +331,10 @@ function topButtons() {
 
   return wrap;
 }
+
+// ============================================================
+// Overlays
+// ============================================================
 
 function renderDeckOverlay(app) {
   const overlay = cardGridOverlay('Your Deck', sortDeckEntries(state.run.deck));
@@ -393,6 +440,10 @@ function relicCard(r, onClick) {
   return el;
 }
 
+// ============================================================
+// Relic pick / deck view
+// ============================================================
+
 function renderRelicPick(app) {
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
@@ -404,7 +455,7 @@ function renderRelicPick(app) {
   row.className = 'relic-row';
   for (const id of state.relicChoices) {
     const r = RELICS[id];
-    row.appendChild(relicCard(r, () => { chooseRelic(id); render(); }));
+    row.appendChild(relicCard(r, () => chooseRelic(id)));
   }
   wrap.appendChild(row);
   app.appendChild(wrap);
@@ -434,10 +485,14 @@ function renderDeckView(app) {
   const btn = document.createElement('button');
   btn.className = 'btn';
   btn.textContent = 'Begin';
-  btn.addEventListener('click', () => { confirmDeck(); render(); });
+  btn.addEventListener('click', () => confirmDeck());
   wrap.appendChild(btn);
   app.appendChild(wrap);
 }
+
+// ============================================================
+// Map
+// ============================================================
 
 function renderMap(app) {
   const map = state.run.map;
@@ -532,7 +587,7 @@ function renderMap(app) {
     if (state.run.currentNodeId === n.id) el.classList.add('map-node-current');
     if (reachSet.has(n.id)) {
       el.classList.add('map-node-reachable');
-      el.addEventListener('click', () => { startNode(n.id); render(); });
+      el.addEventListener('click', () => startNode(n.id));
     } else {
       el.classList.add('map-node-locked');
     }
@@ -542,6 +597,10 @@ function renderMap(app) {
   wrap.appendChild(board);
   app.appendChild(wrap);
 }
+
+// ============================================================
+// Reward
+// ============================================================
 
 function renderReward(app) {
   const r = state.reward;
@@ -566,7 +625,7 @@ function renderReward(app) {
     grid.className = 'deck-grid';
     for (const id of r.cards) {
       const el = cardFace(id, { small: true });
-      el.addEventListener('click', () => { takeRewardCard(id); render(); });
+      el.addEventListener('click', () => takeRewardCard(id));
       grid.appendChild(el);
     }
     wrap.appendChild(grid);
@@ -574,17 +633,21 @@ function renderReward(app) {
     const skip = document.createElement('button');
     skip.className = 'btn';
     skip.textContent = 'Skip';
-    skip.addEventListener('click', () => { skipRewardCard(); render(); });
+    skip.addEventListener('click', () => skipRewardCard());
     wrap.appendChild(skip);
   }
 
   const btn = document.createElement('button');
   btn.className = 'btn';
   btn.textContent = 'Continue';
-  btn.addEventListener('click', () => { claimReward(); render(); });
+  btn.addEventListener('click', () => claimReward());
   wrap.appendChild(btn);
   app.appendChild(wrap);
 }
+
+// ============================================================
+// Act reward
+// ============================================================
 
 function renderActReward(app) {
   const r = state.actReward;
@@ -616,7 +679,7 @@ function renderActReward(app) {
     row.className = 'relic-row';
     for (const id of r.relicChoices) {
       const relic = RELICS[id];
-      row.appendChild(relicCard(relic, () => { takeActRewardRelic(id); render(); }));
+      row.appendChild(relicCard(relic, () => takeActRewardRelic(id)));
     }
     wrap.appendChild(row);
   } else {
@@ -635,7 +698,7 @@ function renderActReward(app) {
       grid.className = 'deck-grid';
       for (const id of r.cards) {
         const el = cardFace(id, { small: true });
-        el.addEventListener('click', () => { takeActRewardCard(id); render(); });
+        el.addEventListener('click', () => takeActRewardCard(id));
         grid.appendChild(el);
       }
       wrap.appendChild(grid);
@@ -643,19 +706,23 @@ function renderActReward(app) {
       const skip = document.createElement('button');
       skip.className = 'btn';
       skip.textContent = 'Skip';
-      skip.addEventListener('click', () => { skipActRewardCard(); render(); });
+      skip.addEventListener('click', () => skipActRewardCard());
       wrap.appendChild(skip);
     } else {
       const btn = document.createElement('button');
       btn.className = 'btn';
       btn.textContent = 'Onward';
-      btn.addEventListener('click', () => { claimActReward(); render(); });
+      btn.addEventListener('click', () => claimActReward());
       wrap.appendChild(btn);
     }
   }
 
   app.appendChild(wrap);
 }
+
+// ============================================================
+// Treasure
+// ============================================================
 
 function renderTreasure(app) {
   const t = state.treasure;
@@ -679,18 +746,22 @@ function renderTreasure(app) {
   row.className = 'relic-row';
   for (const id of t.relicChoices) {
     const relic = RELICS[id];
-    row.appendChild(relicCard(relic, () => { pickTreasureRelic(id); render(); }));
+    row.appendChild(relicCard(relic, () => pickTreasureRelic(id)));
   }
   wrap.appendChild(row);
 
   const skip = document.createElement('button');
   skip.className = 'btn';
   skip.textContent = 'Skip Relic';
-  skip.addEventListener('click', () => { skipTreasure(); render(); });
+  skip.addEventListener('click', () => skipTreasure());
   wrap.appendChild(skip);
 
   app.appendChild(wrap);
 }
+
+// ============================================================
+// Victory
+// ============================================================
 
 function renderVictory(app) {
   const wrap = document.createElement('div');
@@ -715,14 +786,15 @@ function renderVictory(app) {
   const btn = document.createElement('button');
   btn.className = 'btn';
   btn.textContent = 'Return to the Beginning';
-  btn.addEventListener('click', () => {
-    returnToMainMenu();
-    render();
-  });
+  btn.addEventListener('click', () => returnToMainMenu());
   wrap.appendChild(btn);
 
   app.appendChild(wrap);
 }
+
+// ============================================================
+// Event
+// ============================================================
 
 function renderEvent(app) {
   const ev = state.event.data;
@@ -744,12 +816,16 @@ function renderEvent(app) {
     const btn = document.createElement('button');
     btn.className = 'btn choice-btn';
     btn.textContent = c.label;
-    btn.addEventListener('click', () => { pickEventChoice(i); render(); });
+    btn.addEventListener('click', () => pickEventChoice(i));
     choices.appendChild(btn);
   });
   wrap.appendChild(choices);
   app.appendChild(wrap);
 }
+
+// ============================================================
+// Shop
+// ============================================================
 
 function renderShop(app) {
   const s = state.shop;
@@ -782,7 +858,7 @@ function renderShop(app) {
     btn.className = 'btn';
     btn.textContent = 'Buy';
     btn.disabled = !affordable;
-    btn.addEventListener('click', () => { buyShopCard(i); render(); });
+    btn.addEventListener('click', () => buyShopCard(i));
     cell.appendChild(btn);
     grid.appendChild(cell);
   });
@@ -794,17 +870,21 @@ function renderShop(app) {
   healBtn.className = 'btn';
   healBtn.textContent = `Heal 25 HP — ${s.healPrice}g`;
   healBtn.disabled = state.run.gold < s.healPrice;
-  healBtn.addEventListener('click', () => { buyShopHeal(); render(); });
+  healBtn.addEventListener('click', () => buyShopHeal());
   healRow.appendChild(healBtn);
   wrap.appendChild(healRow);
 
   const leave = document.createElement('button');
   leave.className = 'btn';
   leave.textContent = 'Leave';
-  leave.addEventListener('click', () => { backToMap(); render(); });
+  leave.addEventListener('click', () => backToMap());
   wrap.appendChild(leave);
   app.appendChild(wrap);
 }
+
+// ============================================================
+// Rest
+// ============================================================
 
 function renderRest(app) {
   const wrap = document.createElement('div');
@@ -816,23 +896,27 @@ function renderRest(app) {
   const healBtn = document.createElement('button');
   healBtn.className = 'btn';
   healBtn.textContent = 'Rest — heal 30%';
-  healBtn.addEventListener('click', () => { restHeal(); render(); });
+  healBtn.addEventListener('click', () => restHeal());
   wrap.appendChild(healBtn);
 
   const enchantBtn = document.createElement('button');
   enchantBtn.className = 'btn';
   enchantBtn.textContent = 'Enchant a card';
-  enchantBtn.addEventListener('click', () => { restEnchantStart(); render(); });
+  enchantBtn.addEventListener('click', () => restEnchantStart());
   wrap.appendChild(enchantBtn);
 
   app.appendChild(wrap);
 }
 
+// ============================================================
+// Enchant pick
+// ============================================================
+
 function renderEnchantPick(app) {
   const pe = state.pendingEnchant;
   if (!pe) { renderMap(app); return; }
   const enchant = getEnchant(pe.enchantId);
-  if (!enchant) { backToMap(); render(); return; }
+  if (!enchant) { backToMap(); return; }
 
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
@@ -866,7 +950,7 @@ function renderEnchantPick(app) {
     });
     if (eligible) {
       el.classList.add('enchant-target');
-      el.addEventListener('click', () => { applyEnchant(i); render(); });
+      el.addEventListener('click', () => applyEnchant(i));
     }
     grid.appendChild(el);
   });
@@ -875,11 +959,15 @@ function renderEnchantPick(app) {
   const skip = document.createElement('button');
   skip.className = 'btn';
   skip.textContent = 'Skip Enchant';
-  skip.addEventListener('click', () => { skipEnchant(); render(); });
+  skip.addEventListener('click', () => skipEnchant());
   wrap.appendChild(skip);
 
   app.appendChild(wrap);
 }
+
+// ============================================================
+// Combat
+// ============================================================
 
 function renderCombat(app) {
   const c = document.createElement('div');
@@ -997,8 +1085,7 @@ function enemyPanel(e) {
         const card = state.hand.find(c => c.uid === state.pendingCardUid);
         if (card) { doPlayCard(card, null, e.uid); return; }
       }
-      state.selectedEnemyId = e.uid;
-      render();
+      dispatch({ type: 'SELECT_ENEMY', enemyUid: e.uid });
     });
   }
   wrap.appendChild(el);
@@ -1150,11 +1237,12 @@ function doPlayCard(card, sourceEl, targetUid) {
 
   setTimeout(() => {
     state.lastHits = [];
-    const wasPlayed = playCard(card, targetUid);
+    dispatch({ type: 'PLAY_CARD', cardUid: card.uid, targetUid });
+
+    if (isGuest()) return;
+
     const hits = state.lastHits || [];
     state.lastHits = [];
-
-    render();
     animateHits(hits);
 
     const playerEl = document.querySelector('[data-panel="player"]');
@@ -1166,24 +1254,17 @@ function doPlayCard(card, sourceEl, targetUid) {
     }
 
     const hasHeal = def.effects.some(e => e.kind === 'heal' || e.kind === 'reaper');
-    if (hasHeal && playerEl) {
-      spawnFloatText(playerEl, '+HP', 'heal');
-    }
+    if (hasHeal && playerEl) spawnFloatText(playerEl, '+HP', 'heal');
 
-    if (wasPlayed && def.endsTurn && !state.over) {
+    if (def.endsTurn && !state.over) {
       state.pendingCardUid = null;
       setTimeout(() => {
         if (state.over) return;
         state.lastHits = [];
-        beginEnemyTurn();
-        render();
-        setTimeout(() => {
-          resolveEnemyTurn();
-          const enemyHits = state.lastHits || [];
-          state.lastHits = [];
-          render();
-          animateHits(enemyHits);
-        }, 450);
+        dispatch({ type: 'END_TURN' });
+        const enemyHits = state.lastHits || [];
+        state.lastHits = [];
+        animateHits(enemyHits);
       }, 300);
     }
   }, 220);
@@ -1236,15 +1317,13 @@ function bottomBar() {
   btn.addEventListener('click', () => {
     state.pendingCardUid = null;
     state.lastHits = [];
-    beginEnemyTurn();
-    render();
-    setTimeout(() => {
-      resolveEnemyTurn();
-      const hits = state.lastHits || [];
-      state.lastHits = [];
-      render();
-      animateHits(hits);
-    }, 450);
+    dispatch({ type: 'END_TURN' });
+
+    if (isGuest()) return;
+
+    const hits = state.lastHits || [];
+    state.lastHits = [];
+    animateHits(hits);
   });
   bar.appendChild(btn);
 
@@ -1262,7 +1341,7 @@ function bottomBar() {
 }
 
 // ============================================================
-// END-OF-COMBAT BANNER
+// End-of-combat banner
 // ============================================================
 
 function endBanner() {
@@ -1284,10 +1363,10 @@ function endBanner() {
     if (state.combatKind === 'boss') {
       if (state.lastEncounterId === 'final-boss') {
         btn.textContent = 'See Final Results';
-        btn.addEventListener('click', () => { finishRun(); render(); });
+        btn.addEventListener('click', () => finishRun());
       } else {
         btn.textContent = `Continue to Act ${state.run.act + 1}`;
-        btn.addEventListener('click', () => { nextAct(); render(); });
+        btn.addEventListener('click', () => nextAct());
       }
     } else {
       btn.textContent = 'Rewards';
@@ -1303,7 +1382,7 @@ function endBanner() {
 }
 
 // ============================================================
-// DEATH — paginated reveal
+// Death pages
 // ============================================================
 
 const DEATH_PAGES = [
@@ -1369,7 +1448,6 @@ function renderDeathPage(card) {
     if (isLast) {
       state.deathPage = 0;
       returnToMainMenu();
-      render();
     } else {
       state.deathPage = pageIndex + 1;
       render();
@@ -1383,4 +1461,295 @@ function renderGameOver(app) {
   el.className = 'screen screen-center';
   el.textContent = 'Game over.';
   app.appendChild(el);
+}
+
+// ============================================================
+// MULTIPLAYER — HOST
+// ============================================================
+
+let mpHostState = {
+  offerBlob: '',
+  pastedAnswer: '',
+  status: '',
+  statusKind: '',
+  connected: false,
+};
+
+let mpStatusBound = false;
+function bindMpStatus() {
+  if (mpStatusBound) return;
+  mpStatusBound = true;
+  onStatus((text, kind) => {
+    mpHostState.status = text;
+    mpHostState.statusKind = kind || '';
+    if (text === 'Data channel open') mpHostState.connected = true;
+    if (state.screen === 'mpHost' || state.screen === 'mpGuest') render();
+  });
+}
+bindMpStatus();
+
+async function mpGenerateOffer() {
+  mpHostState.status = 'Generating offer…';
+  mpHostState.statusKind = 'wait';
+  render();
+  try {
+    mpHostState.offerBlob = await hostStart();
+    mpHostState.status = 'Offer ready — send it to the guest';
+    mpHostState.statusKind = 'ok';
+  } catch (e) {
+    mpHostState.status = 'Failed: ' + e.message;
+    mpHostState.statusKind = 'err';
+  }
+  render();
+}
+
+async function mpAcceptAnswer() {
+  if (!mpHostState.pastedAnswer.trim()) return;
+  try {
+    await hostAcceptAnswer(mpHostState.pastedAnswer);
+    mpHostState.status = 'Answer accepted — connecting…';
+    mpHostState.statusKind = 'wait';
+    render();
+  } catch (e) {
+    mpHostState.status = 'Bad answer: ' + e.message;
+    mpHostState.statusKind = 'err';
+    render();
+  }
+}
+
+function renderMpHost(app) {
+  const wrap = document.createElement('div');
+  wrap.className = 'screen screen-center';
+
+  const h = document.createElement('h1');
+  h.textContent = 'Host Multiplayer';
+  wrap.appendChild(h);
+
+  const sub = document.createElement('p');
+  sub.className = 'muted';
+  sub.textContent = 'Generate the offer, send it to your guest, then paste their reply back.';
+  wrap.appendChild(sub);
+
+  const offerLabel = document.createElement('p');
+  offerLabel.className = 'muted';
+  offerLabel.textContent = '1. Copy this and send to the guest:';
+  wrap.appendChild(offerLabel);
+
+  const offerTa = document.createElement('textarea');
+  offerTa.className = 'mp-textarea';
+  offerTa.readOnly = true;
+  offerTa.value = mpHostState.offerBlob || '(click Generate to create)';
+  offerTa.rows = 4;
+  wrap.appendChild(offerTa);
+
+  const offerBtns = document.createElement('div');
+  offerBtns.style.display = 'flex';
+  offerBtns.style.gap = '8px';
+  offerBtns.style.marginTop = '8px';
+
+  const genBtn = document.createElement('button');
+  genBtn.className = 'btn';
+  genBtn.textContent = mpHostState.offerBlob ? 'Regenerate' : 'Generate Offer';
+  genBtn.addEventListener('click', mpGenerateOffer);
+  offerBtns.appendChild(genBtn);
+
+  if (mpHostState.offerBlob) {
+    const copyOfferBtn = document.createElement('button');
+    copyOfferBtn.className = 'btn';
+    copyOfferBtn.textContent = 'Copy Offer';
+    copyOfferBtn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(mpHostState.offerBlob); } catch {}
+    });
+    offerBtns.appendChild(copyOfferBtn);
+  }
+  wrap.appendChild(offerBtns);
+
+  const answerLabel = document.createElement('p');
+  answerLabel.className = 'muted';
+  answerLabel.style.marginTop = '16px';
+  answerLabel.textContent = "2. Paste the guest's reply here:";
+  wrap.appendChild(answerLabel);
+
+  const answerTa = document.createElement('textarea');
+  answerTa.className = 'mp-textarea';
+  answerTa.value = mpHostState.pastedAnswer;
+  answerTa.rows = 4;
+  answerTa.addEventListener('input', () => { mpHostState.pastedAnswer = answerTa.value; });
+  wrap.appendChild(answerTa);
+
+  const acceptBtn = document.createElement('button');
+  acceptBtn.className = 'btn';
+  acceptBtn.style.marginTop = '8px';
+  acceptBtn.textContent = 'Accept Answer';
+  acceptBtn.addEventListener('click', mpAcceptAnswer);
+  wrap.appendChild(acceptBtn);
+
+  const status = document.createElement('p');
+  status.textContent = mpHostState.status || 'Idle.';
+  status.style.marginTop = '12px';
+  status.style.color = mpHostState.statusKind === 'ok' ? '#6bff9e' :
+                       mpHostState.statusKind === 'err' ? '#ff8a8a' :
+                       mpHostState.statusKind === 'wait' ? '#ffd166' : '#8b93a1';
+  wrap.appendChild(status);
+
+  if (mpHostState.connected) {
+    const startBtn = document.createElement('button');
+    startBtn.className = 'btn';
+    startBtn.textContent = 'Start Game';
+    startBtn.style.marginTop = '16px';
+    startBtn.style.fontSize = '18px';
+    startBtn.style.padding = '16px 40px';
+    startBtn.addEventListener('click', () => newRun());
+    wrap.appendChild(startBtn);
+  }
+
+  const switchRow = document.createElement('div');
+  switchRow.style.marginTop = '16px';
+  switchRow.style.display = 'flex';
+  switchRow.style.gap = '8px';
+
+  const guestBtn = document.createElement('button');
+  guestBtn.className = 'btn';
+  guestBtn.textContent = 'Join as Guest instead';
+  guestBtn.addEventListener('click', () => {
+    state.screen = 'mpGuest';
+    render();
+  });
+  switchRow.appendChild(guestBtn);
+
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn';
+  backBtn.textContent = 'Back';
+  backBtn.addEventListener('click', () => {
+    state.screen = 'mainMenu';
+    render();
+  });
+  switchRow.appendChild(backBtn);
+  wrap.appendChild(switchRow);
+
+  app.appendChild(wrap);
+}
+
+// ============================================================
+// MULTIPLAYER — GUEST
+// ============================================================
+
+let mpGuestState = {
+  pastedOffer: '',
+  answerBlob: '',
+  status: '',
+  statusKind: '',
+};
+
+async function mpGenerateAnswer() {
+  if (!mpGuestState.pastedOffer.trim()) return;
+  mpGuestState.status = 'Reading offer…';
+  mpGuestState.statusKind = 'wait';
+  render();
+  try {
+    mpGuestState.answerBlob = await guestStart(mpGuestState.pastedOffer);
+    mpGuestState.status = 'Answer ready — send it back to the host';
+    mpGuestState.statusKind = 'ok';
+  } catch (e) {
+    mpGuestState.status = 'Failed: ' + e.message;
+    mpGuestState.statusKind = 'err';
+  }
+  render();
+}
+
+function renderMpGuest(app) {
+  const wrap = document.createElement('div');
+  wrap.className = 'screen screen-center';
+
+  const h = document.createElement('h1');
+  h.textContent = 'Join Multiplayer';
+  wrap.appendChild(h);
+
+  const sub = document.createElement('p');
+  sub.className = 'muted';
+  sub.textContent = "Paste the offer from the host, then send the reply back.";
+  wrap.appendChild(sub);
+
+  const offerLabel = document.createElement('p');
+  offerLabel.className = 'muted';
+  offerLabel.textContent = "1. Paste the host's offer here:";
+  wrap.appendChild(offerLabel);
+
+  const offerTa = document.createElement('textarea');
+  offerTa.className = 'mp-textarea';
+  offerTa.value = mpGuestState.pastedOffer;
+  offerTa.rows = 4;
+  offerTa.addEventListener('input', () => { mpGuestState.pastedOffer = offerTa.value; });
+  wrap.appendChild(offerTa);
+
+  const genBtn = document.createElement('button');
+  genBtn.className = 'btn';
+  genBtn.style.marginTop = '8px';
+  genBtn.textContent = 'Generate Reply';
+  genBtn.addEventListener('click', mpGenerateAnswer);
+  wrap.appendChild(genBtn);
+
+  if (mpGuestState.answerBlob) {
+    const answerLabel = document.createElement('p');
+    answerLabel.className = 'muted';
+    answerLabel.style.marginTop = '16px';
+    answerLabel.textContent = '2. Send this back to the host:';
+    wrap.appendChild(answerLabel);
+
+    const answerTa = document.createElement('textarea');
+    answerTa.className = 'mp-textarea';
+    answerTa.readOnly = true;
+    answerTa.value = mpGuestState.answerBlob;
+    answerTa.rows = 4;
+    wrap.appendChild(answerTa);
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'btn';
+    copyBtn.style.marginTop = '8px';
+    copyBtn.textContent = 'Copy Reply';
+    copyBtn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(mpGuestState.answerBlob); } catch {}
+    });
+    wrap.appendChild(copyBtn);
+
+    const waiting = document.createElement('p');
+    waiting.className = 'muted';
+    waiting.textContent = 'Waiting for the host to start the game…';
+    waiting.style.marginTop = '16px';
+    wrap.appendChild(waiting);
+  }
+
+  const status = document.createElement('p');
+  status.textContent = mpGuestState.status || 'Idle.';
+  status.style.marginTop = '12px';
+  status.style.color = mpGuestState.statusKind === 'ok' ? '#6bff9e' :
+                       mpGuestState.statusKind === 'err' ? '#ff8a8a' :
+                       mpGuestState.statusKind === 'wait' ? '#ffd166' : '#8b93a1';
+  wrap.appendChild(status);
+
+  const switchRow = document.createElement('div');
+  switchRow.style.marginTop = '16px';
+  switchRow.style.display = 'flex';
+  switchRow.style.gap = '8px';
+
+  const hostBtn = document.createElement('button');
+  hostBtn.className = 'btn';
+  hostBtn.textContent = 'Host instead';
+  hostBtn.addEventListener('click', () => {
+    state.screen = 'mpHost';
+    render();
+  });
+  switchRow.appendChild(hostBtn);
+
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn';
+  backBtn.textContent = 'Back';
+  backBtn.addEventListener('click', () => {
+    state.screen = 'mainMenu';
+    render();
+  });
+  switchRow.appendChild(backBtn);
+  wrap.appendChild(switchRow);
+
+  app.appendChild(wrap);
 }
