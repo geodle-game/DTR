@@ -788,13 +788,24 @@ export function starterDeck() {
   ];
 }
 
-export function randomStartingDeck(rng, size = 8) {
+// Rarity filter used by every random pool (starting deck, rewards, shop).
+// Includes 'starter' so Bash and Neutralize can roll.
+export function isRollable(id) {
+  const r = CARDS[id]?.rarity;
+  return r === 'starter' || r === 'common' || r === 'rare' || r === 'uncommon';
+}
+
+export function randomStartingDeck(rng, size = 15) {
   const strikes = 3;
   const defends = 2;
   const rest = size - strikes - defends;
 
-  const commons = Object.keys(CARDS).filter(id => CARDS[id].rarity === 'common');
-  const rares   = Object.keys(CARDS).filter(id => CARDS[id].rarity === 'rare');
+  const commons = Object.keys(CARDS).filter(id => {
+    const r = CARDS[id].rarity;
+    return r === 'starter' || r === 'common' || r === 'uncommon';
+  });
+  const rares = Object.keys(CARDS).filter(id =>
+    CARDS[id].rarity === 'rare');
 
   const ids = [
     ...Array(strikes).fill('strike'),
@@ -802,7 +813,7 @@ export function randomStartingDeck(rng, size = 8) {
   ];
 
   for (let i = 0; i < rest; i++) {
-    const useCommon = rng() < 0.75;
+    const useCommon = rng() < 0.80;
     const pool = useCommon ? commons : rares;
     if (!pool.length) continue;
     const idx = Math.floor(rng() * pool.length);
