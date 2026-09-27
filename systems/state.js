@@ -63,6 +63,7 @@ export const state = {
   combatKind: 'monster',
   combatBanner: null,
   lastEncounterId: null,
+  deathPage: 0,
 };
 
 export function cardDef(card) {
@@ -151,6 +152,7 @@ export function newRun(seed = Date.now()) {
   state.pendingEnchant = null;
   state.bossLore = null;
   state.lastEncounterId = null;
+  state.deathPage = 0;
 }
 
 export function chooseRelic(relicId) {
@@ -389,6 +391,7 @@ export function endCombat(win) {
         e.loreTriggered.onPlayerDeath = true;
       }
     }
+    state.deathPage = 0;
   }
 
   state.over = true;
@@ -476,6 +479,7 @@ export function returnToMainMenu() {
   state.player = null;
   state.enemies = [];
   state.bossLore = null;
+  state.deathPage = 0;
 }
 
 export function rollIntent(enemy) {
