@@ -158,7 +158,10 @@ export function newRun(seed = Date.now()) {
 export function chooseRelic(relicId) {
   state.run.relic = relicId;
   state.run.relics = [relicId];
-  state.run.deck = randomStartingDeck(state.rng, 8).map(makeDeckEntry);
+  // 15-card starter deck: 3 Strikes, 2 Defends, 10 rolled from the pool.
+  // Bash, Neutralize, and uncommons are all rollable thanks to the
+  // updated rarity filter in cards.js.
+  state.run.deck = randomStartingDeck(state.rng, 15).map(makeDeckEntry);
   state.screen = 'deckView';
 }
 
