@@ -26,10 +26,6 @@ function center(el) {
 // ============================================================
 // SLASH SPRITE — tip-first reveal
 // ============================================================
-//
-// The sprite is hidden behind a diagonal clip-path that starts at
-// the tip and sweeps toward the root. If the reveal opens the wrong
-// end of your slash.png, flip REVEAL_FROM_RIGHT.
 
 const REVEAL_FROM_RIGHT = false;
 const SLASH_SIZE = 340;
@@ -98,6 +94,48 @@ export function spawnCrescent(cx, cy, opts = {}) {
   requestAnimationFrame(frame);
 
   return el;
+}
+
+// ============================================================
+// SPELL BOOK — hovers above the caster while a spell charges
+// ============================================================
+
+let lastBookSpawn = 0;
+
+export function spawnSpellBook(casterEl, { duration = 320, dirX = 1 } = {}) {
+  if (!casterEl) return;
+
+  // Dedupe: AoE spells produce one hit per target; only show one book.
+  const now = performance.now();
+  if (now - lastBookSpawn < 100) return;
+  lastBookSpawn = now;
+
+  const r = casterEl.getBoundingClientRect();
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+
+  const img = document.createElement('img');
+  img.src = 'assets/spell-book.png';
+  img.className = 'spell-book-cast';
+  img.style.left = cx + 'px';
+  img.style.top  = cy + 'px';
+  img.style.animationDuration = duration + 'ms';
+  img.style.transform = `scaleX(${dirX >= 0 ? 1 : -1})`;
+  document.body.appendChild(img);
+
+  const ring = document.createElement('div');
+  ring.className = 'spell-book-ring';
+  ring.style.left = cx + 'px';
+  ring.style.top  = cy + 'px';
+  ring.style.animationDuration = (duration + 120) + 'ms';
+  document.body.appendChild(ring);
+
+  setTimeout(() => {
+    img.remove();
+    ring.remove();
+  }, duration + 260);
+
+  return img;
 }
 
 // ============================================================
@@ -201,7 +239,6 @@ export function spawnBlockedIndicator(targetEl) {
   if (!targetEl) return;
   const c = center(targetEl);
 
-  // Shield slam PNG — the "your hit was absorbed" visual
   const shield = document.createElement('img');
   shield.src = 'assets/shield.png';
   shield.className = 'block-impact';
@@ -225,7 +262,6 @@ export function spawnBlockEffect(playerEl) {
   const cx = r.right + 90;
   const cy = r.top + r.height / 2;
 
-  // block.png rising + fading
   const img = document.createElement('img');
   img.src = 'assets/block.png';
   img.className = 'block-effect';
@@ -234,7 +270,6 @@ export function spawnBlockEffect(playerEl) {
   document.body.appendChild(img);
   setTimeout(() => img.remove(), 1500);
 
-  // Expanding blue ring
   const ring = document.createElement('div');
   ring.className = 'block-ring';
   ring.style.left = cx + 'px';
@@ -247,8 +282,9 @@ export function spawnBlockEffect(playerEl) {
 // HIT ORCHESTRATOR
 // ============================================================
 
-const WINDUP_MS = 130;
 const STAGGER_MS = 190;
+const WINDUP_PHYSICAL = 130;
+const WINDUP_SPELL    = 340;
 
 function kindFor(animation) {
   if (animation === 'heavy')  return 'heavy';
@@ -268,9 +304,16 @@ export function playHit(hit, { delay = 0 } = {}) {
       ? (Math.sign(targetC.x - center(attackerEl).x) || 1)
       : 1;
 
-    const kind = kindFor(hit.animation);
+    const kind   = kindFor(hit.animation);
+    const windup = hit.isSpell ? WINDUP_SPELL : WINDUP_PHYSICAL;
 
-    if (attackerEl) windupAttacker(attackerEl, dirX);
+    if (attackerEl) {
+      if (hit.isSpell) {
+        spawnSpellBook(attackerEl, { duration: windup, dirX });
+      } else {
+        windupAttacker(attackerEl, dirX);
+      }
+    }
 
     setTimeout(() => {
       const c = center(targetEl);
@@ -304,7 +347,7 @@ export function playHit(hit, { delay = 0 } = {}) {
           screenFlash(tint);
         }
       }
-    }, WINDUP_MS);
+    }, windup);
   }, delay);
 }
 
