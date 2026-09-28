@@ -50,10 +50,10 @@ export const CARDS = {
   'warden-shackle': {
     id: 'warden-shackle', name: 'Shackle', cost: 1, owner: 'enemy',
     type: 'skill', target: 'player', destination: 'discard',
-    text: 'Apply 2 Weak and 2 Vulnerable.',
+    text: 'Apply 3 Weak and 3 Vulnerable.',
     effects: [
-      { kind: 'applyStatus', status: 'weak', amount: 2 },
-      { kind: 'applyStatus', status: 'vulnerable', amount: 2 },
+      { kind: 'applyStatus', status: 'weak', amount: 3 },
+      { kind: 'applyStatus', status: 'vulnerable', amount: 3 },
     ],
   },
   'warden-purge': {
