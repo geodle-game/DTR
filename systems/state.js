@@ -71,7 +71,13 @@ export const state = {
 // ------------------------------------------------------------
 
 export function activePlayer() {
-  return state.players[state.activePlayerIndex] || null;
+  if (!state.players || !state.players.length) return null;
+  let idx = state.activePlayerIndex;
+  if (typeof idx !== 'number' || idx < 0 || idx >= state.players.length) {
+    idx = 0;
+    state.activePlayerIndex = 0;
+  }
+  return state.players[idx];
 }
 
 export function playerById(id) {
