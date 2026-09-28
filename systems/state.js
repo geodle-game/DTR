@@ -12,6 +12,7 @@ import { bannerForCombat } from '../data/banners.js';
 import { rollEnchant, getEnchant } from '../data/enchants.js';
 import { BOSSES } from '../data/bosses/index.js';
 import { clearSave } from './save.js';
+import { grantCard } from './deckGuard.js';
 
 const BOSS_LORE = {};
 for (const bossModule of BOSSES) {
@@ -95,8 +96,6 @@ Object.defineProperty(state, 'player', {
   get() { return activePlayer(); },
 });
 
-// Returns the merged passives object of all living bosses, plus the
-// per-turn cycling passive if a boss has one. Empty object if no boss.
 export function activeBossPassives() {
   const merged = {};
   for (const e of state.enemies) {
@@ -108,8 +107,6 @@ export function activeBossPassives() {
     if (p.resistPhysical != null) merged.resistPhysical = p.resistPhysical;
     if (p.resistSpell != null) merged.resistSpell = p.resistSpell;
   }
-  // Per-turn cycling passive: if a boss has `cycleByLead` and its
-  // first intent card matches a key, that passive applies this turn.
   for (const e of state.enemies) {
     if (e.hp <= 0) continue;
     if (!e.passives?.cycleByLead) continue;
@@ -172,10 +169,6 @@ export function hasRelicTrigger(trigger, player = activePlayer()) {
   return false;
 }
 
-function makeDeckEntry(defId) {
-  return { defId, enchant: null };
-}
-
 function makePlayer(index, hp, maxHp) {
   return {
     id: index,
@@ -202,6 +195,16 @@ function makePlayer(index, hp, maxHp) {
   };
 }
 
+// ------------------------------------------------------------
+// Phase transitions
+// ------------------------------------------------------------
+
+function setPhase(phase) {
+  if (state.run) state.run.phase = phase;
+}
+
+// ------------------------------------------------------------
+
 export function newRun(seed = Date.now()) {
   state.rng = makeRng(seed);
   state.run = {
@@ -213,6 +216,8 @@ export function newRun(seed = Date.now()) {
     cleared: false,
     victory: false,
     bossesBeaten: [],
+    phase: null,
+    _grantUsed: {},
   };
 
   state.players = [makePlayer(0, 70, 70)];
@@ -271,7 +276,7 @@ export function chooseRelic(relicId) {
   const p = state.players[0];
   p.relic = relicId;
   p.relics = [relicId];
-  p.deck = randomStartingDeck(state.rng, 15).map(makeDeckEntry);
+  p.deck = randomStartingDeck(state.rng, 15).map(defId => ({ defId, enchant: null }));
   state.screen = 'deckView';
 }
 
@@ -320,6 +325,7 @@ export function startNode(nodeId) {
     newCombat(pickEncounter('boss'), 'boss');
   } else if (node.type === 'event') {
     state.event = { data: randomEvent(state.rng) };
+    setPhase('event');
     state.screen = 'event';
   } else if (node.type === 'shop') {
     state.shop = {
@@ -328,17 +334,21 @@ export function startNode(nodeId) {
       removePrice: 30,
       removeUsed: false,
     };
+    setPhase('shop');
     state.screen = 'shop';
   } else if (node.type === 'rest') {
     state.rest = { healed: false };
+    setPhase(null);
     state.screen = 'rest';
   } else if (node.type === 'treasure') {
     const relicChoices = rollRelicChoices(state.rng, state.players[0].relics, 3);
     const gold = 30 + Math.floor(state.rng() * 20);
     state.treasure = { relicChoices, gold };
+    setPhase(null);
     state.screen = 'treasure';
     return;
   } else {
+    setPhase(null);
     state.screen = 'map';
   }
 }
@@ -397,6 +407,7 @@ function pickEncounter(kind) {
 }
 
 export function backToMap() {
+  setPhase(null);
   state.screen = 'map';
   state.reward = null;
   state.event = null;
@@ -433,7 +444,6 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
       intentCards: [],
       loreTriggered: {},
     };
-    // Scripted bosses use a fixed sequence instead of a draw pile.
     if (enemy.script) enemy.scriptIndex = 0;
     return enemy;
   });
@@ -453,6 +463,7 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
     p.exhaustPile = [];
     p.maxEnergy = 3;
     p.energy = 0;
+    p.cardsPlayedThisTurn = 0;
 
     forEachRelic('combatStart', (r) => {
       if (r.block)  p.block += r.block;
@@ -479,6 +490,8 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
   state.log = [];
   state.overlays = emptyOverlays();
   state.activePlayerIndex = 0;
+
+  setPhase(null);
 
   for (const e of state.enemies) {
     if (e.isBoss) {
@@ -522,6 +535,7 @@ export function endCombat(win) {
   state.result = win ? 'win' : 'loss';
   state.turn = 'over';
   state.previewCardUid = null;
+  setPhase(null);
 
   if (win) {
     const kind = state.combatKind || 'monster';
@@ -546,6 +560,7 @@ export function endCombat(win) {
 
     const cards = rollCardChoices(state.rng, 3);
     state.reward = { coins, cards, taken: false };
+    setPhase('reward');
   }
 }
 
@@ -563,12 +578,13 @@ export function nextAct() {
   state.run.floor = -1;
   state.actReward = rollActTransition(state.rng, state.players[0].relics);
   state.actReward.healAmount = healed;
+  setPhase('actReward');
   state.screen = 'actReward';
 }
 
 export function takeActRewardCard(defId) {
   if (!state.actReward || state.actReward.cardTaken) return;
-  state.players[0].deck.push(makeDeckEntry(defId));
+  if (!grantCard(defId, 'actReward:card', { once: true })) return;
   state.actReward.cardTaken = true;
 }
 
@@ -590,6 +606,7 @@ export function claimActReward() {
   state.players[0].gold += state.actReward.coins;
   pushLog(`Act ${state.run.act}: +${state.actReward.coins} gold.`);
   state.actReward = null;
+  setPhase(null);
   state.screen = 'map';
 }
 
@@ -609,9 +626,6 @@ export function returnToMainMenu() {
   state.deathPage = 0;
 }
 
-// Draw the intent(s) for this enemy. Scripted bosses read from their
-// fixed `script` array instead of a draw pile. Non-bosses and unscripted
-// bosses shuffle their deck as usual.
 export function rollIntent(enemy) {
   if (enemy.script && enemy.script.length) {
     const pair = enemy.script[enemy.scriptIndex % enemy.script.length];
@@ -619,20 +633,16 @@ export function rollIntent(enemy) {
     enemy.intentCard = enemy.intentCards[0];
     return;
   }
-  // Default: draw one card for normal enemies.
   const card = drawEnemyCard(enemy, state.rng);
   enemy.intentCard = card;
   enemy.intentCards = card ? [card] : [];
 }
 
-// Advance the script index after a turn. Called from resolveEnemyTurn.
 export function advanceScript(enemy) {
   if (!enemy.script) return;
   enemy.scriptIndex = (enemy.scriptIndex + 1) % enemy.script.length;
 }
 
-// Called when a boss phase-shifts. Resets the script to the top so
-// each phase starts with a predictable opener.
 export function resetBossScript(enemy) {
   if (!enemy.script) return;
   enemy.scriptIndex = 0;
@@ -679,12 +689,13 @@ export function claimReward() {
   state.players[0].gold += state.reward.coins;
   pushLog(`+${state.reward.coins} gold.`);
   state.reward = null;
+  setPhase(null);
   backToMap();
 }
 
 export function takeRewardCard(defId) {
   if (!state.reward || state.reward.taken) return;
-  state.players[0].deck.push(makeDeckEntry(defId));
+  if (!grantCard(defId, 'reward:combat', { once: true })) return;
   state.reward.taken = true;
   pushLog(`Added ${CARDS[defId].name} to your deck.`);
 }
@@ -701,6 +712,7 @@ export function pickEventChoice(index) {
   if (!choice) return;
   for (const eff of choice.effects) applyMetaEffect(eff);
   pushLog(`Event: ${ev.name} → ${choice.label}`);
+  setPhase(null);
   backToMap();
 }
 
@@ -714,7 +726,7 @@ function applyMetaEffect(eff) {
     p.hp = Math.max(1, p.hp - eff.amount);
   } else if (eff.kind === 'grantRandomCard') {
     const [id] = rollCardChoices(state.rng, 1);
-    if (id) p.deck.push(makeDeckEntry(id));
+    if (id) grantCard(id, 'event:grantRandomCard', { once: true });
   }
 }
 
@@ -723,10 +735,11 @@ export function buyShopCard(index) {
   const p = state.players[0];
   const item = state.shop.items[index];
   if (!item) return;
+  if (item.sold) return;
   if (p.gold < item.price) return;
+  if (!grantCard(item.defId, `shop:${index}:${item.defId}`)) return;
+  item.sold = true;
   p.gold -= item.price;
-  p.deck.push(makeDeckEntry(item.defId));
-  state.shop.items.splice(index, 1);
   pushLog(`Bought ${CARDS[item.defId].name} for ${item.price} gold.`);
 }
 
@@ -776,17 +789,20 @@ export function restEnchantStart() {
   state.pendingEnchant = {
     enchantId: enchant.id,
     eligibleIndices: eligible,
+    applied: false,
   };
   state.screen = 'enchantPick';
 }
 
 export function applyEnchant(index) {
   if (!state.pendingEnchant) return;
+  if (state.pendingEnchant.applied) return;
   if (!state.pendingEnchant.eligibleIndices.includes(index)) return;
   const p = state.players[0];
   const entry = p.deck[index];
   if (!entry || entry.enchant) return;
 
+  state.pendingEnchant.applied = true;
   entry.enchant = state.pendingEnchant.enchantId;
   const enchant = getEnchant(state.pendingEnchant.enchantId);
   pushLog(`Enchanted ${CARDS[entry.defId].name} with ${enchant.name}.`);
