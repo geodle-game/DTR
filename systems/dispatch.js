@@ -5,7 +5,7 @@
 import {
   state, newRun, chooseRelic, confirmDeck, startNode, backToMap,
   claimReward, takeRewardCard, skipRewardCard,
-  pickEventChoice, buyShopCard, buyShopHeal,
+  pickEventChoice, buyShopCard, buyShopHeal, buyShopRemove,
   restHeal, restEnchantStart, applyEnchant, skipEnchant,
   returnToMainMenu, nextAct, claimActReward,
   takeActRewardCard, skipActRewardCard, takeActRewardRelic,
@@ -139,6 +139,7 @@ function applyAction(action) {
     // ---- Shop ----
     case 'BUY_SHOP_CARD':      buyShopCard(action.index); break;
     case 'BUY_SHOP_HEAL':      buyShopHeal(); break;
+    case 'BUY_SHOP_REMOVE':    buyShopRemove(action.index); break;
 
     // ---- Rest ----
     case 'REST_HEAL':          restHeal(); break;
