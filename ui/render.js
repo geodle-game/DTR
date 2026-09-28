@@ -30,6 +30,9 @@ import { getEnchant } from '../data/enchants.js';
 const LONG_PRESS_MS = 450;
 const DRAG_THRESHOLD = 14;
 
+// Module-level flag for shop remove mode. Not persisted.
+let shopRemoveMode = false;
+
 // ------------------------------------------------------------
 // Dispatch wrappers — same call signatures as the old imports
 // so nothing else in this file needs to change.
@@ -45,6 +48,7 @@ const skipRewardCard      = ()    => dispatch({ type: 'SKIP_REWARD_CARD' });
 const pickEventChoice     = (i)   => dispatch({ type: 'PICK_EVENT_CHOICE', index: i });
 const buyShopCard         = (i)   => dispatch({ type: 'BUY_SHOP_CARD', index: i });
 const buyShopHeal         = ()    => dispatch({ type: 'BUY_SHOP_HEAL' });
+const buyShopRemove       = (i)   => dispatch({ type: 'BUY_SHOP_REMOVE', index: i });
 const restHeal            = ()    => dispatch({ type: 'REST_HEAL' });
 const restEnchantStart    = ()    => dispatch({ type: 'REST_ENCHANT_START' });
 const applyEnchant        = (i)   => dispatch({ type: 'APPLY_ENCHANT', index: i });
@@ -832,6 +836,11 @@ function renderShop(app) {
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center shop-screen';
 
+  if (shopRemoveMode) {
+    renderShopRemoveMode(app, wrap, s);
+    return;
+  }
+
   const h = document.createElement('h1');
   h.textContent = 'Shop';
   wrap.appendChild(h);
@@ -874,11 +883,74 @@ function renderShop(app) {
   healRow.appendChild(healBtn);
   wrap.appendChild(healRow);
 
+  const removeRow = document.createElement('div');
+  removeRow.className = 'shop-heal';
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'btn';
+  if (s.removeUsed) {
+    removeBtn.textContent = 'Card already removed';
+    removeBtn.disabled = true;
+  } else {
+    removeBtn.textContent = `Remove a card — ${s.removePrice}g`;
+    removeBtn.disabled = state.run.gold < s.removePrice;
+    removeBtn.addEventListener('click', () => {
+      shopRemoveMode = true;
+      render();
+    });
+  }
+  removeRow.appendChild(removeBtn);
+  wrap.appendChild(removeRow);
+
   const leave = document.createElement('button');
   leave.className = 'btn';
   leave.textContent = 'Leave';
-  leave.addEventListener('click', () => backToMap());
+  leave.addEventListener('click', () => {
+    shopRemoveMode = false;
+    backToMap();
+  });
   wrap.appendChild(leave);
+  app.appendChild(wrap);
+}
+
+function renderShopRemoveMode(app, wrap, s) {
+  const h = document.createElement('h1');
+  h.textContent = 'Remove a Card';
+  wrap.appendChild(h);
+
+  const gold = document.createElement('p');
+  gold.innerHTML = 'Gold: ' + goldDisplay(state.run.gold);
+  wrap.appendChild(gold);
+
+  const sub = document.createElement('p');
+  sub.className = 'muted';
+  sub.textContent = `Choose a card to remove permanently. Costs ${s.removePrice}g.`;
+  wrap.appendChild(sub);
+
+  const grid = document.createElement('div');
+  grid.className = 'deck-grid';
+  state.run.deck.forEach((entry, i) => {
+    const el = cardFace(entry.defId, {
+      small: true,
+      enchant: entry.enchant,
+    });
+    el.classList.add('enchant-target');
+    el.addEventListener('click', () => {
+      shopRemoveMode = false;
+      buyShopRemove(i);
+    });
+    grid.appendChild(el);
+  });
+  wrap.appendChild(grid);
+
+  const cancel = document.createElement('button');
+  cancel.className = 'btn';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', () => {
+    shopRemoveMode = false;
+    render();
+  });
+  wrap.appendChild(cancel);
+
   app.appendChild(wrap);
 }
 
