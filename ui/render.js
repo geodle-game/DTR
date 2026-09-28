@@ -2,7 +2,7 @@ import {
   state,
   toggleDeckOverlay, toggleRelicOverlay,
   toggleDrawOverlay, toggleDiscardOverlay, toggleExhaustOverlay,
-  closeOverlays, dismissBossLore,
+  closeOverlays, dismissBossLore, activeBossPassives,
 } from '../systems/state.js';
 import { dispatch } from '../systems/dispatch.js';
 import { getMode, isGuest } from '../systems/net.js';
@@ -30,13 +30,8 @@ import { getEnchant } from '../data/enchants.js';
 const LONG_PRESS_MS = 450;
 const DRAG_THRESHOLD = 14;
 
-// Module-level flag for shop remove mode. Not persisted.
 let shopRemoveMode = false;
 
-// ------------------------------------------------------------
-// Active player helper. In single-player this is always players[0].
-// Stage 2 (co-op) will replace this with a per-view notion of "who am I".
-// ------------------------------------------------------------
 function me() {
   return state.players[0];
 }
@@ -1133,6 +1128,17 @@ function playerPanel() {
   const el = document.createElement('div');
   el.className = 'panel player';
   el.dataset.panel = 'player';
+
+  // Show the boss card-play cap counter if a boss has that passive.
+  const passives = activeBossPassives();
+  let capHtml = '';
+  if (passives.cardPlayCap != null) {
+    const played = p.cardsPlayedThisTurn || 0;
+    const cap = passives.cardPlayCap;
+    const atCap = played >= cap;
+    capHtml = `<div class="card-cap${atCap ? ' card-cap-full' : ''}">Cards played: ${played}/${cap}</div>`;
+  }
+
   el.innerHTML = `
     <div class="panel-name">You</div>
     <div class="hp">HP ${p.hp} / ${p.maxHp}</div>
@@ -1140,6 +1146,7 @@ function playerPanel() {
       <span class="block-icon"></span>${p.block}
     </div>
     <div class="energy">Energy ${p.energy} / ${p.maxEnergy}</div>
+    ${capHtml}
     ${statusRow(p.statuses)}
   `;
   return el;
@@ -1179,7 +1186,13 @@ function enemyPanel(e) {
   }
   wrap.appendChild(el);
 
-  if (!dead && e.intentCard) wrap.appendChild(enemyIntentCard(e.intentCard, e));
+  // Render ALL intent cards (scripted bosses have two).
+  if (!dead) {
+    const intents = e.intentCards?.length ? e.intentCards : (e.intentCard ? [e.intentCard] : []);
+    for (const card of intents) {
+      if (card) wrap.appendChild(enemyIntentCard(card, e));
+    }
+  }
   return wrap;
 }
 
