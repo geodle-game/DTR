@@ -229,7 +229,7 @@ export const CARDS = {
     liveValues: liveDamage(9),
   },
   'perfected-strike': {
-    id: 'perfected-strike', name: 'Perfected Strike', cost: 1, rarity: 'common',
+    id: 'perfected-strike', name: 'Perfected Strike', cost: 2, rarity: 'common',
     type: 'attack', target: 'enemy', destination: 'discard',
     animation: 'heavy',
     text: 'Deal {damage} damage. +2 damage per card with "Strike" in your deck.{live}',
