@@ -1,6 +1,7 @@
 import {
   state, pushLog, startPlayerTurn, livingEnemies, rollIntent, endCombat, cardDef,
-  forEachRelic, showBossLore, activePlayer,
+  forEachRelic, showBossLore, activePlayer, activeBossPassives,
+  advanceScript, resetBossScript,
 } from './state.js';
 import { draw, recycleHand, shuffle, makeCard } from './deck.js';
 import {
@@ -67,11 +68,15 @@ export function canPlay(card, player = activePlayer()) {
   if (player.energy < costOf(card, player)) return false;
 
   // HP-cost cards are unplayable if they'd drop you to 0 or below.
-  // At 8 HP, Offering (cost 8) is blocked. At 9 HP, it plays and
-  // leaves you at 1 HP. This matches the design: self-damage can
-  // never kill you, and it can never be free value at 1 HP.
   const hpCost = hpCostOf(card);
   if (hpCost > 0 && player.hp <= hpCost) return false;
+
+  // Boss passive: card-play cap per turn.
+  const passives = activeBossPassives();
+  if (passives.cardPlayCap != null) {
+    const played = player.cardsPlayedThisTurn || 0;
+    if (played >= passives.cardPlayCap) return false;
+  }
 
   return true;
 }
@@ -96,6 +101,7 @@ export function playCard(card, player = activePlayer(), explicitTargetId = null)
   player.energy -= cost;
   state.pendingCardUid = null;
   player.hand = player.hand.filter(c => c.uid !== card.uid);
+  player.cardsPlayedThisTurn = (player.cardsPlayedThisTurn || 0) + 1;
 
   state.currentAnimation = def.animation || 'slash';
 
@@ -218,14 +224,18 @@ function checkBossPhaseLore(enemy, beforeHp) {
   const pct = enemy.hp / max;
   const beforePct = beforeHp / max;
 
+  let shifted = false;
   if (!enemy.loreTriggered.phase2 && pct <= thresholds.phase2 && beforePct > thresholds.phase2) {
     showBossLore(enemy.id, 'phase2');
     enemy.loreTriggered.phase2 = true;
+    shifted = true;
   }
   if (!enemy.loreTriggered.phase3 && pct <= thresholds.phase3 && beforePct > thresholds.phase3) {
     showBossLore(enemy.id, 'phase3');
     enemy.loreTriggered.phase3 = true;
+    shifted = true;
   }
+  if (shifted) resetBossScript(enemy);
 }
 
 function enchantDamageBonus(card) {
@@ -250,7 +260,7 @@ function applyEffect(eff, targets, card, source) {
           source, t,
           eff.amount + bonus,
           eff.strengthMultiplier,
-          { isSpell },
+          { isSpell, cardType: def?.type },
         );
         pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}).`);
       }
@@ -264,7 +274,7 @@ function applyEffect(eff, targets, card, source) {
       const pool = livingEnemies();
       if (!pool.length) break;
       const t = pool[Math.floor(state.rng() * pool.length)];
-      const r = dealDamage(source, t, eff.amount + bonus, undefined, { isSpell });
+      const r = dealDamage(source, t, eff.amount + bonus, undefined, { isSpell, cardType: def?.type });
       pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}).`);
       break;
     }
@@ -397,11 +407,6 @@ function applyEffect(eff, targets, card, source) {
       pushLog(`  ${source.name || 'You'} healed ${eff.amount}.`);
       break;
 
-    // ---------------------------------------------
-    // Self-HP-cost effects — clamp at 1, never 0.
-    // canPlay already blocks playing these if the player
-    // can't survive the cost, so this is a safety net.
-    // ---------------------------------------------
     case 'loseHpSelf': {
       const before = source.hp;
       source.hp = Math.max(1, source.hp - eff.amount);
@@ -467,8 +472,6 @@ function applyEffect(eff, targets, card, source) {
         pushLog(`  Drew ${eff.amount}.`);
       }
       break;
-
-    // -------- Target-facing pile/hand manipulation --------
 
     case 'discardRandom': {
       for (const t of targets) {
@@ -590,8 +593,6 @@ function applyEffect(eff, targets, card, source) {
       }
       break;
     }
-
-    // -------- Self-facing pile manipulation --------
 
     case 'recoverFromDiscard': {
       if (source.discardPile.length) {
@@ -816,6 +817,25 @@ export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}
   dmg *= outgoingMultiplier(attacker);
   dmg *= incomingMultiplier(target);
 
+  // Boss passives on the *target* (resists).
+  if (!state.players.includes(target)) {
+    const passives = activeBossPassives();
+    if (isSpell && passives.resistSpell != null) {
+      dmg *= (1 - passives.resistSpell);
+    } else if (!isSpell && passives.resistPhysical != null) {
+      dmg *= (1 - passives.resistPhysical);
+    }
+  }
+
+  // Boss passives on the *attacker* (block ignore).
+  let ignoreBlockPercent = 0;
+  if (!state.players.includes(attacker)) {
+    const passives = activeBossPassives();
+    if (passives.ignoreBlockPercent != null) {
+      ignoreBlockPercent = passives.ignoreBlockPercent;
+    }
+  }
+
   if (state.players.includes(attacker) && (target.statuses?.vulnerable || 0) > 0) {
     for (const rid of attacker.relics || []) {
       const r = RELICS[rid];
@@ -826,8 +846,13 @@ export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}
   dmg = Math.floor(dmg);
   if (dmg < 0) dmg = 0;
 
-  const blocked = Math.min(target.block, dmg);
-  target.block -= blocked;
+  // Block ignore: reduce the effective block the target has this hit.
+  let blockPool = target.block;
+  if (ignoreBlockPercent > 0) {
+    blockPool = Math.max(0, Math.floor(target.block * (1 - ignoreBlockPercent)));
+  }
+  const blocked = Math.min(blockPool, dmg);
+  target.block = Math.max(0, target.block - blocked);
   const dealt = dmg - blocked;
 
   if (!state.lastHits) state.lastHits = [];
@@ -893,16 +918,30 @@ export function resolveEnemyTurn() {
 
   for (const e of state.enemies) {
     if (e.hp <= 0) continue;
-    const card = e.intentCard;
-    if (!card) continue;
 
-    const def = ENEMY_CARDS[card.defId];
-    const targets = resolveEnemyTargets(e, def.target);
+    // Scripted enemies have intentCards (1 or more). Normal enemies
+    // have a single intentCard.
+    const cards = e.intentCards?.length
+      ? e.intentCards
+      : (e.intentCard ? [e.intentCard] : []);
 
-    pushLog(`${e.name} plays ${def.name}.`);
-    for (const eff of def.effects) applyEffect(eff, targets, card, e);
-    e.cardDiscard.push(card);
+    for (const card of cards) {
+      if (!card) continue;
+      const def = ENEMY_CARDS[card.defId];
+      const targets = resolveEnemyTargets(e, def.target);
+
+      pushLog(`${e.name} plays ${def.name}.`);
+      for (const eff of def.effects) applyEffect(eff, targets, card, e);
+      e.cardDiscard.push(card);
+    }
+
     tickStatuses(e);
+
+    // Scripted bosses advance to the next turn pair. Unscripted bosses
+    // shuffle their deck as usual via rollIntent.
+    if (e.script) {
+      advanceScript(e);
+    }
     rollIntent(e);
   }
 
