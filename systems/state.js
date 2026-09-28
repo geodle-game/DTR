@@ -212,7 +212,12 @@ export function startNode(nodeId) {
     state.event = { data: randomEvent(state.rng) };
     state.screen = 'event';
   } else if (node.type === 'shop') {
-    state.shop = { items: rollShop(state.rng, 5), healPrice: 60 };
+    state.shop = {
+      items: rollShop(state.rng, 5),
+      healPrice: 60,
+      removePrice: 30,
+      removeUsed: false,
+    };
     state.screen = 'shop';
   } else if (node.type === 'rest') {
     state.rest = { healed: false };
@@ -581,6 +586,18 @@ export function buyShopHeal() {
   state.run.gold -= state.shop.healPrice;
   state.run.hp = Math.min(state.run.maxHp, state.run.hp + 25);
   pushLog('Healed 25 HP.');
+}
+
+export function buyShopRemove(index) {
+  if (!state.shop) return;
+  if (state.shop.removeUsed) return;
+  if (state.run.gold < state.shop.removePrice) return;
+  if (index < 0 || index >= state.run.deck.length) return;
+
+  state.run.gold -= state.shop.removePrice;
+  const removed = state.run.deck.splice(index, 1)[0];
+  state.shop.removeUsed = true;
+  pushLog(`Removed ${CARDS[removed.defId].name} for ${state.shop.removePrice} gold.`);
 }
 
 export function restHeal() {
