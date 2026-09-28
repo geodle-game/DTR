@@ -10,6 +10,7 @@ import {
   returnToMainMenu, nextAct, claimActReward,
   takeActRewardCard, skipActRewardCard, takeActRewardRelic,
   finishRun, pickTreasureRelic, skipTreasure,
+  activePlayer,
 } from './state.js';
 import {
   playCard, beginEnemyTurn, resolveEnemyTurn,
@@ -104,9 +105,11 @@ function applyAction(action) {
 
     // ---- Combat ----
     case 'PLAY_CARD': {
-      const card = state.players[0].hand.find(c => c.uid === action.cardUid);
+      const player = activePlayer();
+      if (!player) return false;
+      const card = player.hand.find(c => c.uid === action.cardUid);
       if (!card) return false;
-      return playCard(card, action.targetUid ?? null);
+      return playCard(card, player, action.targetUid ?? null);
     }
 
     case 'END_TURN': {
