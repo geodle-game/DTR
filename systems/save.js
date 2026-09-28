@@ -6,7 +6,7 @@
 import { makeRng } from './deck.js';
 
 const SAVE_KEY = 'drawnToRuin.save';
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 
 const SAFE_SCREENS = new Set([
   'map', 'shop', 'rest', 'event', 'treasure', 'reward',
@@ -22,6 +22,8 @@ function snapshot(state) {
     screen: state.screen,
     rngState: state.rng?.getState?.() ?? null,
     run: state.run,
+    players: state.players,
+    activePlayerIndex: state.activePlayerIndex,
     relicChoices: state.relicChoices,
     reward: state.reward,
     shop: state.shop,
@@ -83,6 +85,32 @@ export function restoreRun(state, save) {
   if (save.rngState != null) state.rng.setState(save.rngState);
 
   state.run = save.run;
+  state.players = save.players || [];
+  state.activePlayerIndex = save.activePlayerIndex ?? 0;
+
+  // Re-install the back-compat getters on run since JSON parse stripped them.
+  if (state.players[0]) {
+    const p = state.players[0];
+    Object.defineProperty(state.run, 'hp', {
+      get() { return p.hp; }, set(v) { p.hp = v; }, configurable: true,
+    });
+    Object.defineProperty(state.run, 'maxHp', {
+      get() { return p.maxHp; }, set(v) { p.maxHp = v; }, configurable: true,
+    });
+    Object.defineProperty(state.run, 'gold', {
+      get() { return p.gold; }, set(v) { p.gold = v; }, configurable: true,
+    });
+    Object.defineProperty(state.run, 'relic', {
+      get() { return p.relic; }, set(v) { p.relic = v; }, configurable: true,
+    });
+    Object.defineProperty(state.run, 'relics', {
+      get() { return p.relics; }, set(v) { p.relics = v; }, configurable: true,
+    });
+    Object.defineProperty(state.run, 'deck', {
+      get() { return p.deck; }, set(v) { p.deck = v; }, configurable: true,
+    });
+  }
+
   state.relicChoices = save.relicChoices || [];
 
   state.reward = save.reward ?? null;
@@ -93,14 +121,7 @@ export function restoreRun(state, save) {
   state.actReward = save.actReward ?? null;
   state.pendingEnchant = save.pendingEnchant ?? null;
 
-  state.player = null;
   state.enemies = [];
-  state.hand = [];
-  state.drawPile = [];
-  state.discardPile = [];
-  state.exhaustPile = [];
-  state.energy = 0;
-  state.maxEnergy = 3;
   state.turn = 'player';
   state.over = false;
   state.result = null;
