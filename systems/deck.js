@@ -30,10 +30,17 @@ export function shuffle(arr, rng = Math.random) {
   return a;
 }
 
-// Draw now takes an explicit player. Callers must pass the player whose
-// deck is being drawn from. Single-player passes state.players[0].
 export function draw(state, player, n) {
   if (!player) return;
+
+  // No Draw: consume one stack and skip this whole draw call.
+  // Battle Trance applies these; each draw call burns one.
+  if ((player.statuses?.noDraw || 0) > 0) {
+    player.statuses.noDraw -= 1;
+    if (player.statuses.noDraw <= 0) delete player.statuses.noDraw;
+    return;
+  }
+
   if (!state.newlyDrawn) state.newlyDrawn = new Set();
   for (let i = 0; i < n; i++) {
     if (player.drawPile.length === 0) {
