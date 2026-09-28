@@ -30,30 +30,33 @@ export function shuffle(arr, rng = Math.random) {
   return a;
 }
 
-export function draw(state, n) {
+// Draw now takes an explicit player. Callers must pass the player whose
+// deck is being drawn from. Single-player passes state.players[0].
+export function draw(state, player, n) {
+  if (!player) return;
   if (!state.newlyDrawn) state.newlyDrawn = new Set();
   for (let i = 0; i < n; i++) {
-    if (state.drawPile.length === 0) {
-      if (state.discardPile.length > 0) {
-        state.drawPile = shuffle(state.discardPile, state.rng);
-        state.discardPile = [];
+    if (player.drawPile.length === 0) {
+      if (player.discardPile.length > 0) {
+        player.drawPile = shuffle(player.discardPile, state.rng);
+        player.discardPile = [];
       } else {
         // Exhaust is permanent. Discard is the only pile that recycles.
-        // If both draw and discard are empty, we stop drawing.
         return;
       }
     }
-    const card = state.drawPile.pop();
-    state.hand.push(card);
+    const card = player.drawPile.pop();
+    player.hand.push(card);
     state.newlyDrawn.add(card.uid);
   }
 }
 
-export function recycleHand(state) {
+export function recycleHand(state, player) {
+  if (!player) return;
   const retained = [];
   const rest = [];
 
-  for (const card of state.hand) {
+  for (const card of player.hand) {
     const def = state.cardDef(card);
     if (def?.retain) {
       retained.push(card);
@@ -67,16 +70,16 @@ export function recycleHand(state) {
   for (let i = 0; i < keepCount; i++) retained.push(shuffled[i]);
 
   const discarded = shuffled.slice(keepCount);
-  state.discardPile.push(...discarded);
+  player.discardPile.push(...discarded);
 
-  state.hand = retained;
+  player.hand = retained;
 
-  if (state.drawPile.length < 5 && state.discardPile.length > 0) {
-    state.drawPile = shuffle(
-      state.drawPile.concat(state.discardPile),
+  if (player.drawPile.length < 5 && player.discardPile.length > 0) {
+    player.drawPile = shuffle(
+      player.drawPile.concat(player.discardPile),
       state.rng
     );
-    state.discardPile = [];
+    player.discardPile = [];
   }
 }
 
