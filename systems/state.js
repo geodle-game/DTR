@@ -28,12 +28,9 @@ export const state = {
   screen: 'mainMenu',
   rng: null,
   run: null,
-
   players: [],
   activePlayerIndex: 0,
-
   enemies: [],
-
   turn: 'player',
   over: false,
   result: null,
@@ -41,11 +38,9 @@ export const state = {
   pendingCardUid: null,
   previewCardUid: null,
   newlyDrawn: new Set(),
-
   lastHits: [],
   currentAnimation: null,
   bossLore: null,
-
   reward: null,
   actReward: null,
   treasure: null,
@@ -53,9 +48,7 @@ export const state = {
   shop: null,
   rest: null,
   pendingEnchant: null,
-
   overlays: { deck: false, relics: false, draw: false, discard: false, exhaust: false },
-
   log: [],
   relicChoices: [],
   combatKind: 'monster',
@@ -63,10 +56,6 @@ export const state = {
   lastEncounterId: null,
   deathPage: 0,
 };
-
-// ------------------------------------------------------------
-// Player helpers
-// ------------------------------------------------------------
 
 export function activePlayer() {
   if (!state.players || !state.players.length) return null;
@@ -111,8 +100,7 @@ export function activeBossPassives() {
     if (!e.passives?.cycleByLead) continue;
     const lead = e.intentCards?.[0] || e.intentCard;
     if (!lead) continue;
-    const key = lead.defId;
-    const active = e.passives.cycleByLead[key];
+    const active = e.passives.cycleByLead[lead.defId];
     if (!active) continue;
     if (active.ignoreBlockPercent != null) merged.ignoreBlockPercent = active.ignoreBlockPercent;
     if (active.resistPhysical != null) merged.resistPhysical = active.resistPhysical;
@@ -172,21 +160,18 @@ function makePlayer(index, hp, maxHp) {
   return {
     id: index,
     name: index === 0 ? 'You' : 'Ally',
-    hp,
-    maxHp,
+    hp, maxHp,
     block: 0,
     statuses: {},
     nextTurnEnergy: 0,
     perTurnStatuses: [],
     perTurnHooks: [],
-
     drawPile: [],
     hand: [],
     discardPile: [],
     exhaustPile: [],
     energy: 0,
     maxEnergy: 3,
-
     gold: 99,
     relic: null,
     relics: [],
@@ -194,23 +179,11 @@ function makePlayer(index, hp, maxHp) {
   };
 }
 
-// ------------------------------------------------------------
-// Phase helpers
-// ------------------------------------------------------------
-
 function setPhase(phase) {
   if (state.run) state.run.phase = phase;
 }
 
-// ------------------------------------------------------------
-// grantCard — inlined from deckGuard.js
-//
-// Single funnel for adding cards to the permanent deck.
-// Only legal during reward / actReward / shop / event phases.
-// Logs every attempt so the source of any weird addition is
-// visible in the console via __grantLog().
-// ------------------------------------------------------------
-
+// ---- Deck guard: single funnel for adding cards to the deck ----
 const ALLOWED_GRANT_PHASES = new Set(['reward', 'actReward', 'shop', 'event']);
 const grantLog = [];
 
@@ -231,10 +204,7 @@ export function grantCard(defId, source = 'unknown', opts = {}) {
 
   const phase = run.phase || null;
   if (!ALLOWED_GRANT_PHASES.has(phase)) {
-    console.warn(
-      `[deckGuard] REJECTED ${defId} (source: ${source}) — ` +
-      `phase is "${phase}", not one of ${[...ALLOWED_GRANT_PHASES].join(', ')}.`
-    );
+    console.warn(`[deckGuard] REJECTED ${defId} (source: ${source}) — phase "${phase}".`);
     pushGrantLog({ defId, source, phase, allowed: false, reason: 'wrong-phase' });
     return false;
   }
@@ -262,55 +232,36 @@ if (typeof window !== 'undefined') {
   window.__grantLog = getGrantLog;
 }
 
-// ------------------------------------------------------------
+// ---- Run lifecycle ----
 
 export function newRun(seed = Date.now()) {
   state.rng = makeRng(seed);
   state.run = {
-    seed,
-    act: 1,
-    map: null,
-    currentNodeId: null,
-    floor: -1,
-    cleared: false,
-    victory: false,
-    bossesBeaten: [],
-    phase: null,
-    _grantUsed: {},
+    seed, act: 1,
+    map: null, currentNodeId: null, floor: -1,
+    cleared: false, victory: false, bossesBeaten: [],
+    phase: null, _grantUsed: {},
   };
-
   state.players = [makePlayer(0, 70, 70)];
   state.activePlayerIndex = 0;
 
   Object.defineProperty(state.run, 'hp', {
-    get() { return state.players[0].hp; },
-    set(v) { state.players[0].hp = v; },
-    configurable: true,
+    get() { return state.players[0].hp; }, set(v) { state.players[0].hp = v; }, configurable: true,
   });
   Object.defineProperty(state.run, 'maxHp', {
-    get() { return state.players[0].maxHp; },
-    set(v) { state.players[0].maxHp = v; },
-    configurable: true,
+    get() { return state.players[0].maxHp; }, set(v) { state.players[0].maxHp = v; }, configurable: true,
   });
   Object.defineProperty(state.run, 'gold', {
-    get() { return state.players[0].gold; },
-    set(v) { state.players[0].gold = v; },
-    configurable: true,
+    get() { return state.players[0].gold; }, set(v) { state.players[0].gold = v; }, configurable: true,
   });
   Object.defineProperty(state.run, 'relic', {
-    get() { return state.players[0].relic; },
-    set(v) { state.players[0].relic = v; },
-    configurable: true,
+    get() { return state.players[0].relic; }, set(v) { state.players[0].relic = v; }, configurable: true,
   });
   Object.defineProperty(state.run, 'relics', {
-    get() { return state.players[0].relics; },
-    set(v) { state.players[0].relics = v; },
-    configurable: true,
+    get() { return state.players[0].relics; }, set(v) { state.players[0].relics = v; }, configurable: true,
   });
   Object.defineProperty(state.run, 'deck', {
-    get() { return state.players[0].deck; },
-    set(v) { state.players[0].deck = v; },
-    configurable: true,
+    get() { return state.players[0].deck; }, set(v) { state.players[0].deck = v; }, configurable: true,
   });
 
   state.relicChoices = rollRelicChoices(state.rng, [], 3);
@@ -387,12 +338,7 @@ export function startNode(nodeId) {
     setPhase('event');
     state.screen = 'event';
   } else if (node.type === 'shop') {
-    state.shop = {
-      items: rollShop(state.rng, 5),
-      healPrice: 60,
-      removePrice: 30,
-      removeUsed: false,
-    };
+    state.shop = { items: rollShop(state.rng, 5), healPrice: 60, removePrice: 30, removeUsed: false };
     setPhase('shop');
     state.screen = 'shop';
   } else if (node.type === 'rest') {
@@ -405,7 +351,6 @@ export function startNode(nodeId) {
     state.treasure = { relicChoices, gold };
     setPhase(null);
     state.screen = 'treasure';
-    return;
   } else {
     setPhase(null);
     state.screen = 'map';
@@ -414,7 +359,6 @@ export function startNode(nodeId) {
 
 export function pickTreasureRelic(relicId) {
   if (!state.treasure) return;
-  if (state.treasure.relicChoices.length === 0) return;
   if (!state.treasure.relicChoices.includes(relicId)) return;
   const p = state.players[0];
   p.relics.push(relicId);
@@ -446,22 +390,16 @@ function pickEncounter(kind) {
     const pool = ['act1-elite-1', 'act1-elite-2', 'act1-elite-3', 'act1-elite-4'];
     return pool[Math.floor(state.rng() * pool.length)];
   }
-
   const act = state.run.act;
   let pool;
-  if (act === 1) {
-    pool = ['act1-boss', 'act1-boss-2', 'act1-boss-3'];
-  } else if (act === 2) {
+  if (act === 1) pool = ['act1-boss', 'act1-boss-2', 'act1-boss-3'];
+  else if (act === 2) {
     pool = ['act1-boss', 'act1-boss-2', 'act1-boss-3']
       .filter(b => !state.run.bossesBeaten.includes(b));
     if (!pool.length) pool = ['act1-boss'];
-  } else if (act === 3) {
-    pool = ['act3-boss'];
-  } else if (act === 4) {
-    pool = ['act4-boss'];
-  } else {
-    pool = ['final-boss'];
-  }
+  } else if (act === 3) pool = ['act3-boss'];
+  else if (act === 4) pool = ['act4-boss'];
+  else pool = ['final-boss'];
   return pool[Math.floor(state.rng() * pool.length)];
 }
 
@@ -490,17 +428,9 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
     const cardDraw = shuffle(def.deck.map(makeEnemyCard), state.rng);
     const scaledHp = Math.ceil(def.hp * scale.hp);
     const enemy = {
-      ...def,
-      uid: `e${i}`,
-      hp: scaledHp,
-      maxHp: scaledHp,
-      damageScale: scale.damage,
-      block: 0,
-      statuses: {},
-      cardDraw,
-      cardDiscard: [],
-      intentCard: null,
-      intentCards: [],
+      ...def, uid: `e${i}`, hp: scaledHp, maxHp: scaledHp,
+      damageScale: scale.damage, block: 0, statuses: {},
+      cardDraw, cardDiscard: [], intentCard: null, intentCards: [],
       loreTriggered: {},
     };
     if (enemy.script) enemy.scriptIndex = 0;
@@ -508,59 +438,35 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
   });
 
   for (const p of state.players) {
-    p.block = 0;
-    p.statuses = {};
-    p.nextTurnEnergy = 0;
-    p.perTurnStatuses = [];
-    p.perTurnHooks = [];
-    p.drawPile = shuffle(
-      p.deck.map(entry => makeCard(entry.defId, entry.enchant)),
-      state.rng,
-    );
-    p.hand = [];
-    p.discardPile = [];
-    p.exhaustPile = [];
-    p.maxEnergy = 3;
-    p.energy = 0;
-    p.cardsPlayedThisTurn = 0;
+    p.block = 0; p.statuses = {};
+    p.nextTurnEnergy = 0; p.perTurnStatuses = []; p.perTurnHooks = [];
+    p.drawPile = shuffle(p.deck.map(entry => makeCard(entry.defId, entry.enchant)), state.rng);
+    p.hand = []; p.discardPile = []; p.exhaustPile = [];
+    p.maxEnergy = 3; p.energy = 0; p.cardsPlayedThisTurn = 0;
 
     forEachRelic('combatStart', (r) => {
-      if (r.block)  p.block += r.block;
-      if (r.heal)   p.hp = Math.min(p.maxHp, p.hp + r.heal);
-      if (r.strength) {
-        p.statuses.strength = (p.statuses.strength || 0) + r.strength;
-      }
+      if (r.block) p.block += r.block;
+      if (r.heal) p.hp = Math.min(p.maxHp, p.hp + r.heal);
+      if (r.strength) p.statuses.strength = (p.statuses.strength || 0) + r.strength;
     }, p);
     forEachRelic('firstTurn', (r) => {
       if (r.energy) p.nextTurnEnergy += r.energy;
     }, p);
   }
 
-  state.turn = 'player';
-  state.over = false;
-  state.result = null;
-  state.pendingCardUid = null;
-  state.previewCardUid = null;
-  state.newlyDrawn = new Set();
-  state.lastHits = [];
-  state.currentAnimation = null;
-  state.bossLore = null;
+  state.turn = 'player'; state.over = false; state.result = null;
+  state.pendingCardUid = null; state.previewCardUid = null;
+  state.newlyDrawn = new Set(); state.lastHits = [];
+  state.currentAnimation = null; state.bossLore = null;
   state.selectedEnemyId = state.enemies[0]?.uid ?? null;
-  state.log = [];
-  state.overlays = emptyOverlays();
+  state.log = []; state.overlays = emptyOverlays();
   state.activePlayerIndex = 0;
-
   setPhase(null);
 
   for (const e of state.enemies) {
-    if (e.isBoss) {
-      showBossLore(e.id, 'start');
-      e.loreTriggered.start = true;
-    }
+    if (e.isBoss) { showBossLore(e.id, 'start'); e.loreTriggered.start = true; }
   }
-
   for (const e of state.enemies) rollIntent(e);
-
   startPlayerTurn(0, true);
   pushLog('Combat start.');
   state.screen = 'combat';
@@ -568,7 +474,6 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
 
 export function endCombat(win) {
   if (state.over) return;
-
   if (win) {
     for (const p of state.players) {
       forEachRelic('combatEnd', (r) => {
@@ -590,7 +495,6 @@ export function endCombat(win) {
     }
     state.deathPage = 0;
   }
-
   state.over = true;
   state.result = win ? 'win' : 'loss';
   state.turn = 'over';
@@ -599,17 +503,13 @@ export function endCombat(win) {
 
   if (win) {
     const kind = state.combatKind || 'monster';
-
     if (kind === 'boss') {
       const lastEncounter = state.lastEncounterId;
       if (lastEncounter) state.run.bossesBeaten.push(lastEncounter);
       state.run.cleared = true;
-      if (lastEncounter === 'final-boss') {
-        state.run.victory = true;
-      }
+      if (lastEncounter === 'final-boss') state.run.victory = true;
       return;
     }
-
     let coins = rollCoins(state.rng, kind);
     forEachRelic('onGoldGain', (r) => {
       if (r.doubleChance && state.rng() < r.doubleChance) {
@@ -617,7 +517,6 @@ export function endCombat(win) {
         pushLog('Coin Purse: doubled gold!');
       }
     });
-
     const cards = rollCardChoices(state.rng, 3);
     state.reward = { coins, cards, taken: false };
     setPhase('reward');
@@ -630,7 +529,6 @@ export function nextAct() {
   state.players[0].hp = Math.min(state.players[0].maxHp, state.players[0].hp + healAmount);
   const healed = state.players[0].hp - hpBefore;
   pushLog(`Act cleared. Healed ${healed} HP (30% of max).`);
-
   state.run.act += 1;
   state.run.cleared = false;
   state.run.map = generateMap(state.rng);
@@ -712,26 +610,21 @@ export function startPlayerTurn(playerIndex, isFirstTurn = false) {
   state.activePlayerIndex = playerIndex;
   const p = state.players[playerIndex];
   if (!p) return;
-
   state.turn = 'player';
   state.previewCardUid = null;
   p.cardsPlayedThisTurn = 0;
   for (const c of p.hand) delete c.disabledThisTurn;
 
   if (!isFirstTurn) {
-    let keepPercent = 0;
-    let keepMax = 999;
+    let keepPercent = 0, keepMax = 999;
     forEachRelic('onTurnEnd', (r) => {
       if (r.keepBlockPercent) {
         keepPercent = Math.max(keepPercent, r.keepBlockPercent);
         keepMax = Math.min(keepMax, r.keepBlockMax ?? 999);
       }
     }, p);
-    if (keepPercent > 0) {
-      p.block = Math.min(keepMax, Math.floor(p.block * keepPercent));
-    } else {
-      p.block = 0;
-    }
+    if (keepPercent > 0) p.block = Math.min(keepMax, Math.floor(p.block * keepPercent));
+    else p.block = 0;
   }
 
   p.energy = p.maxEnergy + (p.nextTurnEnergy || 0);
@@ -778,13 +671,10 @@ export function pickEventChoice(index) {
 
 function applyMetaEffect(eff) {
   const p = state.players[0];
-  if (eff.kind === 'heal') {
-    p.hp = Math.min(p.maxHp, p.hp + eff.amount);
-  } else if (eff.kind === 'gold') {
-    p.gold = Math.max(0, p.gold + eff.amount);
-  } else if (eff.kind === 'damageSelf') {
-    p.hp = Math.max(1, p.hp - eff.amount);
-  } else if (eff.kind === 'grantRandomCard') {
+  if (eff.kind === 'heal') p.hp = Math.min(p.maxHp, p.hp + eff.amount);
+  else if (eff.kind === 'gold') p.gold = Math.max(0, p.gold + eff.amount);
+  else if (eff.kind === 'damageSelf') p.hp = Math.max(1, p.hp - eff.amount);
+  else if (eff.kind === 'grantRandomCard') {
     const [id] = rollCardChoices(state.rng, 1);
     if (id) grantCard(id, 'event:grantRandomCard', { once: true });
   }
@@ -813,12 +703,10 @@ export function buyShopHeal() {
 }
 
 export function buyShopRemove(index) {
-  if (!state.shop) return;
-  if (state.shop.removeUsed) return;
+  if (!state.shop || state.shop.removeUsed) return;
   const p = state.players[0];
   if (p.gold < state.shop.removePrice) return;
   if (index < 0 || index >= p.deck.length) return;
-
   p.gold -= state.shop.removePrice;
   const removed = p.deck.splice(index, 1)[0];
   state.shop.removeUsed = true;
@@ -835,33 +723,23 @@ export function restHeal() {
 
 export function restEnchantStart() {
   const p = state.players[0];
-  const eligible = p.deck
-    .map((entry, i) => entry.enchant ? -1 : i)
-    .filter(i => i >= 0);
-
+  const eligible = p.deck.map((entry, i) => entry.enchant ? -1 : i).filter(i => i >= 0);
   if (eligible.length === 0) {
     pushLog('No enchantable cards in deck.');
     backToMap();
     return;
   }
-
   const enchant = rollEnchant(state.rng);
-  state.pendingEnchant = {
-    enchantId: enchant.id,
-    eligibleIndices: eligible,
-    applied: false,
-  };
+  state.pendingEnchant = { enchantId: enchant.id, eligibleIndices: eligible, applied: false };
   state.screen = 'enchantPick';
 }
 
 export function applyEnchant(index) {
-  if (!state.pendingEnchant) return;
-  if (state.pendingEnchant.applied) return;
+  if (!state.pendingEnchant || state.pendingEnchant.applied) return;
   if (!state.pendingEnchant.eligibleIndices.includes(index)) return;
   const p = state.players[0];
   const entry = p.deck[index];
   if (!entry || entry.enchant) return;
-
   state.pendingEnchant.applied = true;
   entry.enchant = state.pendingEnchant.enchantId;
   const enchant = getEnchant(state.pendingEnchant.enchantId);
@@ -876,12 +754,6 @@ export function skipEnchant() {
   backToMap();
 }
 
-export function debugFightDungeonCore() {
-  newCombat('final-boss', 'boss');
-}
-export function debugFightFallenDrawn() {
-  newCombat('act3-boss', 'boss');
-}
-export function debugFightWarden() {
-  newCombat('act4-boss', 'boss');
-}
+export function debugFightDungeonCore() { newCombat('final-boss', 'boss'); }
+export function debugFightFallenDrawn() { newCombat('act3-boss', 'boss'); }
+export function debugFightWarden() { newCombat('act4-boss', 'boss'); }
