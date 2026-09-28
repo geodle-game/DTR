@@ -4,6 +4,8 @@
 // The Core's silent enforcer. Built from the dungeon's oldest
 // defenses. Does not speak, does not negotiate. Just blocks
 // the final door with everything it has.
+//
+// Passive: caps the player at 10 cards played per turn.
 // ============================================================
 
 export const ENEMY = {
@@ -22,6 +24,9 @@ export const ENEMY = {
     'warden-rush',
     'warden-wall',
   ],
+  passives: {
+    cardPlayCap: 10,
+  },
 };
 
 export const CARDS = {
