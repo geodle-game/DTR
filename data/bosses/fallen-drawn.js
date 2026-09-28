@@ -4,6 +4,8 @@
 // A previous century's hero, consumed by the Core and turned
 // back against the world. Uses corrupted versions of the same
 // cards you do — echoing what a Drawn becomes if they fail.
+//
+// Passive: takes 50% less damage from Spells.
 // ============================================================
 
 export const ENEMY = {
@@ -22,6 +24,9 @@ export const ENEMY = {
     'drawn-fracture',
     'drawn-guard',
   ],
+  passives: {
+    resistSpell: 0.5,
+  },
 };
 
 export const CARDS = {
