@@ -77,17 +77,26 @@ export const ENEMIES = {
     deck: ['multi-stab', 'single-stab', 'multi-stab', 'heavy-stab'],
   },
 
-  // -------- Boss --------
+  // -------- Boss (inline, Act 1 pool) --------
   'the-guardian': {
     id: 'the-guardian', name: 'The Guardian', hp: 140,
+    isBoss: true,
     deck: ['guardian-slam', 'guardian-mode', 'guardian-slam', 'guardian-vent'],
+    passives: {
+      ignoreBlockPercent: 0.5,
+    },
   },
   'hexaghost': {
     id: 'hexaghost', name: 'Hexaghost', hp: 180,
+    isBoss: true,
     deck: ['hexaghost-divider', 'hexaghost-sear', 'hexaghost-inflame', 'hexaghost-tackle'],
+    passives: {
+      resistPhysical: 0.7,
+    },
   },
   'slime-boss': {
     id: 'slime-boss', name: 'Slime Boss', hp: 140,
+    isBoss: true,
     deck: ['slime-goop', 'slime-prep', 'slime-slam', 'slime-goop'],
   },
 };
