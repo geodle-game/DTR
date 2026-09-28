@@ -28,15 +28,14 @@ export const state = {
   screen: 'mainMenu',
   rng: null,
   run: null,
-  player: null,
+
+  // players[0] is the only player in single-player.
+  // In co-op, players[1] exists and activePlayerIndex switches between them.
+  players: [],
+  activePlayerIndex: 0,
+
   enemies: [],
 
-  drawPile: [],
-  hand: [],
-  discardPile: [],
-  exhaustPile: [],
-  energy: 0,
-  maxEnergy: 3,
   turn: 'player',
   over: false,
   result: null,
@@ -67,10 +66,32 @@ export const state = {
   deathPage: 0,
 };
 
+// ------------------------------------------------------------
+// Player helpers
+// ------------------------------------------------------------
+
+export function activePlayer() {
+  return state.players[state.activePlayerIndex] || null;
+}
+
+export function playerById(id) {
+  return state.players.find(p => p.id === id) || null;
+}
+
+export function livingPlayers() {
+  return state.players.filter(p => p.hp > 0);
+}
+
 export function cardDef(card) {
   return CARDS[card.defId];
 }
 state.cardDef = cardDef;
+
+// Back-compat alias so existing code that read `state.player` keeps working
+// during the transition. Remove in stage 2 once every call site is migrated.
+Object.defineProperty(state, 'player', {
+  get() { return activePlayer(); },
+});
 
 export function pushLog(msg) {
   state.log.push(msg);
@@ -102,15 +123,17 @@ export function actScaling(act) {
   return table[act] ?? table[1];
 }
 
-export function forEachRelic(trigger, fn) {
-  for (const rid of state.run.relics || []) {
+export function forEachRelic(trigger, fn, player = activePlayer()) {
+  if (!player) return;
+  for (const rid of player.relics || []) {
     const r = RELICS[rid];
     if (r && r.trigger === trigger) fn(r);
   }
 }
 
-export function hasRelicTrigger(trigger) {
-  for (const rid of state.run.relics || []) {
+export function hasRelicTrigger(trigger, player = activePlayer()) {
+  if (!player) return false;
+  for (const rid of player.relics || []) {
     const r = RELICS[rid];
     if (r && r.trigger === trigger) return true;
   }
@@ -121,16 +144,39 @@ function makeDeckEntry(defId) {
   return { defId, enchant: null };
 }
 
+function makePlayer(index, hp, maxHp) {
+  return {
+    id: index,
+    name: index === 0 ? 'You' : 'Ally',
+    hp,
+    maxHp,
+    block: 0,
+    statuses: {},
+    nextTurnEnergy: 0,
+    perTurnStatuses: [],
+    perTurnHooks: [],
+
+    // In-combat card state (populated by newCombat)
+    drawPile: [],
+    hand: [],
+    discardPile: [],
+    exhaustPile: [],
+    energy: 0,
+    maxEnergy: 3,
+
+    // Meta run state
+    gold: 99,
+    relic: null,
+    relics: [],
+    deck: [],
+  };
+}
+
 export function newRun(seed = Date.now()) {
   state.rng = makeRng(seed);
   state.run = {
     seed,
     act: 1,
-    hp: 70, maxHp: 70,
-    gold: 99,
-    relic: null,
-    relics: [],
-    deck: [],
     map: null,
     currentNodeId: null,
     floor: -1,
@@ -138,6 +184,44 @@ export function newRun(seed = Date.now()) {
     victory: false,
     bossesBeaten: [],
   };
+
+  // Single-player: one player. Co-op later: push a second player here.
+  state.players = [makePlayer(0, 70, 70)];
+  state.activePlayerIndex = 0;
+
+  // For back-compat with old save/reward code that references run.hp/gold/etc.
+  // These getters proxy through to the active player. Remove in stage 2.
+  Object.defineProperty(state.run, 'hp', {
+    get() { return state.players[0].hp; },
+    set(v) { state.players[0].hp = v; },
+    configurable: true,
+  });
+  Object.defineProperty(state.run, 'maxHp', {
+    get() { return state.players[0].maxHp; },
+    set(v) { state.players[0].maxHp = v; },
+    configurable: true,
+  });
+  Object.defineProperty(state.run, 'gold', {
+    get() { return state.players[0].gold; },
+    set(v) { state.players[0].gold = v; },
+    configurable: true,
+  });
+  Object.defineProperty(state.run, 'relic', {
+    get() { return state.players[0].relic; },
+    set(v) { state.players[0].relic = v; },
+    configurable: true,
+  });
+  Object.defineProperty(state.run, 'relics', {
+    get() { return state.players[0].relics; },
+    set(v) { state.players[0].relics = v; },
+    configurable: true,
+  });
+  Object.defineProperty(state.run, 'deck', {
+    get() { return state.players[0].deck; },
+    set(v) { state.players[0].deck = v; },
+    configurable: true,
+  });
+
   state.relicChoices = rollRelicChoices(state.rng, [], 3);
   state.screen = 'relicPick';
   state.log = [];
@@ -157,11 +241,10 @@ export function newRun(seed = Date.now()) {
 }
 
 export function chooseRelic(relicId) {
-  state.run.relic = relicId;
-  state.run.relics = [relicId];
-  // 15-card starter deck. Bash and Neutralize are in the 'starter'
-  // rarity pool and roll naturally at ~30% per slot.
-  state.run.deck = randomStartingDeck(state.rng, 15).map(makeDeckEntry);
+  const p = state.players[0];
+  p.relic = relicId;
+  p.relics = [relicId];
+  p.deck = randomStartingDeck(state.rng, 15).map(makeDeckEntry);
   state.screen = 'deckView';
 }
 
@@ -223,7 +306,7 @@ export function startNode(nodeId) {
     state.rest = { healed: false };
     state.screen = 'rest';
   } else if (node.type === 'treasure') {
-    const relicChoices = rollRelicChoices(state.rng, state.run.relics, 3);
+    const relicChoices = rollRelicChoices(state.rng, state.players[0].relics, 3);
     const gold = 30 + Math.floor(state.rng() * 20);
     state.treasure = { relicChoices, gold };
     state.screen = 'treasure';
@@ -237,9 +320,10 @@ export function pickTreasureRelic(relicId) {
   if (!state.treasure) return;
   if (state.treasure.relicChoices.length === 0) return;
   if (!state.treasure.relicChoices.includes(relicId)) return;
-  state.run.relics.push(relicId);
-  state.run.relic = state.run.relic || relicId;
-  state.run.gold += state.treasure.gold;
+  const p = state.players[0];
+  p.relics.push(relicId);
+  p.relic = p.relic || relicId;
+  p.gold += state.treasure.gold;
   pushLog(`Treasure: ${RELICS[relicId].name}. +${state.treasure.gold} gold.`);
   state.treasure = null;
   backToMap();
@@ -247,7 +331,7 @@ export function pickTreasureRelic(relicId) {
 
 export function skipTreasure() {
   if (!state.treasure) return;
-  state.run.gold += state.treasure.gold;
+  state.players[0].gold += state.treasure.gold;
   pushLog(`Skipped treasure. +${state.treasure.gold} gold.`);
   state.treasure = null;
   backToMap();
@@ -298,18 +382,8 @@ export function backToMap() {
 }
 
 export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
-  state.player = {
-    id: 'player', name: 'You',
-    hp: state.run.hp, maxHp: state.run.maxHp,
-    block: 0,
-    statuses: {},
-    nextTurnEnergy: 0,
-    perTurnStatuses: [],
-    perTurnHooks: [],
-  };
   state.combatKind = sourceKind;
   state.lastEncounterId = encounterId;
-
   state.combatBanner = bannerForCombat(sourceKind, state.rng);
 
   const scale = actScaling(state.run.act);
@@ -333,14 +407,35 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
     };
   });
 
-  state.drawPile = shuffle(
-    state.run.deck.map(entry => makeCard(entry.defId, entry.enchant)),
-    state.rng,
-  );
-  state.hand = [];
-  state.discardPile = [];
-  state.exhaustPile = [];
-  state.maxEnergy = 3;
+  // Reset combat state on each player.
+  for (const p of state.players) {
+    p.block = 0;
+    p.statuses = {};
+    p.nextTurnEnergy = 0;
+    p.perTurnStatuses = [];
+    p.perTurnHooks = [];
+    p.drawPile = shuffle(
+      p.deck.map(entry => makeCard(entry.defId, entry.enchant)),
+      state.rng,
+    );
+    p.hand = [];
+    p.discardPile = [];
+    p.exhaustPile = [];
+    p.maxEnergy = 3;
+    p.energy = 0;
+
+    forEachRelic('combatStart', (r) => {
+      if (r.block)  p.block += r.block;
+      if (r.heal)   p.hp = Math.min(p.maxHp, p.hp + r.heal);
+      if (r.strength) {
+        p.statuses.strength = (p.statuses.strength || 0) + r.strength;
+      }
+    }, p);
+    forEachRelic('firstTurn', (r) => {
+      if (r.energy) p.nextTurnEnergy += r.energy;
+    }, p);
+  }
+
   state.turn = 'player';
   state.over = false;
   state.result = null;
@@ -353,17 +448,7 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
   state.selectedEnemyId = state.enemies[0]?.uid ?? null;
   state.log = [];
   state.overlays = emptyOverlays();
-
-  forEachRelic('combatStart', (r) => {
-    if (r.block)  state.player.block += r.block;
-    if (r.heal)   state.player.hp = Math.min(state.player.maxHp, state.player.hp + r.heal);
-    if (r.strength) {
-      state.player.statuses.strength = (state.player.statuses.strength || 0) + r.strength;
-    }
-  });
-  forEachRelic('firstTurn', (r) => {
-    if (r.energy) state.player.nextTurnEnergy += r.energy;
-  });
+  state.activePlayerIndex = 0;
 
   for (const e of state.enemies) {
     if (e.isBoss) {
@@ -373,18 +458,25 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
   }
 
   for (const e of state.enemies) rollIntent(e);
-  startPlayerTurn(true);
+
+  // Start first player's turn. In single-player this is the only one.
+  startPlayerTurn(0, true);
   pushLog('Combat start.');
   state.screen = 'combat';
 }
 
 export function endCombat(win) {
-  state.run.hp = state.player.hp;
+  // Write HP back to the players.
+  for (const p of state.players) {
+    // nothing — HP already lives on the player object
+  }
 
   if (win) {
-    forEachRelic('combatEnd', (r) => {
-      if (r.heal) state.run.hp = Math.min(state.run.maxHp, state.run.hp + r.heal);
-    });
+    for (const p of state.players) {
+      forEachRelic('combatEnd', (r) => {
+        if (r.heal) p.hp = Math.min(p.maxHp, p.hp + r.heal);
+      }, p);
+    }
 
     for (const e of state.enemies) {
       if (e.isBoss && !e.loreTriggered.onDeath) {
@@ -434,10 +526,10 @@ export function endCombat(win) {
 }
 
 export function nextAct() {
-  const healAmount = Math.floor(state.run.maxHp * 0.3);
-  const hpBefore = state.run.hp;
-  state.run.hp = Math.min(state.run.maxHp, state.run.hp + healAmount);
-  const healed = state.run.hp - hpBefore;
+  const healAmount = Math.floor(state.players[0].maxHp * 0.3);
+  const hpBefore = state.players[0].hp;
+  state.players[0].hp = Math.min(state.players[0].maxHp, state.players[0].hp + healAmount);
+  const healed = state.players[0].hp - hpBefore;
   pushLog(`Act cleared. Healed ${healed} HP (30% of max).`);
 
   state.run.act += 1;
@@ -445,14 +537,14 @@ export function nextAct() {
   state.run.map = generateMap(state.rng);
   state.run.currentNodeId = null;
   state.run.floor = -1;
-  state.actReward = rollActTransition(state.rng, state.run.relics);
+  state.actReward = rollActTransition(state.rng, state.players[0].relics);
   state.actReward.healAmount = healed;
   state.screen = 'actReward';
 }
 
 export function takeActRewardCard(defId) {
   if (!state.actReward || state.actReward.cardTaken) return;
-  state.run.deck.push(makeDeckEntry(defId));
+  state.players[0].deck.push(makeDeckEntry(defId));
   state.actReward.cardTaken = true;
 }
 
@@ -463,14 +555,15 @@ export function skipActRewardCard() {
 
 export function takeActRewardRelic(relicId) {
   if (!state.actReward || state.actReward.relicTaken) return;
-  state.run.relics.push(relicId);
-  state.run.relic = state.run.relic || relicId;
+  const p = state.players[0];
+  p.relics.push(relicId);
+  p.relic = p.relic || relicId;
   state.actReward.relicTaken = relicId;
 }
 
 export function claimActReward() {
   if (!state.actReward) return;
-  state.run.gold += state.actReward.coins;
+  state.players[0].gold += state.actReward.coins;
   pushLog(`Act ${state.run.act}: +${state.actReward.coins} gold.`);
   state.actReward = null;
   state.screen = 'map';
@@ -485,8 +578,8 @@ export function returnToMainMenu() {
   clearSave();
   state.screen = 'mainMenu';
   state.run = null;
-  state.combat = null;
-  state.player = null;
+  state.players = [];
+  state.activePlayerIndex = 0;
   state.enemies = [];
   state.bossLore = null;
   state.deathPage = 0;
@@ -497,10 +590,15 @@ export function rollIntent(enemy) {
   enemy.intentCard = card;
 }
 
-export function startPlayerTurn(isFirstTurn = false) {
+export function startPlayerTurn(playerIndex, isFirstTurn = false) {
+  state.activePlayerIndex = playerIndex;
+  const p = state.players[playerIndex];
+  if (!p) return;
+
   state.turn = 'player';
   state.previewCardUid = null;
-  for (const c of state.hand) delete c.disabledThisTurn;
+  for (const c of p.hand) delete c.disabledThisTurn;
+
   if (!isFirstTurn) {
     let keepPercent = 0;
     let keepMax = 999;
@@ -509,17 +607,18 @@ export function startPlayerTurn(isFirstTurn = false) {
         keepPercent = Math.max(keepPercent, r.keepBlockPercent);
         keepMax = Math.min(keepMax, r.keepBlockMax ?? 999);
       }
-    });
+    }, p);
     if (keepPercent > 0) {
-      state.player.block = Math.min(keepMax, Math.floor(state.player.block * keepPercent));
+      p.block = Math.min(keepMax, Math.floor(p.block * keepPercent));
     } else {
-      state.player.block = 0;
+      p.block = 0;
     }
   }
-  state.energy = state.maxEnergy + (state.player.nextTurnEnergy || 0);
-  state.player.nextTurnEnergy = 0;
-  draw(state, 5);
-  pushLog(`--- Your turn (${state.energy} energy) ---`);
+
+  p.energy = p.maxEnergy + (p.nextTurnEnergy || 0);
+  p.nextTurnEnergy = 0;
+  draw(state, p, 5);
+  pushLog(`--- ${p.name}'s turn (${p.energy} energy) ---`);
 }
 
 export function livingEnemies() {
@@ -528,7 +627,7 @@ export function livingEnemies() {
 
 export function claimReward() {
   if (!state.reward) return;
-  state.run.gold += state.reward.coins;
+  state.players[0].gold += state.reward.coins;
   pushLog(`+${state.reward.coins} gold.`);
   state.reward = null;
   backToMap();
@@ -536,7 +635,7 @@ export function claimReward() {
 
 export function takeRewardCard(defId) {
   if (!state.reward || state.reward.taken) return;
-  state.run.deck.push(makeDeckEntry(defId));
+  state.players[0].deck.push(makeDeckEntry(defId));
   state.reward.taken = true;
   pushLog(`Added ${CARDS[defId].name} to your deck.`);
 }
@@ -557,58 +656,64 @@ export function pickEventChoice(index) {
 }
 
 function applyMetaEffect(eff) {
+  const p = state.players[0];
   if (eff.kind === 'heal') {
-    state.run.hp = Math.min(state.run.maxHp, state.run.hp + eff.amount);
+    p.hp = Math.min(p.maxHp, p.hp + eff.amount);
   } else if (eff.kind === 'gold') {
-    state.run.gold = Math.max(0, state.run.gold + eff.amount);
+    p.gold = Math.max(0, p.gold + eff.amount);
   } else if (eff.kind === 'damageSelf') {
-    state.run.hp = Math.max(1, state.run.hp - eff.amount);
+    p.hp = Math.max(1, p.hp - eff.amount);
   } else if (eff.kind === 'grantRandomCard') {
     const [id] = rollCardChoices(state.rng, 1);
-    if (id) state.run.deck.push(makeDeckEntry(id));
+    if (id) p.deck.push(makeDeckEntry(id));
   }
 }
 
 export function buyShopCard(index) {
   if (!state.shop) return;
+  const p = state.players[0];
   const item = state.shop.items[index];
   if (!item) return;
-  if (state.run.gold < item.price) return;
-  state.run.gold -= item.price;
-  state.run.deck.push(makeDeckEntry(item.defId));
+  if (p.gold < item.price) return;
+  p.gold -= item.price;
+  p.deck.push(makeDeckEntry(item.defId));
   state.shop.items.splice(index, 1);
   pushLog(`Bought ${CARDS[item.defId].name} for ${item.price} gold.`);
 }
 
 export function buyShopHeal() {
   if (!state.shop) return;
-  if (state.run.gold < state.shop.healPrice) return;
-  state.run.gold -= state.shop.healPrice;
-  state.run.hp = Math.min(state.run.maxHp, state.run.hp + 25);
+  const p = state.players[0];
+  if (p.gold < state.shop.healPrice) return;
+  p.gold -= state.shop.healPrice;
+  p.hp = Math.min(p.maxHp, p.hp + 25);
   pushLog('Healed 25 HP.');
 }
 
 export function buyShopRemove(index) {
   if (!state.shop) return;
   if (state.shop.removeUsed) return;
-  if (state.run.gold < state.shop.removePrice) return;
-  if (index < 0 || index >= state.run.deck.length) return;
+  const p = state.players[0];
+  if (p.gold < state.shop.removePrice) return;
+  if (index < 0 || index >= p.deck.length) return;
 
-  state.run.gold -= state.shop.removePrice;
-  const removed = state.run.deck.splice(index, 1)[0];
+  p.gold -= state.shop.removePrice;
+  const removed = p.deck.splice(index, 1)[0];
   state.shop.removeUsed = true;
   pushLog(`Removed ${CARDS[removed.defId].name} for ${state.shop.removePrice} gold.`);
 }
 
 export function restHeal() {
-  const amount = Math.floor(state.run.maxHp * 0.3);
-  state.run.hp = Math.min(state.run.maxHp, state.run.hp + amount);
+  const p = state.players[0];
+  const amount = Math.floor(p.maxHp * 0.3);
+  p.hp = Math.min(p.maxHp, p.hp + amount);
   pushLog(`Rested, healed ${amount}.`);
   backToMap();
 }
 
 export function restEnchantStart() {
-  const eligible = state.run.deck
+  const p = state.players[0];
+  const eligible = p.deck
     .map((entry, i) => entry.enchant ? -1 : i)
     .filter(i => i >= 0);
 
@@ -629,7 +734,8 @@ export function restEnchantStart() {
 export function applyEnchant(index) {
   if (!state.pendingEnchant) return;
   if (!state.pendingEnchant.eligibleIndices.includes(index)) return;
-  const entry = state.run.deck[index];
+  const p = state.players[0];
+  const entry = p.deck[index];
   if (!entry || entry.enchant) return;
 
   entry.enchant = state.pendingEnchant.enchantId;
