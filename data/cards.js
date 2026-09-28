@@ -451,10 +451,10 @@ export const CARDS = {
   'blood-wall': {
     id: 'blood-wall', name: 'Blood Wall', cost: 1, rarity: 'common',
     type: 'skill', target: 'self', destination: 'discard',
-    text: 'Gain 16 Block. Lose 2 HP.',
+    text: 'Gain 16 Block. Lose 4 HP.',
     effects: [
       { kind: 'block', amount: 16 },
-      { kind: 'loseHpSelf', amount: 2 },
+      { kind: 'loseHpSelf', amount: 4 },
     ],
   },
 
@@ -573,9 +573,9 @@ export const CARDS = {
   bloodletting: {
     id: 'bloodletting', name: 'Bloodletting', cost: 0, rarity: 'common',
     type: 'skill', target: 'self', destination: 'exhaust',
-    text: 'Lose 3 HP. Gain 2 Energy. Exhaust.',
+    text: 'Lose 5 HP. Gain 2 Energy. Exhaust.',
     effects: [
-      { kind: 'loseHpSelf', amount: 3 },
+      { kind: 'loseHpSelf', amount: 5 },
       { kind: 'gainEnergy', amount: 2 },
     ],
   },
@@ -597,9 +597,9 @@ export const CARDS = {
   offering: {
     id: 'offering', name: 'Offering', cost: 0, rarity: 'rare',
     type: 'skill', target: 'self', destination: 'exhaust',
-    text: 'Lose 6 HP. Gain 2 Energy. Draw 3. Exhaust.',
+    text: 'Lose 8 HP. Gain 2 Energy. Draw 3. Exhaust.',
     effects: [
-      { kind: 'loseHpSelf', amount: 6 },
+      { kind: 'loseHpSelf', amount: 8 },
       { kind: 'gainEnergy', amount: 2 },
       { kind: 'draw', amount: 3 },
     ],
@@ -627,7 +627,7 @@ export const CARDS = {
     effects: [{ kind: 'dualWield' }],
   },
   whirlwind: {
-    id: 'whirlwind', name: 'Whirlwind', cost: X, rarity: 'rare',
+    id: 'whirlwind', name: 'Whirlwind', cost: -1, rarity: 'rare',
     type: 'attack', target: 'all-enemies', destination: 'exhaust',
     animation: 'heavy',
     text: 'Deal 5 damage to ALL enemies X times.{live} Costs all your Energy. Exhaust.',
@@ -674,7 +674,7 @@ export const CARDS = {
     liveValues: liveAoE(4),
   },
   adrenaline: {
-    id: 'adrenaline', name: 'Adrenaline', cost: 0, rarity: 'rare',
+    id: 'adrenaline', name: 'Adrenaline', cost: 1, rarity: 'rare',
     type: 'power', target: 'self', destination: 'exhaust',
     text: 'Gain 3 Energy next turn. Exhaust.',
     effects: [{ kind: 'gainEnergyNextTurn', amount: 3 }],
