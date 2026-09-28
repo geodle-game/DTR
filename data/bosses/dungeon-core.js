@@ -6,6 +6,17 @@
 // your HP. It can exhaust your hand, disable your cards,
 // flood you with Burns, or replace your hand entirely.
 // Every move is the dungeon weaponizing the gift it invented.
+//
+// Scripted AI:
+//   - Plays TWO cards per turn, in a fixed order defined by `script`.
+//   - The script is a list of [firstCard, secondCard] pairs.
+//   - `scriptIndex` advances one entry per turn, wrapping at the end.
+//   - Phase shifts reset `scriptIndex` to 0.
+//
+// Passive design:
+//   - Always caps the player at 10 cards played per turn.
+//   - Each turn, gains one resist/ignore passive based on the
+//     FIRST card of the turn (see `cycleByLead`).
 // ============================================================
 
 export const ENEMY = {
@@ -14,18 +25,44 @@ export const ENEMY = {
   hp: 300,
   isBoss: true,
   phaseThresholds: { phase2: 0.66, phase3: 0.33 },
-  deck: [
-    'core-shatter',
-    'core-stonefall',
-    'core-rewrite',
-    'core-ascend',
-    'core-shatter',
-    'core-cinderstorm',
-    'core-pulse',
-    'core-cinderhand',
-    'core-stonefall',
-    'core-rewrite',
+
+  // The scripted turn sequence. Each entry is [leadCard, followCard].
+  // Reset to index 0 at combat start and on every phase shift.
+  script: [
+    ['core-pulse',      'core-shatter'],      // 1: soft open, see the passive
+    ['core-rewrite',    'core-stonefall'],    // 2: hand disruption + chip
+    ['core-ascend',     'core-pulse'],        // 3: the "oh no" scaling turn
+    ['core-cinderhand', 'core-shatter'],      // 4: hand sweep + big hit
+    ['core-cinderstorm','core-stonefall'],    // 5: burn fill + chip
+    ['core-shatter',    'core-pulse'],        // 6: straightforward aggression
+    ['core-rewrite',    'core-ascend'],       // 7: double scaling pressure
+    ['core-stonefall',  'core-cinderhand'],   // 8: punish greedy hands
+    ['core-cinderstorm','core-shatter'],      // 9: burn + big damage
+    ['core-pulse',      'core-stonefall'],    // 10: breather before loop
   ],
+  scriptIndex: 0,
+
+  // Legacy deck kept for compatibility (some code may still read it).
+  deck: [
+    'core-shatter', 'core-stonefall', 'core-rewrite', 'core-ascend',
+    'core-shatter', 'core-cinderstorm', 'core-pulse', 'core-cinderhand',
+    'core-stonefall', 'core-rewrite',
+  ],
+
+  drawsPerTurn: 2,
+
+  passives: {
+    cardPlayCap: 10,
+    cycleByLead: {
+      'core-shatter':     { ignoreBlockPercent: 0.5 },
+      'core-stonefall':   { ignoreBlockPercent: 0.5 },
+      'core-rewrite':     { resistPhysical: 0.7 },
+      'core-cinderhand':  { resistPhysical: 0.7 },
+      'core-cinderstorm': { resistPhysical: 0.7 },
+      'core-pulse':       { resistSpell: 0.5 },
+      'core-ascend':      { resistSpell: 0.5 },
+    },
+  },
 };
 
 export const CARDS = {
@@ -86,7 +123,6 @@ export const CARDS = {
       { kind: 'applyStatus', status: 'strength', amount: 2 },
     ],
   },
-  // The "oh no" button. The dungeon stops playing fair.
   'core-ascend': {
     id: 'core-ascend', name: "The Dungeon's Will", cost: 1, owner: 'enemy',
     type: 'skill', target: 'self', destination: 'discard',
@@ -95,10 +131,7 @@ export const CARDS = {
   },
 };
 
-// Lore lines shown at key moments. Each entry is an array of
-// paragraphs, displayed one after another in the modal.
 export const LORE = {
-  // Shown once when combat starts. Blocks input until dismissed.
   start: [
     'You descend the final stair.',
     'Below you, the walls breathe. Something vast and patient opens one eye.',
@@ -109,8 +142,6 @@ export const LORE = {
     '"I will end this. Not because I hate you. Because you cannot be trusted with what I made."',
     '"Draw your hand."',
   ],
-
-  // Triggered when boss drops below 66% max HP. One-shot.
   phase2: [
     'The Core\'s light stutters.',
     'It is no longer amused.',
@@ -118,8 +149,6 @@ export const LORE = {
     '"How many of you did I make? How many cards did I hand out, thinking you would use them like children use toys?"',
     '"I was wrong. I will not be wrong twice."',
   ],
-
-  // Triggered when boss drops below 33% max HP. One-shot.
   phase3: [
     'The Core fractures.',
     'Something older than language cracks open inside it.',
@@ -128,9 +157,6 @@ export const LORE = {
     '"I am the dungeon. And the dungeon does not end."',
     '"Come. Let us finish the thousand years."',
   ],
-
-  // Shown when the boss dies. One-shot. This is the payoff —
-  // the reveal that reframes the entire run.
   onDeath: [
     'The Core fractures.',
     'Not like a monster dying — like a shell cracking open. What was inside was never a monster.',
@@ -207,8 +233,6 @@ export const LORE = {
     'When you are ready.',
     'I will be waiting.',
   ],
-
-  // Shown when the boss kills the player. One-shot.
   onPlayerDeath: [
     'The Core reaches into you.',
     'It takes the cards. It takes the memories of the people who gave them to you. It takes your name.',
