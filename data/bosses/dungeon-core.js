@@ -42,12 +42,13 @@ export const CARDS = {
   'core-stonefall': {
     id: 'core-stonefall', name: 'Stonefall', cost: 1, owner: 'enemy',
     type: 'attack', target: 'player', destination: 'discard',
-    text: 'Deal 4 damage four times.',
+    text: 'Deal 5 damage five times.',
     effects: [
-      { kind: 'damage', amount: 4 },
-      { kind: 'damage', amount: 4 },
-      { kind: 'damage', amount: 4 },
-      { kind: 'damage', amount: 4 },
+      { kind: 'damage', amount: 5 },
+      { kind: 'damage', amount: 5 },
+      { kind: 'damage', amount: 5 },
+      { kind: 'damage', amount: 5 },
+      { kind: 'damage', amount: 5 },
     ],
   },
 
@@ -62,7 +63,7 @@ export const CARDS = {
     id: 'core-cinderhand', name: 'Cinderhand', cost: 1, owner: 'enemy',
     type: 'skill', target: 'player', destination: 'discard',
     text: 'Replace your hand with Burns.',
-    effects: [{ kind: 'replaceHandWithCard', cardId: 'burn', amount: 5 }],
+    effects: [{ kind: 'replaceHandWithCard', cardId: 'burn', amount: 7 }],
   },
   'core-cinderstorm': {
     id: 'core-cinderstorm', name: 'Cinderstorm', cost: 1, owner: 'enemy',
