@@ -104,7 +104,7 @@ function applyAction(action) {
 
     // ---- Combat ----
     case 'PLAY_CARD': {
-      const card = state.hand.find(c => c.uid === action.cardUid);
+      const card = state.players[0].hand.find(c => c.uid === action.cardUid);
       if (!card) return false;
       return playCard(card, action.targetUid ?? null);
     }
