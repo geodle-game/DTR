@@ -28,8 +28,8 @@ export const CARDS = {
   'warden-slam': {
     id: 'warden-slam', name: 'Slam', cost: 1, owner: 'enemy',
     type: 'attack', target: 'player', destination: 'discard',
-    text: 'Deal 22 damage.',
-    effects: [{ kind: 'damage', amount: 22 }],
+    text: 'Deal 25 damage.',
+    effects: [{ kind: 'damage', amount: 25 }],
   },
   'warden-rush': {
     id: 'warden-rush', name: 'Rush', cost: 1, owner: 'enemy',
@@ -44,8 +44,8 @@ export const CARDS = {
   'warden-wall': {
     id: 'warden-wall', name: 'Wardwall', cost: 1, owner: 'enemy',
     type: 'skill', target: 'self', destination: 'discard',
-    text: 'Gain 20 Block.',
-    effects: [{ kind: 'block', amount: 20 }],
+    text: 'Gain 23 Block.',
+    effects: [{ kind: 'block', amount: 23 }],
   },
   'warden-shackle': {
     id: 'warden-shackle', name: 'Shackle', cost: 1, owner: 'enemy',
