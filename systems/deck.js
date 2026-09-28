@@ -39,10 +39,7 @@ export function draw(state, n) {
         state.discardPile = [];
       } else {
         // Exhaust is permanent. Discard is the only pile that recycles.
-        // If both draw and discard are empty, we stop drawing — the player
-        // is out of cards for this turn. This is intentional and correct:
-        // a deck that fully exhausts itself under Corruption should feel
-        // the consequence, not get bailed out by an infinite loop.
+        // If both draw and discard are empty, we stop drawing.
         return;
       }
     }
