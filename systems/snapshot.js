@@ -7,14 +7,9 @@ import { state } from './state.js';
 export function snapshotState() {
   return {
     run: state.run,
-    player: state.player,
+    players: state.players,
+    activePlayerIndex: state.activePlayerIndex,
     enemies: state.enemies,
-    drawPile: state.drawPile,
-    hand: state.hand,
-    discardPile: state.discardPile,
-    exhaustPile: state.exhaustPile,
-    energy: state.energy,
-    maxEnergy: state.maxEnergy,
     turn: state.turn,
     over: state.over,
     result: state.result,
@@ -36,14 +31,9 @@ export function snapshotState() {
 
 export function restoreSnapshot(s) {
   state.run = s.run;
-  state.player = s.player;
+  state.players = s.players || [];
+  state.activePlayerIndex = s.activePlayerIndex ?? 0;
   state.enemies = s.enemies || [];
-  state.drawPile = s.drawPile || [];
-  state.hand = s.hand || [];
-  state.discardPile = s.discardPile || [];
-  state.exhaustPile = s.exhaustPile || [];
-  state.energy = s.energy ?? 0;
-  state.maxEnergy = s.maxEnergy ?? 3;
   state.turn = s.turn ?? 'player';
   state.over = s.over ?? false;
   state.result = s.result ?? null;
@@ -66,4 +56,6 @@ export function restoreSnapshot(s) {
   state.overlays = { deck: false, relics: false, draw: false, discard: false, exhaust: false };
   state.previewCardUid = null;
   state.currentAnimation = null;
+  state.pendingCardUid = null;
+  state.selectedEnemyId = null;
 }
