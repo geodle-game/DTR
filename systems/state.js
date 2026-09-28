@@ -12,7 +12,6 @@ import { bannerForCombat } from '../data/banners.js';
 import { rollEnchant, getEnchant } from '../data/enchants.js';
 import { BOSSES } from '../data/bosses/index.js';
 import { clearSave } from './save.js';
-import { grantCard } from './deckGuard.js';
 
 const BOSS_LORE = {};
 for (const bossModule of BOSSES) {
@@ -196,11 +195,71 @@ function makePlayer(index, hp, maxHp) {
 }
 
 // ------------------------------------------------------------
-// Phase transitions
+// Phase helpers
 // ------------------------------------------------------------
 
 function setPhase(phase) {
   if (state.run) state.run.phase = phase;
+}
+
+// ------------------------------------------------------------
+// grantCard — inlined from deckGuard.js
+//
+// Single funnel for adding cards to the permanent deck.
+// Only legal during reward / actReward / shop / event phases.
+// Logs every attempt so the source of any weird addition is
+// visible in the console via __grantLog().
+// ------------------------------------------------------------
+
+const ALLOWED_GRANT_PHASES = new Set(['reward', 'actReward', 'shop', 'event']);
+const grantLog = [];
+
+function pushGrantLog(entry) {
+  grantLog.push({ ...entry, at: Date.now() });
+  if (grantLog.length > 100) grantLog.shift();
+}
+
+export function grantCard(defId, source = 'unknown', opts = {}) {
+  const run = state.run;
+  const player = state.players?.[0];
+
+  if (!run || !player) {
+    console.warn(`[deckGuard] REJECTED ${defId} (source: ${source}) — no active run.`);
+    pushGrantLog({ defId, source, phase: null, allowed: false, reason: 'no-run' });
+    return false;
+  }
+
+  const phase = run.phase || null;
+  if (!ALLOWED_GRANT_PHASES.has(phase)) {
+    console.warn(
+      `[deckGuard] REJECTED ${defId} (source: ${source}) — ` +
+      `phase is "${phase}", not one of ${[...ALLOWED_GRANT_PHASES].join(', ')}.`
+    );
+    pushGrantLog({ defId, source, phase, allowed: false, reason: 'wrong-phase' });
+    return false;
+  }
+
+  if (opts.once) {
+    run._grantUsed = run._grantUsed || {};
+    if (run._grantUsed[source]) {
+      console.warn(`[deckGuard] REJECTED ${defId} — one-shot "${source}" already used.`);
+      pushGrantLog({ defId, source, phase, allowed: false, reason: 'already-used' });
+      return false;
+    }
+    run._grantUsed[source] = true;
+  }
+
+  player.deck.push({ defId, enchant: null });
+  pushGrantLog({ defId, source, phase, allowed: true });
+  return true;
+}
+
+export function getGrantLog() {
+  return grantLog.slice();
+}
+
+if (typeof window !== 'undefined') {
+  window.__grantLog = getGrantLog;
 }
 
 // ------------------------------------------------------------
@@ -508,13 +567,14 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
 }
 
 export function endCombat(win) {
+  if (state.over) return;
+
   if (win) {
     for (const p of state.players) {
       forEachRelic('combatEnd', (r) => {
         if (r.heal) p.hp = Math.min(p.maxHp, p.hp + r.heal);
       }, p);
     }
-
     for (const e of state.enemies) {
       if (e.isBoss && !e.loreTriggered.onDeath) {
         showBossLore(e.id, 'onDeath');
