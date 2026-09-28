@@ -29,8 +29,6 @@ export const state = {
   rng: null,
   run: null,
 
-  // players[0] is the only player in single-player.
-  // In co-op, players[1] exists and activePlayerIndex switches between them.
   players: [],
   activePlayerIndex: 0,
 
@@ -93,11 +91,39 @@ export function cardDef(card) {
 }
 state.cardDef = cardDef;
 
-// Back-compat alias so existing code that read `state.player` keeps working
-// during the transition. Remove in stage 2 once every call site is migrated.
 Object.defineProperty(state, 'player', {
   get() { return activePlayer(); },
 });
+
+// Returns the merged passives object of all living bosses, plus the
+// per-turn cycling passive if a boss has one. Empty object if no boss.
+export function activeBossPassives() {
+  const merged = {};
+  for (const e of state.enemies) {
+    if (e.hp <= 0) continue;
+    if (!e.passives) continue;
+    const p = e.passives;
+    if (p.cardPlayCap != null) merged.cardPlayCap = p.cardPlayCap;
+    if (p.ignoreBlockPercent != null) merged.ignoreBlockPercent = p.ignoreBlockPercent;
+    if (p.resistPhysical != null) merged.resistPhysical = p.resistPhysical;
+    if (p.resistSpell != null) merged.resistSpell = p.resistSpell;
+  }
+  // Per-turn cycling passive: if a boss has `cycleByLead` and its
+  // first intent card matches a key, that passive applies this turn.
+  for (const e of state.enemies) {
+    if (e.hp <= 0) continue;
+    if (!e.passives?.cycleByLead) continue;
+    const lead = e.intentCards?.[0] || e.intentCard;
+    if (!lead) continue;
+    const key = lead.defId;
+    const active = e.passives.cycleByLead[key];
+    if (!active) continue;
+    if (active.ignoreBlockPercent != null) merged.ignoreBlockPercent = active.ignoreBlockPercent;
+    if (active.resistPhysical != null) merged.resistPhysical = active.resistPhysical;
+    if (active.resistSpell != null) merged.resistSpell = active.resistSpell;
+  }
+  return merged;
+}
 
 export function pushLog(msg) {
   state.log.push(msg);
@@ -162,7 +188,6 @@ function makePlayer(index, hp, maxHp) {
     perTurnStatuses: [],
     perTurnHooks: [],
 
-    // In-combat card state (populated by newCombat)
     drawPile: [],
     hand: [],
     discardPile: [],
@@ -170,7 +195,6 @@ function makePlayer(index, hp, maxHp) {
     energy: 0,
     maxEnergy: 3,
 
-    // Meta run state
     gold: 99,
     relic: null,
     relics: [],
@@ -191,12 +215,9 @@ export function newRun(seed = Date.now()) {
     bossesBeaten: [],
   };
 
-  // Single-player: one player. Co-op later: push a second player here.
   state.players = [makePlayer(0, 70, 70)];
   state.activePlayerIndex = 0;
 
-  // For back-compat with old save/reward code that references run.hp/gold/etc.
-  // These getters proxy through to the active player. Remove in stage 2.
   Object.defineProperty(state.run, 'hp', {
     get() { return state.players[0].hp; },
     set(v) { state.players[0].hp = v; },
@@ -398,7 +419,7 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
     const def = getEnemyDef(id);
     const cardDraw = shuffle(def.deck.map(makeEnemyCard), state.rng);
     const scaledHp = Math.ceil(def.hp * scale.hp);
-    return {
+    const enemy = {
       ...def,
       uid: `e${i}`,
       hp: scaledHp,
@@ -409,11 +430,14 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
       cardDraw,
       cardDiscard: [],
       intentCard: null,
+      intentCards: [],
       loreTriggered: {},
     };
+    // Scripted bosses use a fixed sequence instead of a draw pile.
+    if (enemy.script) enemy.scriptIndex = 0;
+    return enemy;
   });
 
-  // Reset combat state on each player.
   for (const p of state.players) {
     p.block = 0;
     p.statuses = {};
@@ -465,18 +489,12 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
 
   for (const e of state.enemies) rollIntent(e);
 
-  // Start first player's turn. In single-player this is the only one.
   startPlayerTurn(0, true);
   pushLog('Combat start.');
   state.screen = 'combat';
 }
 
 export function endCombat(win) {
-  // Write HP back to the players.
-  for (const p of state.players) {
-    // nothing — HP already lives on the player object
-  }
-
   if (win) {
     for (const p of state.players) {
       forEachRelic('combatEnd', (r) => {
@@ -591,9 +609,33 @@ export function returnToMainMenu() {
   state.deathPage = 0;
 }
 
+// Draw the intent(s) for this enemy. Scripted bosses read from their
+// fixed `script` array instead of a draw pile. Non-bosses and unscripted
+// bosses shuffle their deck as usual.
 export function rollIntent(enemy) {
+  if (enemy.script && enemy.script.length) {
+    const pair = enemy.script[enemy.scriptIndex % enemy.script.length];
+    enemy.intentCards = pair.map(defId => makeEnemyCard(defId));
+    enemy.intentCard = enemy.intentCards[0];
+    return;
+  }
+  // Default: draw one card for normal enemies.
   const card = drawEnemyCard(enemy, state.rng);
   enemy.intentCard = card;
+  enemy.intentCards = card ? [card] : [];
+}
+
+// Advance the script index after a turn. Called from resolveEnemyTurn.
+export function advanceScript(enemy) {
+  if (!enemy.script) return;
+  enemy.scriptIndex = (enemy.scriptIndex + 1) % enemy.script.length;
+}
+
+// Called when a boss phase-shifts. Resets the script to the top so
+// each phase starts with a predictable opener.
+export function resetBossScript(enemy) {
+  if (!enemy.script) return;
+  enemy.scriptIndex = 0;
 }
 
 export function startPlayerTurn(playerIndex, isFirstTurn = false) {
@@ -603,6 +645,7 @@ export function startPlayerTurn(playerIndex, isFirstTurn = false) {
 
   state.turn = 'player';
   state.previewCardUid = null;
+  p.cardsPlayedThisTurn = 0;
   for (const c of p.hand) delete c.disabledThisTurn;
 
   if (!isFirstTurn) {
