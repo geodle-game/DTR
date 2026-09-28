@@ -627,7 +627,7 @@ export const CARDS = {
     effects: [{ kind: 'dualWield' }],
   },
   whirlwind: {
-    id: 'whirlwind', name: 'Whirlwind', cost: -1, rarity: 'rare',
+    id: 'whirlwind', name: 'Whirlwind', cost: X, rarity: 'rare',
     type: 'attack', target: 'all-enemies', destination: 'exhaust',
     animation: 'heavy',
     text: 'Deal 5 damage to ALL enemies X times.{live} Costs all your Energy. Exhaust.',
