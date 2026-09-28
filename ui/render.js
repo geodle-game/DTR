@@ -358,7 +358,8 @@ function renderCardPileOverlay(app, title, pile) {
 
 function sortDeckEntries(entries) {
   return entries.slice().sort((a, b) => {
-    const A = CARDS[a.defId], B = CARDS[b.defId];
+    const A = CARDS[a.defId] || { type: 'zzz', name: String(a.defId) };
+    const B = CARDS[b.defId] || { type: 'zzz', name: String(b.defId) };
     return (A.type || '').localeCompare(B.type || '') || A.name.localeCompare(B.name);
   });
 }
@@ -1129,7 +1130,6 @@ function playerPanel() {
   el.className = 'panel player';
   el.dataset.panel = 'player';
 
-  // Show the boss card-play cap counter if a boss has that passive.
   const passives = activeBossPassives();
   let capHtml = '';
   if (passives.cardPlayCap != null) {
@@ -1186,12 +1186,106 @@ function enemyPanel(e) {
   }
   wrap.appendChild(el);
 
-  // Render ALL intent cards (scripted bosses have two).
   if (!dead) {
+    // Render ALL intent cards (scripted bosses have two).
     const intents = e.intentCards?.length ? e.intentCards : (e.intentCard ? [e.intentCard] : []);
     for (const card of intents) {
       if (card) wrap.appendChild(enemyIntentCard(card, e));
     }
+
+    // Passive badge — only if the enemy has passives.
+    const badge = passiveBadge(e);
+    if (badge) wrap.appendChild(badge);
+  }
+  return wrap;
+}
+
+// ============================================================
+// Passive display
+// ============================================================
+
+function describePassives(enemy) {
+  if (!enemy.passives) return [];
+  const out = [];
+  const p = enemy.passives;
+
+  if (p.cardPlayCap != null) {
+    out.push({
+      name: 'Card Lock',
+      text: `You can play at most ${p.cardPlayCap} cards per turn.`,
+      kind: 'cap',
+    });
+  }
+  if (p.ignoreBlockPercent != null) {
+    out.push({
+      name: 'Block Breaker',
+      text: `Attacks ignore ${Math.round(p.ignoreBlockPercent * 100)}% of your Block.`,
+      kind: 'ignore',
+    });
+  }
+  if (p.resistPhysical != null) {
+    out.push({
+      name: 'Ironhide',
+      text: `Takes ${Math.round(p.resistPhysical * 100)}% less damage from Attacks.`,
+      kind: 'resist-phys',
+    });
+  }
+  if (p.resistSpell != null) {
+    out.push({
+      name: 'Warded',
+      text: `Takes ${Math.round(p.resistSpell * 100)}% less damage from Spells.`,
+      kind: 'resist-spell',
+    });
+  }
+
+  // Per-turn cycling passive — show what's active RIGHT NOW.
+  if (p.cycleByLead) {
+    const lead = enemy.intentCards?.[0] || enemy.intentCard;
+    if (lead) {
+      const active = p.cycleByLead[lead.defId];
+      if (active) {
+        if (active.ignoreBlockPercent != null) {
+          out.push({
+            name: 'This Turn: Block Breaker',
+            text: `Attacks ignore ${Math.round(active.ignoreBlockPercent * 100)}% of your Block.`,
+            kind: 'ignore',
+          });
+        }
+        if (active.resistPhysical != null) {
+          out.push({
+            name: 'This Turn: Ironhide',
+            text: `Takes ${Math.round(active.resistPhysical * 100)}% less damage from Attacks.`,
+            kind: 'resist-phys',
+          });
+        }
+        if (active.resistSpell != null) {
+          out.push({
+            name: 'This Turn: Warded',
+            text: `Takes ${Math.round(active.resistSpell * 100)}% less damage from Spells.`,
+            kind: 'resist-spell',
+          });
+        }
+      }
+    }
+  }
+
+  return out;
+}
+
+function passiveBadge(enemy) {
+  const list = describePassives(enemy);
+  if (!list.length) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'enemy-passives';
+  for (const p of list) {
+    const el = document.createElement('div');
+    el.className = `enemy-passive kind-${p.kind}`;
+    el.innerHTML = `
+      <div class="enemy-passive-name">⚠ ${p.name}</div>
+      <div class="enemy-passive-text">${p.text}</div>
+    `;
+    wrap.appendChild(el);
   }
   return wrap;
 }
@@ -1374,6 +1468,12 @@ function doPlayCard(card, sourceEl, targetUid) {
 
 function cardFace(defId, { disabled = false, small = false, big = false, enchant = null } = {}) {
   const def = CARDS[defId];
+  if (!def) {
+    const el = document.createElement('div');
+    el.className = 'card disabled';
+    el.innerHTML = `<div class="cname">??</div><div class="ctext">Missing: ${defId}</div>`;
+    return el;
+  }
   const enchantDef = enchant ? getEnchant(enchant) : null;
 
   const el = document.createElement('div');
