@@ -1,6 +1,6 @@
 import {
   state, pushLog, startPlayerTurn, livingEnemies, rollIntent, endCombat, cardDef,
-  forEachRelic, showBossLore,
+  forEachRelic, showBossLore, activePlayer,
 } from './state.js';
 import { draw, recycleHand, shuffle, makeCard } from './deck.js';
 import {
@@ -24,13 +24,14 @@ export function resetCombatScratch() {
   combat.rampageBonus = {};
 }
 
-export function costOf(card) {
+export function costOf(card, player = activePlayer()) {
+  if (!player) return 0;
   const def = CARDS[card.defId];
   let cost = def.cost;
 
-  if (def.xCost) return state.energy;
+  if (def.xCost) return player.energy;
   if (cost === -1) return 0;
-  if (state.player?.corruption && def.type === 'skill') cost = 0;
+  if (player.corruption && def.type === 'skill') cost = 0;
 
   if (def.costReduction?.kind === 'hpLost') {
     const steps = Math.floor(combat.hpLostThisCombat / def.costReduction.per);
@@ -45,48 +46,50 @@ export function costOf(card) {
   return Math.max(0, cost);
 }
 
-export function canPlay(card) {
+export function canPlay(card, player = activePlayer()) {
+  if (!player) return false;
   if (state.turn !== 'player' || state.over) return false;
   if (card.disabledThisTurn) return false;
   const def = CARDS[card.defId];
   if (def.unplayable) return false;
-  return state.energy >= costOf(card);
+  return player.energy >= costOf(card, player);
 }
 
-export function selectCardForPlay(card) {
+export function selectCardForPlay(card, player = activePlayer()) {
   const def = CARDS[card.defId];
-  if (!canPlay(card)) return;
+  if (!canPlay(card, player)) return;
   if (def.target === 'enemy' && livingEnemies().length > 1) {
     state.pendingCardUid = card.uid;
     pushLog(`Choose a target for ${def.name}.`);
     return;
   }
-  playCard(card);
+  playCard(card, player, null);
 }
 
-export function playCard(card, explicitTargetId = null) {
-  if (!canPlay(card)) return false;
+export function playCard(card, player = activePlayer(), explicitTargetId = null) {
+  if (!player) return false;
+  if (!canPlay(card, player)) return false;
   const def = CARDS[card.defId];
   const enchant = card.enchant ? getEnchant(card.enchant) : null;
-  const cost = costOf(card);
-  state.energy -= cost;
+  const cost = costOf(card, player);
+  player.energy -= cost;
   state.pendingCardUid = null;
-  state.hand = state.hand.filter(c => c.uid !== card.uid);
+  player.hand = player.hand.filter(c => c.uid !== card.uid);
 
   state.currentAnimation = def.animation || 'slash';
 
-  const targets = resolveTargets(def.target, explicitTargetId);
+  const targets = resolveTargets(def.target, explicitTargetId, player);
 
   if (def.type === 'attack') combat.attacksThisTurn++;
 
-  const echoActive = state.player.echoForm && !state.player.echoUsedThisTurn;
-  if (echoActive) state.player.echoUsedThisTurn = true;
+  const echoActive = player.echoForm && !player.echoUsedThisTurn;
+  if (echoActive) player.echoUsedThisTurn = true;
 
-  const doubleTap = state.player.doubleTapNextAttack && def.type === 'attack';
-  if (doubleTap) state.player.doubleTapNextAttack = false;
+  const doubleTap = player.doubleTapNextAttack && def.type === 'attack';
+  if (doubleTap) player.doubleTapNextAttack = false;
 
-  const burst = state.player.burstNextSkill && def.type === 'skill';
-  if (burst) state.player.burstNextSkill = false;
+  const burst = player.burstNextSkill && def.type === 'skill';
+  if (burst) player.burstNextSkill = false;
 
   const timesToPlay =
     1 +
@@ -98,15 +101,15 @@ export function playCard(card, explicitTargetId = null) {
     if (def.xCost) {
       const x = cost;
       for (let j = 0; j < x; j++) {
-        for (const eff of def.effects) applyEffect(eff, targets, card, state.player);
+        for (const eff of def.effects) applyEffect(eff, targets, card, player);
       }
     } else {
-      for (const eff of def.effects) applyEffect(eff, targets, card, state.player);
+      for (const eff of def.effects) applyEffect(eff, targets, card, player);
     }
   }
 
   if (enchant?.onPlay) {
-    for (const eff of enchant.onPlay) applyEffect(eff, targets, card, state.player);
+    for (const eff of enchant.onPlay) applyEffect(eff, targets, card, player);
   }
 
   if (timesToPlay > 1) pushLog(`  Played ${timesToPlay}×!`);
@@ -114,55 +117,55 @@ export function playCard(card, explicitTargetId = null) {
   state.currentAnimation = null;
 
   let dest = def.destination ?? 'discard';
-  if (state.player.corruption && def.type === 'skill') dest = 'exhaust';
+  if (player.corruption && def.type === 'skill') dest = 'exhaust';
 
-  moveCardToDestination(card, dest);
+  moveCardToDestination(player, card, dest);
 
   pushLog(`You played ${def.name}.`);
   checkEnemiesDead();
   return true;
 }
 
-function moveCardToDestination(card, dest) {
+function moveCardToDestination(player, card, dest) {
   if (dest === 'draw') {
-    state.drawPile.push(card);
-    state.drawPile = shuffle(state.drawPile, state.rng);
+    player.drawPile.push(card);
+    player.drawPile = shuffle(player.drawPile, state.rng);
   } else if (dest === 'exhaust') {
-    exhaustCard(card);
+    exhaustCard(player, card);
   } else {
-    state.discardPile.push(card);
+    player.discardPile.push(card);
   }
 }
 
-function exhaustCard(card) {
-  state.exhaustPile.push(card);
-  if (state.player.feelNoPain) {
-    state.player.block += state.player.feelNoPain;
-    pushLog(`  Feel No Pain: +${state.player.feelNoPain} Block.`);
+function exhaustCard(player, card) {
+  player.exhaustPile.push(card);
+  if (player.feelNoPain) {
+    player.block += player.feelNoPain;
+    pushLog(`  Feel No Pain: +${player.feelNoPain} Block.`);
   }
-  if (state.player.darkEmbrace) {
-    draw(state, 1);
+  if (player.darkEmbrace) {
+    draw(state, player, 1);
     pushLog('  Dark Embrace: drew 1.');
   }
 }
 
-function damagePlayerHp(amount) {
-  const before = state.player.hp;
-  state.player.hp = Math.max(0, state.player.hp - amount);
-  const lost = before - state.player.hp;
+function damagePlayerHp(player, amount) {
+  const before = player.hp;
+  player.hp = Math.max(0, player.hp - amount);
+  const lost = before - player.hp;
   if (lost <= 0) return 0;
   combat.hpLostThisCombat += lost;
   forEachRelic('onLoseHp', (r) => {
     if (r.goldPerHp) {
-      state.run.gold += r.goldPerHp * lost;
+      player.gold += r.goldPerHp * lost;
       pushLog(`  Lucky Coin: +${r.goldPerHp * lost} gold.`);
     }
-  });
+  }, player);
   return lost;
 }
 
-function resolveTargets(targetKind, explicitId) {
-  if (targetKind === 'self' || targetKind === 'none') return [state.player];
+function resolveTargets(targetKind, explicitId, player) {
+  if (targetKind === 'self' || targetKind === 'none') return [player];
   if (targetKind === 'all-enemies') return livingEnemies();
   if (targetKind === 'random-enemy') {
     const pool = livingEnemies();
@@ -181,7 +184,11 @@ function resolveTargets(targetKind, explicitId) {
 function resolveEnemyTargets(enemy, kind) {
   if (kind === 'self') return [enemy];
   if (kind === 'all-enemies') return livingEnemies();
-  return [state.player];
+  // Enemies target the first living player. Stage 2 will add proper
+  // target selection (random / lowest HP / per-enemy preference).
+  const pool = state.players.filter(p => p.hp > 0);
+  if (!pool.length) return [];
+  return [pool[0]];
 }
 
 function checkBossPhaseLore(enemy, beforeHp) {
@@ -202,12 +209,13 @@ function checkBossPhaseLore(enemy, beforeHp) {
 }
 
 function enchantDamageBonus(card, source) {
-  if (source !== state.player || !card?.enchant) return 0;
+  if (!card?.enchant) return 0;
+  if (source !== source) return 0;
   const e = getEnchant(card.enchant);
   return e?.damageBonus ?? 0;
 }
-function enchantBlockBonus(card, source) {
-  if (source !== state.player || !card?.enchant) return 0;
+function enchantBlockBonus(card) {
+  if (!card?.enchant) return 0;
   const e = getEnchant(card.enchant);
   return e?.blockBonus ?? 0;
 }
@@ -252,16 +260,16 @@ function applyEffect(eff, targets, card, source) {
 
         if (!state.lastHits) state.lastHits = [];
         state.lastHits.push({
-          attackerUid: source.id === 'player' ? 'player' : source.uid,
-          targetUid:   t.id === 'player' ? 'player' : t.uid,
+          attackerUid: source.id != null ? `p${source.id}` : (source.uid || 'player'),
+          targetUid:   t.id != null ? `p${t.id}`   : (t.uid || 'player'),
           dealt,
           blocked,
           animation: state.currentAnimation || 'slash',
           isSpell: false,
         });
 
-        if (t === state.player) {
-          damagePlayerHp(dealt);
+        if (state.players.includes(t)) {
+          damagePlayerHp(t, dealt);
         } else {
           const before = t.hp;
           t.hp = Math.max(0, t.hp - dealt);
@@ -284,7 +292,7 @@ function applyEffect(eff, targets, card, source) {
 
     case 'perfectedStrike': {
       const bonus = enchantDamageBonus(card, source);
-      const strikeCount = state.run.deck.filter(c => c.defId.includes('strike')).length;
+      const strikeCount = source.deck.filter(c => c.defId.includes('strike')).length;
       const amount = eff.base + eff.perStrike * strikeCount + bonus;
       for (const t of targets) {
         const r = dealDamage(source, t, amount);
@@ -321,7 +329,7 @@ function applyEffect(eff, targets, card, source) {
 
     case 'lastStand': {
       const bonus = enchantDamageBonus(card, source);
-      const handCount = state.hand.length;
+      const handCount = source.hand.length;
       const dmg = eff.base + handCount + bonus;
       pushLog(`  Last Stand: ${handCount} cards in hand → ${dmg} damage.`);
       for (const t of targets) {
@@ -339,26 +347,26 @@ function applyEffect(eff, targets, card, source) {
         totalDealt += r.dealt;
       }
       if (totalDealt > 0) {
-        state.player.hp = Math.min(state.player.maxHp, state.player.hp + totalDealt);
+        source.hp = Math.min(source.maxHp, source.hp + totalDealt);
         pushLog(`  Reaper healed ${totalDealt}.`);
       }
       break;
     }
 
     case 'block': {
-      let amount = eff.amount + enchantBlockBonus(card, source);
-      if (source === state.player) {
+      let amount = eff.amount + enchantBlockBonus(card);
+      if (state.players.includes(source)) {
         forEachRelic('onBlockGain', (r) => {
           if (r.blockBonus) amount += r.blockBonus;
-        });
+        }, source);
       }
       source.block += amount;
       pushLog(`  ${source.name || 'You'} gained ${amount} block.`);
-      if (state.player.juggernaut && source === state.player) {
+      if (source.juggernaut && state.players.includes(source)) {
         const pool = livingEnemies();
         if (pool.length) {
           const t = pool[Math.floor(state.rng() * pool.length)];
-          const r = dealDamage(state.player, t, state.player.juggernaut);
+          const r = dealDamage(source, t, source.juggernaut);
           pushLog(`  Juggernaut: ${t.name} took ${r.dealt}.`);
         }
       }
@@ -371,34 +379,34 @@ function applyEffect(eff, targets, card, source) {
       break;
 
     case 'loseHpSelf':
-      damagePlayerHp(eff.amount);
+      damagePlayerHp(source, eff.amount);
       pushLog(`  Lost ${eff.amount} HP.`);
-      if (state.player.rupture) {
-        applyStatus(state.player, 'strength', state.player.rupture);
-        pushLog(`  Rupture: +${state.player.rupture} Strength.`);
+      if (source.rupture) {
+        applyStatus(source, 'strength', source.rupture);
+        pushLog(`  Rupture: +${source.rupture} Strength.`);
       }
       break;
 
     case 'loseEnergy':
-      state.energy = Math.max(0, state.energy - eff.amount);
+      source.energy = Math.max(0, source.energy - eff.amount);
       pushLog(`  Lost ${eff.amount} Energy.`);
       break;
 
     case 'gainEnergy':
-      state.energy += eff.amount;
+      source.energy += eff.amount;
       pushLog(`  Gained ${eff.amount} Energy.`);
       break;
 
     case 'applyStatus':
       for (const t of targets) {
         applyStatus(t, eff.status, eff.amount);
-        if (eff.status === 'strength' && t === state.player) {
+        if (eff.status === 'strength' && state.players.includes(t)) {
           forEachRelic('onGainStrength', (r) => {
             if (r.blockOnStrength) {
-              state.player.block += r.blockOnStrength;
+              t.block += r.blockOnStrength;
               pushLog(`  Battle Focus: +${r.blockOnStrength} Block.`);
             }
-          });
+          }, t);
         }
         pushLog(`  ${t.name || 'You'} gained ${eff.amount} ${eff.status}.`);
       }
@@ -410,46 +418,49 @@ function applyEffect(eff, targets, card, source) {
       break;
 
     case 'gainEnergyPerTurn':
-      state.player.perTurnEnergy = (state.player.perTurnEnergy || 0) + eff.amount;
+      source.perTurnEnergy = (source.perTurnEnergy || 0) + eff.amount;
       if (eff.selfDamagePerTurn) {
-        state.player.perTurnHooks.push({ kind: 'selfDamage', amount: eff.selfDamagePerTurn });
+        source.perTurnHooks.push({ kind: 'selfDamage', amount: eff.selfDamagePerTurn });
       }
       pushLog(`  +${eff.amount} energy each turn.`);
       break;
 
     case 'draw':
-      if (source === state.player) {
-        draw(state, eff.amount);
+      if (state.players.includes(source)) {
+        draw(state, source, eff.amount);
         pushLog(`  Drew ${eff.amount}.`);
       }
       break;
 
     case 'discardRandom': {
+      const p = source;
       for (let i = 0; i < eff.amount; i++) {
-        if (!state.hand.length) break;
-        const idx = Math.floor(state.rng() * state.hand.length);
-        const c = state.hand.splice(idx, 1)[0];
-        state.discardPile.push(c);
+        if (!p.hand.length) break;
+        const idx = Math.floor(state.rng() * p.hand.length);
+        const c = p.hand.splice(idx, 1)[0];
+        p.discardPile.push(c);
         pushLog(`  Discarded ${CARDS[c.defId].name}.`);
       }
       break;
     }
 
     case 'recoverFromDiscard': {
-      if (state.discardPile.length) {
-        const idx = Math.floor(state.rng() * state.discardPile.length);
-        const c = state.discardPile.splice(idx, 1)[0];
-        state.drawPile.push(c);
+      const p = source;
+      if (p.discardPile.length) {
+        const idx = Math.floor(state.rng() * p.discardPile.length);
+        const c = p.discardPile.splice(idx, 1)[0];
+        p.drawPile.push(c);
         pushLog(`  Recovered ${CARDS[c.defId].name} from discard.`);
       }
       break;
     }
 
     case 'topDeckRandom': {
-      if (state.hand.length) {
-        const idx = Math.floor(state.rng() * state.hand.length);
-        const c = state.hand.splice(idx, 1)[0];
-        state.drawPile.push(c);
+      const p = source;
+      if (p.hand.length) {
+        const idx = Math.floor(state.rng() * p.hand.length);
+        const c = p.hand.splice(idx, 1)[0];
+        p.drawPile.push(c);
         pushLog(`  Put ${CARDS[c.defId].name} on top of draw pile.`);
       }
       break;
@@ -457,31 +468,31 @@ function applyEffect(eff, targets, card, source) {
 
     case 'addCardToDraw': {
       const c = makeCard(eff.cardId);
-      state.drawPile.push(c);
-      state.drawPile = shuffle(state.drawPile, state.rng);
+      source.drawPile.push(c);
+      source.drawPile = shuffle(source.drawPile, state.rng);
       pushLog(`  Added ${CARDS[eff.cardId].name} to draw pile.`);
       break;
     }
 
     case 'addCardToPlayerDraw': {
       const c = makeCard(eff.cardId);
-      state.drawPile.push(c);
-      state.drawPile = shuffle(state.drawPile, state.rng);
+      source.drawPile.push(c);
+      source.drawPile = shuffle(source.drawPile, state.rng);
       pushLog(`  Added ${CARDS[eff.cardId].name} to your draw pile.`);
       break;
     }
 
     case 'addCardToPlayerDiscard': {
-      state.discardPile.push(makeCard(eff.cardId));
+      source.discardPile.push(makeCard(eff.cardId));
       pushLog(`  Added ${CARDS[eff.cardId].name} to your discard pile.`);
       break;
     }
 
     case 'exhaustRandom': {
-      if (state.hand.length) {
-        const idx = Math.floor(state.rng() * state.hand.length);
-        const removed = state.hand.splice(idx, 1)[0];
-        exhaustCard(removed);
+      if (source.hand.length) {
+        const idx = Math.floor(state.rng() * source.hand.length);
+        const removed = source.hand.splice(idx, 1)[0];
+        exhaustCard(source, removed);
         pushLog(`  Exhausted ${CARDS[removed.defId].name}.`);
       }
       break;
@@ -490,10 +501,10 @@ function applyEffect(eff, targets, card, source) {
     case 'exhaustRandomHand': {
       const n = eff.amount ?? 1;
       for (let i = 0; i < n; i++) {
-        if (!state.hand.length) break;
-        const idx = Math.floor(state.rng() * state.hand.length);
-        const removed = state.hand.splice(idx, 1)[0];
-        exhaustCard(removed);
+        if (!source.hand.length) break;
+        const idx = Math.floor(state.rng() * source.hand.length);
+        const removed = source.hand.splice(idx, 1)[0];
+        exhaustCard(source, removed);
         pushLog(`  ${CARDS[removed.defId].name} was exhausted.`);
       }
       break;
@@ -501,7 +512,7 @@ function applyEffect(eff, targets, card, source) {
 
     case 'disableRandomHand': {
       const n = eff.amount ?? 1;
-      const eligible = state.hand.filter(c => !c.disabledThisTurn);
+      const eligible = source.hand.filter(c => !c.disabledThisTurn);
       const toDisable = Math.min(n, eligible.length);
       for (let i = 0; i < toDisable; i++) {
         const idx = Math.floor(state.rng() * eligible.length);
@@ -514,7 +525,7 @@ function applyEffect(eff, targets, card, source) {
 
     case 'disableHandPercent': {
       const pct = eff.percent ?? 0.5;
-      const eligible = state.hand.filter(c => !c.disabledThisTurn);
+      const eligible = source.hand.filter(c => !c.disabledThisTurn);
       const n = Math.floor(eligible.length * pct);
       for (let i = 0; i < n; i++) {
         const idx = Math.floor(state.rng() * eligible.length);
@@ -526,13 +537,13 @@ function applyEffect(eff, targets, card, source) {
     }
 
     case 'replaceHandWithCard': {
-      const n = eff.amount ?? state.hand.length;
+      const n = eff.amount ?? source.hand.length;
       const id = eff.cardId;
-      const replaced = state.hand.length;
-      state.discardPile.push(...state.hand);
-      state.hand = [];
+      const replaced = source.hand.length;
+      source.discardPile.push(...source.hand);
+      source.hand = [];
       for (let i = 0; i < n; i++) {
-        state.hand.push(makeCard(id));
+        source.hand.push(makeCard(id));
       }
       pushLog(`  ${replaced} card(s) replaced with ${CARDS[id].name}.`);
       break;
@@ -541,65 +552,64 @@ function applyEffect(eff, targets, card, source) {
     case 'feed': {
       const killed = targets.some(t => t.hp <= 0);
       if (killed) {
-        state.player.maxHp += eff.amount;
-        state.player.hp += eff.amount;
-        state.run.maxHp += eff.amount;
+        source.maxHp += eff.amount;
+        source.hp += eff.amount;
         pushLog(`  Feed! Max HP +${eff.amount}.`);
       }
       break;
     }
 
     case 'gainStatusPerTurn':
-      if (!state.player.perTurnStatuses) state.player.perTurnStatuses = [];
-      state.player.perTurnStatuses.push({ status: eff.status, amount: eff.amount });
+      if (!source.perTurnStatuses) source.perTurnStatuses = [];
+      source.perTurnStatuses.push({ status: eff.status, amount: eff.amount });
       pushLog(`  Will gain ${eff.amount} ${eff.status} each turn.`);
       break;
 
     case 'doubleTapNextAttack':
-      state.player.doubleTapNextAttack = true;
+      source.doubleTapNextAttack = true;
       pushLog('  Next attack this turn will play twice.');
       break;
 
     case 'burstNextSkill':
-      state.player.burstNextSkill = true;
+      source.burstNextSkill = true;
       pushLog('  Next skill this turn will play twice.');
       break;
 
     case 'echoForm':
-      state.player.echoForm = true;
+      source.echoForm = true;
       pushLog('  Echo Form active.');
       break;
 
     case 'corruption':
-      state.player.corruption = true;
+      source.corruption = true;
       pushLog('  Corruption active. Skills cost 0 and exhaust.');
       break;
 
     case 'feelNoPain':
-      state.player.feelNoPain = (state.player.feelNoPain || 0) + eff.amount;
-      pushLog(`  Feel No Pain ${state.player.feelNoPain}.`);
+      source.feelNoPain = (source.feelNoPain || 0) + eff.amount;
+      pushLog(`  Feel No Pain ${source.feelNoPain}.`);
       break;
 
     case 'darkEmbrace':
-      state.player.darkEmbrace = true;
+      source.darkEmbrace = true;
       pushLog('  Dark Embrace active.');
       break;
 
     case 'juggernaut':
-      state.player.juggernaut = (state.player.juggernaut || 0) + eff.amount;
+      source.juggernaut = (source.juggernaut || 0) + eff.amount;
       pushLog(`  Juggernaut ${eff.amount}.`);
       break;
 
     case 'rupture':
-      state.player.rupture = (state.player.rupture || 0) + 1;
+      source.rupture = (source.rupture || 0) + 1;
       pushLog('  Rupture active.');
       break;
 
     case 'dropkick': {
       const t = targets[0];
       if (t && (t.statuses?.vulnerable || 0) > 0) {
-        state.energy += 1;
-        draw(state, 1);
+        source.energy += 1;
+        draw(state, source, 1);
         pushLog('  Dropkick! +1 Energy, drew 1.');
       }
       break;
@@ -607,32 +617,32 @@ function applyEffect(eff, targets, card, source) {
 
     case 'escapePlan':
       if (combat.attacksThisTurn > 0) {
-        state.player.block += eff.amount;
+        source.block += eff.amount;
         pushLog(`  Escape Plan: +${eff.amount} Block.`);
       }
       break;
 
     case 'deepBreath':
-      if (state.discardPile.length >= 10) {
-        draw(state, 2);
+      if (source.discardPile.length >= 10) {
+        draw(state, source, 2);
         pushLog('  Deep Breath: drew 2 more.');
       }
       break;
 
     case 'calculatedGamble': {
-      const n = state.hand.length;
-      state.discardPile.push(...state.hand);
-      state.hand = [];
-      draw(state, n + 1);
+      const n = source.hand.length;
+      source.discardPile.push(...source.hand);
+      source.hand = [];
+      draw(state, source, n + 1);
       pushLog(`  Calculated Gamble: discarded ${n}, drew ${n + 1}.`);
       break;
     }
 
     case 'fiendFire': {
       const bonus = enchantDamageBonus(card, source);
-      const n = state.hand.length;
-      const toDiscard = state.hand.splice(0);
-      for (const c of toDiscard) state.discardPile.push(c);
+      const n = source.hand.length;
+      const toDiscard = source.hand.splice(0);
+      for (const c of toDiscard) source.discardPile.push(c);
       const dmg = n * eff.amount + bonus;
       pushLog(`  Fiend Fire: discarded ${n} cards → ${dmg} damage.`);
       for (const t of targets) {
@@ -643,30 +653,30 @@ function applyEffect(eff, targets, card, source) {
     }
 
     case 'rescueDiscard': {
-      if (!state.discardPile.length) break;
-      const idx = Math.floor(state.rng() * state.discardPile.length);
-      const c = state.discardPile.splice(idx, 1)[0];
-      exhaustCard(c);
-      state.drawPile = shuffle(state.drawPile.concat(state.discardPile), state.rng);
-      state.discardPile = [];
-      pushLog(`  Rescue: exhausted ${CARDS[c.defId].name}, shuffled ${state.drawPile.length} into draw.`);
+      if (!source.discardPile.length) break;
+      const idx = Math.floor(state.rng() * source.discardPile.length);
+      const c = source.discardPile.splice(idx, 1)[0];
+      exhaustCard(source, c);
+      source.drawPile = shuffle(source.drawPile.concat(source.discardPile), state.rng);
+      source.discardPile = [];
+      pushLog(`  Rescue: exhausted ${CARDS[c.defId].name}, shuffled ${source.drawPile.length} into draw.`);
       break;
     }
 
     case 'shuffleDiscardIntoDraw':
-      state.drawPile = shuffle(state.drawPile.concat(state.discardPile), state.rng);
-      state.discardPile = [];
-      pushLog(`  Shuffled discard into draw (${state.drawPile.length} cards).`);
+      source.drawPile = shuffle(source.drawPile.concat(source.discardPile), state.rng);
+      source.discardPile = [];
+      pushLog(`  Shuffled discard into draw (${source.drawPile.length} cards).`);
       break;
 
     case 'dualWield': {
-      const candidates = state.hand.filter(c => {
+      const candidates = source.hand.filter(c => {
         const d = CARDS[c.defId];
         return d.type === 'attack' || d.type === 'power';
       });
       if (!candidates.length) { pushLog('  No Attack or Power in hand.'); break; }
       const pick = candidates[Math.floor(state.rng() * candidates.length)];
-      state.hand.push(makeCard(pick.defId));
+      source.hand.push(makeCard(pick.defId));
       pushLog(`  Copied ${CARDS[pick.defId].name}.`);
       break;
     }
@@ -675,12 +685,12 @@ function applyEffect(eff, targets, card, source) {
       break;
 
     case 'graveRobber': {
-      if (!state.exhaustPile.length) {
+      if (!source.exhaustPile.length) {
         pushLog('  Exhaust pile is empty.');
         break;
       }
-      const idx = Math.floor(state.rng() * state.exhaustPile.length);
-      const c = state.exhaustPile[idx];
+      const idx = Math.floor(state.rng() * source.exhaustPile.length);
+      const c = source.exhaustPile[idx];
       const dmg = cardBaseDamage(c.defId);
       pushLog(`  Revealed ${CARDS[c.defId].name} (${dmg} damage).`);
       if (dmg > 0 && targets.length) {
@@ -695,27 +705,27 @@ function applyEffect(eff, targets, card, source) {
     }
 
     case 'seance': {
-      if (!state.exhaustPile.length) {
+      if (!source.exhaustPile.length) {
         pushLog('  Exhaust pile is empty.');
         break;
       }
-      const idx = Math.floor(state.rng() * state.exhaustPile.length);
-      const c = state.exhaustPile.splice(idx, 1)[0];
-      state.hand.push(c);
+      const idx = Math.floor(state.rng() * source.exhaustPile.length);
+      const c = source.exhaustPile.splice(idx, 1)[0];
+      source.hand.push(c);
       pushLog(`  Returned ${CARDS[c.defId].name} from the exhaust pile.`);
       break;
     }
 
     case 'necromancersPact': {
-      if (!state.discardPile.length) {
+      if (!source.discardPile.length) {
         pushLog('  Discard pile is empty.');
         break;
       }
-      const idx = Math.floor(state.rng() * state.discardPile.length);
-      const c = state.discardPile.splice(idx, 1)[0];
+      const idx = Math.floor(state.rng() * source.discardPile.length);
+      const c = source.discardPile.splice(idx, 1)[0];
       const dmg = cardBaseDamage(c.defId);
       pushLog(`  Exhausted ${CARDS[c.defId].name} (${dmg} damage).`);
-      exhaustCard(c);
+      exhaustCard(source, c);
       if (dmg > 0 && targets.length) {
         for (const t of targets) {
           const r = dealDamage(source, t, dmg);
@@ -742,8 +752,8 @@ export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}
   dmg *= outgoingMultiplier(attacker);
   dmg *= incomingMultiplier(target);
 
-  if (attacker === state.player && (target.statuses?.vulnerable || 0) > 0) {
-    for (const rid of state.run.relics || []) {
+  if (state.players.includes(attacker) && (target.statuses?.vulnerable || 0) > 0) {
+    for (const rid of attacker.relics || []) {
       const r = RELICS[rid];
       if (r?.damageVsVulnerable) dmg *= r.damageVsVulnerable;
     }
@@ -758,16 +768,16 @@ export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}
 
   if (!state.lastHits) state.lastHits = [];
   state.lastHits.push({
-    attackerUid: attacker.id === 'player' ? 'player' : attacker.uid,
-    targetUid:   target.id   === 'player' ? 'player' : target.uid,
+    attackerUid: state.players.includes(attacker) ? `p${attacker.id}` : attacker.uid,
+    targetUid:   state.players.includes(target)   ? `p${target.id}`   : target.uid,
     dealt,
     blocked,
     animation: state.currentAnimation || 'slash',
     isSpell,
   });
 
-  if (target === state.player) {
-    damagePlayerHp(dealt);
+  if (state.players.includes(target)) {
+    damagePlayerHp(target, dealt);
   } else {
     const before = target.hp;
     target.hp = Math.max(0, target.hp - dealt);
@@ -787,17 +797,22 @@ function checkEnemiesDead() {
 export function beginEnemyTurn() {
   if (state.turn !== 'player' || state.over) return;
 
-  for (const c of state.hand) {
-    const def = CARDS[c.defId];
-    if (def.endOfTurnDamage) {
-      damagePlayerHp(def.endOfTurnDamage);
-      pushLog(`${def.name}: took ${def.endOfTurnDamage}.`);
+  // End-of-turn effects run for every player.
+  for (const p of state.players) {
+    for (const c of p.hand) {
+      const def = CARDS[c.defId];
+      if (def.endOfTurnDamage) {
+        damagePlayerHp(p, def.endOfTurnDamage);
+        pushLog(`${def.name}: took ${def.endOfTurnDamage}.`);
+      }
     }
   }
-  if (state.player.hp <= 0) { endCombat(false); return; }
+  if (state.players.every(p => p.hp <= 0)) { endCombat(false); return; }
 
-  recycleHand(state);
-  tickStatuses(state.player);
+  for (const p of state.players) {
+    recycleHand(state, p);
+    tickStatuses(p);
+  }
   state.turn = 'enemy';
 }
 
@@ -823,32 +838,35 @@ export function resolveEnemyTurn() {
 
   state.currentAnimation = null;
 
-  if (state.player.hp <= 0) {
+  if (state.players.every(p => p.hp <= 0)) {
     pushLog('Defeat.');
     endCombat(false);
     return;
   }
 
-  if (state.player.perTurnStatuses) {
-    for (const entry of state.player.perTurnStatuses) {
-      applyStatus(state.player, entry.status, entry.amount);
-    }
-  }
-  if (state.player.perTurnHooks) {
-    for (const h of state.player.perTurnHooks) {
-      if (h.kind === 'selfDamage') {
-        damagePlayerHp(h.amount);
+  for (const p of state.players) {
+    if (p.hp <= 0) continue;
+    if (p.perTurnStatuses) {
+      for (const entry of p.perTurnStatuses) {
+        applyStatus(p, entry.status, entry.amount);
       }
     }
+    if (p.perTurnHooks) {
+      for (const h of p.perTurnHooks) {
+        if (h.kind === 'selfDamage') {
+          damagePlayerHp(p, h.amount);
+        }
+      }
+    }
+    if (p.hp <= 0) continue;
+    if (p.perTurnEnergy) {
+      p.nextTurnEnergy += p.perTurnEnergy;
+    }
+    p.echoUsedThisTurn = false;
   }
-  if (state.player.hp <= 0) { endCombat(false); return; }
 
-  if (state.player.perTurnEnergy) {
-    state.player.nextTurnEnergy += state.player.perTurnEnergy;
-  }
-
-  state.player.echoUsedThisTurn = false;
   combat.attacksThisTurn = 0;
 
-  startPlayerTurn();
+  // Reset active player to index 0 for the new player phase.
+  startPlayerTurn(0);
 }
