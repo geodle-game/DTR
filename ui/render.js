@@ -840,7 +840,7 @@ function renderEvent(app) {
 // Shop
 // ============================================================
 
-function renderShop(app) {
+function renderShop(app) 
   const s = state.shop;
   const p = me();
   const wrap = document.createElement('div');
@@ -871,11 +871,14 @@ function renderShop(app) {
     price.className = 'shop-price';
     price.textContent = `${item.price}g`;
     cell.appendChild(price);
-    const affordable = p.gold >= item.price;
+
+    const sold = !!item.sold;
+    const affordable = !sold && p.gold >= item.price;
     if (!affordable) cell.classList.add('shop-unaffordable');
+
     const btn = document.createElement('button');
     btn.className = 'btn';
-    btn.textContent = 'Buy';
+    btn.textContent = sold ? 'Sold' : 'Buy';
     btn.disabled = !affordable;
     btn.addEventListener('click', () => buyShopCard(i));
     cell.appendChild(btn);
@@ -921,7 +924,6 @@ function renderShop(app) {
   wrap.appendChild(leave);
   app.appendChild(wrap);
 }
-
 function renderShopRemoveMode(app, wrap, s) {
   const p = me();
   const h = document.createElement('h1');
@@ -964,7 +966,6 @@ function renderShopRemoveMode(app, wrap, s) {
 
   app.appendChild(wrap);
 }
-
 // ============================================================
 // Rest
 // ============================================================
