@@ -24,6 +24,18 @@ export function resetCombatScratch() {
   combat.rampageBonus = {};
 }
 
+// Sum of all HP costs on a card. Used by canPlay to block a card
+// that would drop the player to 0 HP or below.
+function hpCostOf(card) {
+  const def = CARDS[card.defId];
+  if (!def) return 0;
+  let total = 0;
+  for (const eff of def.effects) {
+    if (eff.kind === 'loseHpSelf') total += eff.amount;
+  }
+  return total;
+}
+
 export function costOf(card, player = activePlayer()) {
   if (!player) return 0;
   const def = CARDS[card.defId];
@@ -52,7 +64,16 @@ export function canPlay(card, player = activePlayer()) {
   if (card.disabledThisTurn) return false;
   const def = CARDS[card.defId];
   if (def.unplayable) return false;
-  return player.energy >= costOf(card, player);
+  if (player.energy < costOf(card, player)) return false;
+
+  // HP-cost cards are unplayable if they'd drop you to 0 or below.
+  // At 8 HP, Offering (cost 8) is blocked. At 9 HP, it plays and
+  // leaves you at 1 HP. This matches the design: self-damage can
+  // never kill you, and it can never be free value at 1 HP.
+  const hpCost = hpCostOf(card);
+  if (hpCost > 0 && player.hp <= hpCost) return false;
+
+  return true;
 }
 
 export function selectCardForPlay(card, player = activePlayer()) {
@@ -123,6 +144,7 @@ export function playCard(card, player = activePlayer(), explicitTargetId = null)
 
   pushLog(`You played ${def.name}.`);
   checkEnemiesDead();
+  checkPlayerDead();
   return true;
 }
 
@@ -183,10 +205,7 @@ function resolveTargets(targetKind, explicitId, player) {
 
 function resolveEnemyTargets(enemy, kind) {
   if (kind === 'self') return [enemy];
-  // From the enemy's perspective, "all-enemies" means all living players.
   if (kind === 'all-enemies') return state.players.filter(p => p.hp > 0);
-  // Enemies target the first living player. Stage 2 will add proper
-  // target selection (random / lowest HP / per-enemy preference).
   const pool = state.players.filter(p => p.hp > 0);
   if (!pool.length) return [];
   return [pool[0]];
@@ -378,14 +397,31 @@ function applyEffect(eff, targets, card, source) {
       pushLog(`  ${source.name || 'You'} healed ${eff.amount}.`);
       break;
 
-    case 'loseHpSelf':
-      damagePlayerHp(source, eff.amount);
-      pushLog(`  Lost ${eff.amount} HP.`);
-      if (source.rupture) {
-        applyStatus(source, 'strength', source.rupture);
-        pushLog(`  Rupture: +${source.rupture} Strength.`);
+    // ---------------------------------------------
+    // Self-HP-cost effects — clamp at 1, never 0.
+    // canPlay already blocks playing these if the player
+    // can't survive the cost, so this is a safety net.
+    // ---------------------------------------------
+    case 'loseHpSelf': {
+      const before = source.hp;
+      source.hp = Math.max(1, source.hp - eff.amount);
+      const lost = before - source.hp;
+      if (lost > 0) {
+        combat.hpLostThisCombat += lost;
+        forEachRelic('onLoseHp', (r) => {
+          if (r.goldPerHp) {
+            source.gold += r.goldPerHp * lost;
+            pushLog(`  Lucky Coin: +${r.goldPerHp * lost} gold.`);
+          }
+        }, source);
+        pushLog(`  Lost ${lost} HP.`);
+        if (source.rupture) {
+          applyStatus(source, 'strength', source.rupture);
+          pushLog(`  Rupture: +${source.rupture} Strength.`);
+        }
       }
       break;
+    }
 
     case 'loseEnergy':
       source.energy = Math.max(0, source.energy - eff.amount);
@@ -432,11 +468,7 @@ function applyEffect(eff, targets, card, source) {
       }
       break;
 
-    // ---------------------------------------------------------
-    // Effects that modify the TARGET's hand / piles.
-    // Enemies use these to attack the player, so they must go
-    // through `targets`, not `source`.
-    // ---------------------------------------------------------
+    // -------- Target-facing pile/hand manipulation --------
 
     case 'discardRandom': {
       for (const t of targets) {
@@ -559,9 +591,7 @@ function applyEffect(eff, targets, card, source) {
       break;
     }
 
-    // ---------------------------------------------------------
-    // Effects that operate on the CASTER's own resources.
-    // ---------------------------------------------------------
+    // -------- Self-facing pile manipulation --------
 
     case 'recoverFromDiscard': {
       if (source.discardPile.length) {
@@ -825,6 +855,13 @@ function checkEnemiesDead() {
   if (livingEnemies().length === 0) {
     pushLog('Victory.');
     endCombat(true);
+  }
+}
+
+function checkPlayerDead() {
+  if (state.players.every(p => p.hp <= 0)) {
+    pushLog('Defeat.');
+    endCombat(false);
   }
 }
 
