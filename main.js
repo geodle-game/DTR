@@ -6,4 +6,4 @@ import { render } from './ui/render.js';
 state.screen = 'mainMenu';
 render();
 
-window.__game = { state };
+window.__game = { state, render };
