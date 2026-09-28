@@ -34,8 +34,15 @@ const DRAG_THRESHOLD = 14;
 let shopRemoveMode = false;
 
 // ------------------------------------------------------------
-// Dispatch wrappers — same call signatures as the old imports
-// so nothing else in this file needs to change.
+// Active player helper. In single-player this is always players[0].
+// Stage 2 (co-op) will replace this with a per-view notion of "who am I".
+// ------------------------------------------------------------
+function me() {
+  return state.players[0];
+}
+
+// ------------------------------------------------------------
+// Dispatch wrappers
 // ------------------------------------------------------------
 const chooseRelic         = (id)  => dispatch({ type: 'CHOOSE_RELIC', relicId: id });
 const confirmDeck         = ()    => dispatch({ type: 'CONFIRM_DECK' });
@@ -91,11 +98,12 @@ export function render() {
     default:            renderGameOver(app);
   }
 
+  const p = me();
   if (state.overlays?.deck)    renderDeckOverlay(app);
   if (state.overlays?.relics)  renderRelicOverlay(app);
-  if (state.overlays?.draw)    renderCardPileOverlay(app, 'Draw Pile', state.drawPile);
-  if (state.overlays?.discard) renderCardPileOverlay(app, 'Discard Pile', state.discardPile);
-  if (state.overlays?.exhaust) renderCardPileOverlay(app, 'Exhausted', state.exhaustPile);
+  if (state.overlays?.draw)    renderCardPileOverlay(app, 'Draw Pile', p?.drawPile || []);
+  if (state.overlays?.discard) renderCardPileOverlay(app, 'Discard Pile', p?.discardPile || []);
+  if (state.overlays?.exhaust) renderCardPileOverlay(app, 'Exhausted', p?.exhaustPile || []);
 
   if (state.bossLore) renderBossLore(app);
 
@@ -290,14 +298,14 @@ function resolveCardText(def, ctx) {
 }
 
 function playerCardContext() {
-  const attacker = state.player;
+  const attacker = me();
   const living = (state.enemies || []).filter(e => e.hp > 0);
   const target = living.find(e => e.uid === state.selectedEnemyId) || living[0] || null;
   return { attacker, target };
 }
 
 function enemyCardContext(enemy) {
-  return { attacker: enemy, target: state.player };
+  return { attacker: enemy, target: me() };
 }
 
 function coinStackClass(gold) {
@@ -317,18 +325,20 @@ function topButtons() {
   const wrap = document.createElement('div');
   wrap.className = 'top-buttons';
 
+  const p = me();
+
   const deckBtn = document.createElement('button');
   deckBtn.className = 'icon-btn';
   deckBtn.title = 'View deck';
-  deckBtn.textContent = `Deck ${state.run.deck.length}`;
+  deckBtn.textContent = `Deck ${p.deck.length}`;
   deckBtn.addEventListener('click', () => { toggleDeckOverlay(); render(); });
   wrap.appendChild(deckBtn);
 
-  if (state.run.relics?.length) {
+  if (p.relics?.length) {
     const relicBtn = document.createElement('button');
     relicBtn.className = 'icon-btn';
     relicBtn.title = 'View relics';
-    relicBtn.textContent = `Relics ${state.run.relics.length}`;
+    relicBtn.textContent = `Relics ${p.relics.length}`;
     relicBtn.addEventListener('click', () => { toggleRelicOverlay(); render(); });
     wrap.appendChild(relicBtn);
   }
@@ -341,7 +351,7 @@ function topButtons() {
 // ============================================================
 
 function renderDeckOverlay(app) {
-  const overlay = cardGridOverlay('Your Deck', sortDeckEntries(state.run.deck));
+  const overlay = cardGridOverlay('Your Deck', sortDeckEntries(me().deck));
   app.appendChild(overlay);
 }
 
@@ -402,7 +412,7 @@ function renderRelicOverlay(app) {
 
   const list = document.createElement('div');
   list.className = 'relic-list';
-  for (const id of state.run.relics) {
+  for (const id of me().relics) {
     const r = RELICS[id];
     const el = document.createElement('div');
     el.className = `relic-row-item rarity-${r.rarity || 'common'}`;
@@ -468,7 +478,8 @@ function renderRelicPick(app) {
 function renderDeckView(app) {
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
-  const relic = RELICS[state.run.relic];
+  const p = me();
+  const relic = RELICS[p.relic];
   const h = document.createElement('h1');
   h.textContent = 'Your Starting Deck';
   wrap.appendChild(h);
@@ -479,7 +490,7 @@ function renderDeckView(app) {
 
   const grid = document.createElement('div');
   grid.className = 'deck-grid';
-  state.run.deck.forEach((entry, i) => {
+  p.deck.forEach((entry, i) => {
     const el = cardFace(entry.defId, { disabled: true, small: true, enchant: entry.enchant });
     el.style.animationDelay = `${i * 30}ms`;
     grid.appendChild(el);
@@ -500,6 +511,7 @@ function renderDeckView(app) {
 
 function renderMap(app) {
   const map = state.run.map;
+  const p = me();
   const wrap = document.createElement('div');
   wrap.className = 'screen map-screen';
 
@@ -507,8 +519,8 @@ function renderMap(app) {
   header.className = 'map-header';
   header.innerHTML = `
     <div>Act ${state.run.act}</div>
-    <div>HP <span class="hp">${state.run.hp}/${state.run.maxHp}</span></div>
-    <div>${goldDisplay(state.run.gold)}</div>
+    <div>HP <span class="hp">${p.hp}/${p.maxHp}</span></div>
+    <div>${goldDisplay(p.gold)}</div>
     <div>Floor ${state.run.floor + 1} / ${map.floors}</div>
   `;
   wrap.appendChild(header);
@@ -776,14 +788,15 @@ function renderVictory(app) {
   h.style.color = '#ffd166';
   wrap.appendChild(h);
 
+  const p = me();
   const stats = document.createElement('div');
   stats.className = 'victory-stats';
   stats.innerHTML = `
     <div>Acts cleared: <strong>${state.run.act}</strong></div>
-    <div>Final HP: <strong class="hp">${state.run.hp} / ${state.run.maxHp}</strong></div>
-    <div>Gold: <strong>${goldDisplay(state.run.gold)}</strong></div>
-    <div>Deck size: <strong>${state.run.deck.length}</strong></div>
-    <div>Relics: <strong style="color:#c9a3ff">${state.run.relics.length}</strong></div>
+    <div>Final HP: <strong class="hp">${p.hp} / ${p.maxHp}</strong></div>
+    <div>Gold: <strong>${goldDisplay(p.gold)}</strong></div>
+    <div>Deck size: <strong>${p.deck.length}</strong></div>
+    <div>Relics: <strong style="color:#c9a3ff">${p.relics.length}</strong></div>
   `;
   wrap.appendChild(stats);
 
@@ -833,6 +846,7 @@ function renderEvent(app) {
 
 function renderShop(app) {
   const s = state.shop;
+  const p = me();
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center shop-screen';
 
@@ -846,7 +860,7 @@ function renderShop(app) {
   wrap.appendChild(h);
 
   const gold = document.createElement('p');
-  gold.innerHTML = 'Gold: ' + goldDisplay(state.run.gold);
+  gold.innerHTML = 'Gold: ' + goldDisplay(p.gold);
   wrap.appendChild(gold);
 
   const grid = document.createElement('div');
@@ -861,7 +875,7 @@ function renderShop(app) {
     price.className = 'shop-price';
     price.textContent = `${item.price}g`;
     cell.appendChild(price);
-    const affordable = state.run.gold >= item.price;
+    const affordable = p.gold >= item.price;
     if (!affordable) cell.classList.add('shop-unaffordable');
     const btn = document.createElement('button');
     btn.className = 'btn';
@@ -878,7 +892,7 @@ function renderShop(app) {
   const healBtn = document.createElement('button');
   healBtn.className = 'btn';
   healBtn.textContent = `Heal 25 HP — ${s.healPrice}g`;
-  healBtn.disabled = state.run.gold < s.healPrice;
+  healBtn.disabled = p.gold < s.healPrice;
   healBtn.addEventListener('click', () => buyShopHeal());
   healRow.appendChild(healBtn);
   wrap.appendChild(healRow);
@@ -892,7 +906,7 @@ function renderShop(app) {
     removeBtn.disabled = true;
   } else {
     removeBtn.textContent = `Remove a card — ${s.removePrice}g`;
-    removeBtn.disabled = state.run.gold < s.removePrice;
+    removeBtn.disabled = p.gold < s.removePrice;
     removeBtn.addEventListener('click', () => {
       shopRemoveMode = true;
       render();
@@ -913,12 +927,13 @@ function renderShop(app) {
 }
 
 function renderShopRemoveMode(app, wrap, s) {
+  const p = me();
   const h = document.createElement('h1');
   h.textContent = 'Remove a Card';
   wrap.appendChild(h);
 
   const gold = document.createElement('p');
-  gold.innerHTML = 'Gold: ' + goldDisplay(state.run.gold);
+  gold.innerHTML = 'Gold: ' + goldDisplay(p.gold);
   wrap.appendChild(gold);
 
   const sub = document.createElement('p');
@@ -928,7 +943,7 @@ function renderShopRemoveMode(app, wrap, s) {
 
   const grid = document.createElement('div');
   grid.className = 'deck-grid';
-  state.run.deck.forEach((entry, i) => {
+  p.deck.forEach((entry, i) => {
     const el = cardFace(entry.defId, {
       small: true,
       enchant: entry.enchant,
@@ -990,6 +1005,7 @@ function renderEnchantPick(app) {
   const enchant = getEnchant(pe.enchantId);
   if (!enchant) { backToMap(); return; }
 
+  const p = me();
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
 
@@ -1013,7 +1029,7 @@ function renderEnchantPick(app) {
 
   const grid = document.createElement('div');
   grid.className = 'deck-grid';
-  state.run.deck.forEach((entry, i) => {
+  p.deck.forEach((entry, i) => {
     const eligible = pe.eligibleIndices.includes(i);
     const el = cardFace(entry.defId, {
       small: true,
@@ -1042,6 +1058,7 @@ function renderEnchantPick(app) {
 // ============================================================
 
 function renderCombat(app) {
+  const p = me();
   const c = document.createElement('div');
   c.className = 'combat';
 
@@ -1078,8 +1095,8 @@ function renderCombat(app) {
 
   const hand = document.createElement('div');
   hand.className = 'hand';
-  const n = state.hand.length;
-  state.hand.forEach((card, i) => {
+  const n = p.hand.length;
+  p.hand.forEach((card, i) => {
     const el = cardInHand(card);
     const t = n === 1 ? 0 : (i - (n - 1) / 2) / ((n - 1) / 2);
     const maxAngle = 14;
@@ -1112,7 +1129,7 @@ function pileEl(label, count, onClick) {
 }
 
 function playerPanel() {
-  const p = state.player;
+  const p = me();
   const el = document.createElement('div');
   el.className = 'panel player';
   el.dataset.panel = 'player';
@@ -1122,7 +1139,7 @@ function playerPanel() {
     <div class="block${p.block > 0 ? '' : ' block-empty'}">
       <span class="block-icon"></span>${p.block}
     </div>
-    <div class="energy">Energy ${state.energy} / ${state.maxEnergy}</div>
+    <div class="energy">Energy ${p.energy} / ${p.maxEnergy}</div>
     ${statusRow(p.statuses)}
   `;
   return el;
@@ -1154,7 +1171,7 @@ function enemyPanel(e) {
   if (!dead) {
     el.addEventListener('click', () => {
       if (state.pendingCardUid) {
-        const card = state.hand.find(c => c.uid === state.pendingCardUid);
+        const card = me().hand.find(c => c.uid === state.pendingCardUid);
         if (card) { doPlayCard(card, null, e.uid); return; }
       }
       dispatch({ type: 'SELECT_ENEMY', enemyUid: e.uid });
@@ -1375,10 +1392,11 @@ function cardFace(defId, { disabled = false, small = false, big = false, enchant
 }
 
 function bottomBar() {
+  const p = me();
   const bar = document.createElement('div');
   bar.className = 'bar';
 
-  bar.appendChild(pileEl('Draw', state.drawPile.length, () => {
+  bar.appendChild(pileEl('Draw', p.drawPile.length, () => {
     toggleDrawOverlay(); render();
   }));
 
@@ -1399,12 +1417,12 @@ function bottomBar() {
   });
   bar.appendChild(btn);
 
-  bar.appendChild(pileEl('Discard', state.discardPile.length, () => {
+  bar.appendChild(pileEl('Discard', p.discardPile.length, () => {
     toggleDiscardOverlay(); render();
   }));
 
-  if (state.exhaustPile.length) {
-    bar.appendChild(pileEl('Exhaust', state.exhaustPile.length, () => {
+  if (p.exhaustPile.length) {
+    bar.appendChild(pileEl('Exhaust', p.exhaustPile.length, () => {
       toggleExhaustOverlay(); render();
     }));
   }
