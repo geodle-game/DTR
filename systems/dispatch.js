@@ -28,7 +28,6 @@ import { render } from '../ui/render.js';
 import { animateHits } from '../ui/animations.js';
 
 // ---- Local slot ----
-// 0 = host, 1 = guest, null = single-player (acts as "both").
 function localSlot() {
   return state.localSlot;
 }
@@ -50,8 +49,15 @@ export function dispatch(action) {
     tagged.actorId = localSlot();
   }
 
+  // DEBUG
+  console.log('[dispatch]', mode, 'slot=', localSlot(), 'action=', tagged);
+
   if (mode === 'guest') {
-    if (!isMyAction(tagged)) return;
+    if (!isMyAction(tagged)) {
+      console.warn('[dispatch] guest REJECTED its own action:', tagged);
+      return;
+    }
+    console.log('[dispatch] guest → sendAction', tagged);
     sendAction(tagged);
     return;
   }
@@ -68,13 +74,26 @@ export function dispatch(action) {
 // ---- Network callbacks ----
 
 onAction(action => {
-  // Guest → host. This path is always "from network": the host must
-  // apply the guest's action regardless of the host's own local slot.
+  console.log('[onAction] host received from guest:', action);
+
   const slot = localSlot();
   if (slot != null && action.actorId != null && action.actorId === slot) {
-    // Guard against a confused guest echoing host actions.
+    console.warn('[onAction] host rejected echo of own action');
     return;
   }
+
+  // DEBUG: does the card exist in the actor's hand?
+  if (action.type === 'PLAY_CARD') {
+    const idx = action.actorId ?? 0;
+    const p = state.players[idx];
+    const handUids = p ? p.hand.map(c => c.uid) : [];
+    const found = p ? p.hand.find(c => c.uid === action.cardUid) : null;
+    console.log('[onAction][PLAY_CARD] actorIdx=', idx,
+      'cardUid=', action.cardUid,
+      'found=', !!found,
+      'hand=', handUids);
+  }
+
   state.lastHits = [];
   applyAction(action, /* fromNetwork */ true);
   sendSnapshot(snapshotState());
@@ -87,6 +106,11 @@ onAction(action => {
 });
 
 onSnapshot(snap => {
+  console.log('[onSnapshot] guest received snapshot',
+    'turn=', snap.turn,
+    'p1Energy=', snap.players?.[1]?.energy,
+    'enemies[0].hp=', snap.enemies?.[0]?.hp,
+    'lastHits=', snap.lastHits?.length);
   const hits = (snap.lastHits || []).slice();
   restoreSnapshot(snap);
   render();
@@ -99,13 +123,9 @@ function applyAction(action, fromNetwork = false) {
   const mode = getMode();
   const slot = localSlot();
 
-  // Slot filter for LOCAL UI actions only. When an action arrives from
-  // the network (fromNetwork === true) it's already been attributed to
-  // an actorId, and the host must apply it — even if the host's own
-  // local slot differs. Filtering network actions here would silently
-  // drop every guest action, which is exactly the bug this flag fixes.
   if (!fromNetwork && mode !== 'guest' && slot != null && action.actorId != null) {
     if (action.actorId !== slot) {
+      console.warn('[applyAction] local slot mismatch, dropping', action);
       return;
     }
   }
@@ -136,16 +156,42 @@ function applyAction(action, fromNetwork = false) {
     case 'PLAY_CARD': {
       const actorIdx = action.actorId ?? 0;
       const player = state.players[actorIdx];
-      if (!player) return false;
+      if (!player) {
+        console.warn('[PLAY_CARD] FAIL: no player at index', actorIdx);
+        return false;
+      }
       const card = player.hand.find(c => c.uid === action.cardUid);
-      if (!card) return false;
-      return playCard(card, player, action.targetUid ?? null);
+      if (!card) {
+        console.warn('[PLAY_CARD] FAIL: card not in hand',
+          'looking for uid', action.cardUid,
+          'in P' + actorIdx + ' hand of', player.hand.map(c => c.uid));
+        return false;
+      }
+      const result = playCard(card, player, action.targetUid ?? null);
+      if (!result) {
+        console.warn('[PLAY_CARD] FAIL: playCard returned false',
+          'def=', card.defId,
+          'energy=', player.energy,
+          'ended=', player.endedTurn,
+          'turn=', state.turn,
+          'over=', state.over,
+          'handHasCard=', !!player.hand.find(c => c.uid === card.uid));
+      } else {
+        console.log('[PLAY_CARD] OK played', card.defId,
+          'for P' + actorIdx, 'energy now', player.energy);
+      }
+      return result;
     }
 
     case 'END_TURN': {
-      if (state.turn !== 'player' || state.over) return false;
+      if (state.turn !== 'player' || state.over) {
+        console.warn('[END_TURN] rejected, turn/over =', state.turn, state.over);
+        return false;
+      }
       const actorIdx = action.actorId ?? 0;
+      console.log('[END_TURN] P' + actorIdx + ' ending');
       const { allReady } = beginPlayerEndTurn(actorIdx);
+      console.log('[END_TURN] allReady=', allReady);
       if (state.over) return true;
       if (allReady) {
         beginEnemyTurn();
