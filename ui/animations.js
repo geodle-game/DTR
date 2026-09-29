@@ -14,9 +14,26 @@ const rng = () => Math.random();
 const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
 const easeOutQuint = x => 1 - Math.pow(1 - x, 5);
 
+// ------------------------------------------------------------
+// Panel resolution
+// ------------------------------------------------------------
+// uids can be:
+//   'player'   → legacy single-player player panel
+//   'player0'  → co-op player 0
+//   'player1'  → co-op player 1
+//   'e0','e1'  → enemies
+// Anything else → first player panel (fallback).
 function panelForUid(uid) {
-  if (!uid || uid === 'player')
-    return document.querySelector('[data-panel="player"]');
+  if (!uid || uid === 'player') {
+    return document.querySelector('[data-panel="player0"], [data-panel="player"]');
+  }
+  if (typeof uid === 'string' && uid.startsWith('player')) {
+    const idx = uid.slice('player'.length) || '0';
+    return (
+      document.querySelector(`[data-panel="player${idx}"]`) ||
+      document.querySelector('[data-panel="player0"], [data-panel="player"]')
+    );
+  }
   return document.querySelector(`[data-panel="enemy"][data-uid="${uid}"]`);
 }
 
@@ -118,8 +135,6 @@ export function spawnSpellBook(casterEl, { duration = 320, dirX = 1 } = {}) {
   const cx = r.left + r.width / 2;
   const cy = r.top + r.height / 2;
 
-  // Book — a div with background-image so it has a visible fallback
-  // color even if the PNG hasn't loaded yet.
   const book = document.createElement('div');
   book.className = 'spell-book-cast';
   book.style.left = cx + 'px';
@@ -129,7 +144,6 @@ export function spawnSpellBook(casterEl, { duration = 320, dirX = 1 } = {}) {
   book.style.setProperty('--flip', dirX >= 0 ? '1' : '-1');
   document.body.appendChild(book);
 
-  // Charging ring behind the book
   const ring = document.createElement('div');
   ring.className = 'spell-book-ring';
   ring.style.left = cx + 'px';
