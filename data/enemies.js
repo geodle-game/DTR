@@ -91,7 +91,7 @@ export const ENEMIES = {
     isBoss: true,
     deck: ['hexaghost-divider', 'hexaghost-sear', 'hexaghost-inflame', 'hexaghost-tackle'],
     passives: {
-      resistPhysical: 0.7,
+      resistPhysical: 0.5,
     },
   },
   'slime-boss': {
