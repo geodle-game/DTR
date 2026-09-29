@@ -1,7 +1,3 @@
-// ============================================================
-// systems/dispatch.js
-// ============================================================
-
 import {
   state, newRun, chooseRelic, confirmDeck, startNode, backToMap,
   claimReward, takeRewardCard, skipRewardCard,
@@ -11,9 +7,13 @@ import {
   takeActRewardCard, skipActRewardCard, takeActRewardRelic,
   finishRun, pickTreasureRelic, skipTreasure,
   activePlayer,
+  markPlayerEndedTurn, allPlayersEndedTurn,
+  setMetaFocus, setRewardFocus, setActRewardFocus,
+  setShopFocus, setRestFocus, setTreasureFocus, setEventFocus,
+  setDeckViewFocus,
 } from './state.js';
 import {
-  playCard, beginEnemyTurn, resolveEnemyTurn,
+  playCard, beginPlayerEndTurn, beginEnemyTurn, resolveEnemyTurn,
 } from './combat.js';
 import {
   getMode, sendAction, sendSnapshot, onAction, onSnapshot,
@@ -22,23 +22,38 @@ import { snapshotState, restoreSnapshot } from './snapshot.js';
 import { render } from '../ui/render.js';
 import { animateHits } from '../ui/animations.js';
 
-// ============================================================
-// Public API
-// ============================================================
+// ---- Local slot ----
+// 0 = host, 1 = guest, null = single-player (acts as "both").
+function localSlot() {
+  return state.localSlot;
+}
+
+function isMyAction(action) {
+  const slot = localSlot();
+  if (slot == null) return true;              // single-player: any action is mine
+  if (action.actorId == null) return true;    // legacy/no-actor actions
+  return action.actorId === slot;
+}
+
+// ---- Public dispatch ----
 
 export function dispatch(action) {
   const mode = getMode();
 
-  // Guest: forward to host, don't apply locally.
+  // Tag outgoing actions with our slot so the receiver can validate.
+  const tagged = { ...action };
+  if (tagged.actorId == null && localSlot() != null) {
+    tagged.actorId = localSlot();
+  }
+
   if (mode === 'guest') {
-    sendAction(action);
+    if (!isMyAction(tagged)) return;          // don't forward other player's actions
+    sendAction(tagged);
     return;
   }
 
-  // Single or host: apply locally.
-  applyAction(action);
+  applyAction(tagged);
 
-  // Host: broadcast resulting state.
   if (mode === 'host') {
     sendSnapshot(snapshotState());
   }
@@ -46,12 +61,18 @@ export function dispatch(action) {
   render();
 }
 
-// ============================================================
-// Wire up network callbacks
-// ============================================================
+// ---- Network callbacks ----
 
 onAction(action => {
-  // Host receives an action from the guest.
+  // Guest → host.
+  const slot = localSlot();
+  // Host is slot 0; guest's actions should be tagged slot 1.
+  // (We trust the handshake, but sanity-check.)
+  if (slot != null && action.actorId != null && action.actorId === slot) {
+    // Guard against a malicious/confused guest echoing host actions.
+    // Drop silently.
+    return;
+  }
   state.lastHits = [];
   applyAction(action);
   sendSnapshot(snapshotState());
@@ -64,48 +85,55 @@ onAction(action => {
 });
 
 onSnapshot(snap => {
-  // Guest receives a full state from the host.
   const hits = (snap.lastHits || []).slice();
   restoreSnapshot(snap);
   render();
   if (hits.length) setTimeout(() => animateHits(hits), 30);
 });
 
-// ============================================================
-// Action handlers
-// ============================================================
+// ---- Action handlers ----
 
 function applyAction(action) {
+  // Local-only guard: single-player or host is authoritative.
+  const mode = getMode();
+  const slot = localSlot();
+  if (mode !== 'guest' && slot != null && action.actorId != null) {
+    // Host may only apply its own actions from the UI, or the guest's
+    // actions forwarded through onAction. onAction paths call applyAction
+    // directly, so this branch only sees local UI actions.
+    if (action.actorId !== slot) {
+      // Not ours — ignore.
+      return;
+    }
+  }
+
   switch (action.type) {
     // ---- Run lifecycle ----
-    case 'NEW_RUN':
-      newRun(action.seed);
-      break;
-
-    case 'CHOOSE_RELIC':
-      chooseRelic(action.relicId);
-      break;
-
-    case 'CONFIRM_DECK':
-      confirmDeck();
-      break;
-
-    case 'RETURN_TO_MAIN_MENU':
-      returnToMainMenu();
-      break;
+    case 'NEW_RUN':           newRun(action.seed); break;
+    case 'CHOOSE_RELIC':      chooseRelic(action.relicId); break;
+    case 'CONFIRM_DECK':      confirmDeck(); break;
+    case 'RETURN_TO_MAIN_MENU': returnToMainMenu(); break;
 
     // ---- Map ----
-    case 'START_NODE':
-      startNode(action.nodeId);
-      break;
+    case 'START_NODE':        startNode(action.nodeId); break;
+    case 'BACK_TO_MAP':       backToMap(); break;
 
-    case 'BACK_TO_MAP':
-      backToMap();
-      break;
+    // ---- Focus (meta screens) ----
+    case 'SET_META_FOCUS':    setMetaFocus(action.index); break;
+    case 'SET_DECKVIEW_FOCUS': setDeckViewFocus(action.index); break;
+    case 'SET_REWARD_FOCUS':  setRewardFocus(action.index); break;
+    case 'SET_ACT_REWARD_FOCUS': setActRewardFocus(action.index); break;
+    case 'SET_SHOP_FOCUS':    setShopFocus(action.index); break;
+    case 'SET_REST_FOCUS':    setRestFocus(action.index); break;
+    case 'SET_TREASURE_FOCUS': setTreasureFocus(action.index); break;
+    case 'SET_EVENT_FOCUS':   setEventFocus(action.index); break;
 
     // ---- Combat ----
     case 'PLAY_CARD': {
-      const player = activePlayer();
+      // Each player may only play their own cards. We infer "own" from
+      // the actorId and the card's location in that player's hand.
+      const actorIdx = action.actorId ?? 0;
+      const player = state.players[actorIdx];
       if (!player) return false;
       const card = player.hand.find(c => c.uid === action.cardUid);
       if (!card) return false;
@@ -114,10 +142,13 @@ function applyAction(action) {
 
     case 'END_TURN': {
       if (state.turn !== 'player' || state.over) return false;
-      state.pendingCardUid = null;
-      beginEnemyTurn();
+      const actorIdx = action.actorId ?? 0;
+      const { allReady } = beginPlayerEndTurn(actorIdx);
       if (state.over) return true;
-      resolveEnemyTurn();
+      if (allReady) {
+        beginEnemyTurn();
+        resolveEnemyTurn();
+      }
       return true;
     }
 
