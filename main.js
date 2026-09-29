@@ -7,7 +7,7 @@ render();
 if (typeof window !== 'undefined') {
   try {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('k9') === 'a7f2') {
+    if (params.get('v') === '29') {
       window.__game = { state, render };
       console.info(
         '%c[Drawn to Ruin] Dev handle enabled.',
