@@ -1,5 +1,18 @@
+// ============================================================
+// systems/statuses.js
+// All status applications clamp to ±MAX_STATUS so a tampered,
+// corrupted, or runaway value can never spiral out of control.
+// ============================================================
+
+const MAX_STATUS = 999;
+
 export function applyStatus(entity, status, amount) {
-  entity.statuses[status] = (entity.statuses[status] || 0) + amount;
+  if (!entity || !entity.statuses) return;
+  const n = Math.floor(Number(amount)) || 0;
+  const current = entity.statuses[status] || 0;
+  const next = Math.max(-MAX_STATUS, Math.min(MAX_STATUS, current + n));
+  if (next === 0) delete entity.statuses[status];
+  else entity.statuses[status] = next;
 }
 
 export function hasStatus(entity, status) {
@@ -31,4 +44,8 @@ export function tickStatuses(entity) {
     entity.statuses[k]--;
     if (entity.statuses[k] <= 0) delete entity.statuses[k];
   }
+}
+
+export function getMaxStatus() {
+  return MAX_STATUS;
 }
