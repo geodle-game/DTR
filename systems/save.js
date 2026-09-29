@@ -6,7 +6,7 @@
 import { makeRng } from './deck.js';
 
 const SAVE_KEY = 'drawnToRuin.save';
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;   // bumped: per-player reward/shop/treasure/actReward
 
 const SAFE_SCREENS = new Set([
   'map', 'shop', 'rest', 'event', 'treasure', 'reward',
@@ -23,8 +23,12 @@ function snapshot(state) {
     rngState: state.rng?.getState?.() ?? null,
     run: state.run,
     players: state.players,
+    metaFocusIndex: state.metaFocusIndex,
     activePlayerIndex: state.activePlayerIndex,
+    combatActivePlayers: state.combatActivePlayers,
+    endedTurn: state.endedTurn,
     relicChoices: state.relicChoices,
+    pendingRelicPick: state.pendingRelicPick,
     reward: state.reward,
     shop: state.shop,
     rest: state.rest,
@@ -32,6 +36,7 @@ function snapshot(state) {
     treasure: state.treasure,
     actReward: state.actReward,
     pendingEnchant: state.pendingEnchant,
+    localSlot: state.localSlot,
   };
 }
 
@@ -49,11 +54,8 @@ export function autoSave(state) {
 }
 
 export function hasSave() {
-  try {
-    return localStorage.getItem(SAVE_KEY) !== null;
-  } catch {
-    return false;
-  }
+  try { return localStorage.getItem(SAVE_KEY) !== null; }
+  catch { return false; }
 }
 
 export function loadSave() {
@@ -74,9 +76,7 @@ export function loadSave() {
 }
 
 export function clearSave() {
-  try {
-    localStorage.removeItem(SAVE_KEY);
-  } catch {}
+  try { localStorage.removeItem(SAVE_KEY); } catch {}
   lastSavedJson = null;
 }
 
@@ -86,9 +86,13 @@ export function restoreRun(state, save) {
 
   state.run = save.run;
   state.players = save.players || [];
-  state.activePlayerIndex = save.activePlayerIndex ?? 0;
+  state.metaFocusIndex = save.metaFocusIndex ?? 0;
+  state.activePlayerIndex = save.activePlayerIndex ?? state.metaFocusIndex;
+  state.combatActivePlayers = save.combatActivePlayers || [];
+  state.endedTurn = save.endedTurn || [];
+  state.localSlot = save.localSlot ?? null;
 
-  // Re-install the back-compat getters on run since JSON parse stripped them.
+  // Back-compat getters on run (P0 only).
   if (state.players[0]) {
     const p = state.players[0];
     Object.defineProperty(state.run, 'hp', {
@@ -112,6 +116,7 @@ export function restoreRun(state, save) {
   }
 
   state.relicChoices = save.relicChoices || [];
+  state.pendingRelicPick = save.pendingRelicPick ?? null;
 
   state.reward = save.reward ?? null;
   state.shop = save.shop ?? null;
