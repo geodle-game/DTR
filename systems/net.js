@@ -2,6 +2,8 @@
 // systems/net.js
 // ============================================================
 
+import { state } from './state.js';
+
 const ICE_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -21,6 +23,12 @@ export function isHost() { return mode === 'host'; }
 export function isGuest() { return mode === 'guest'; }
 export function isMultiplayer() { return mode !== 'single'; }
 export function setMode(m) { mode = m; }
+
+export function mySlot() {
+  if (mode === 'host') return 0;
+  if (mode === 'guest') return 1;
+  return null;
+}
 
 export function onStatus(cb) { onStatusCb = cb; }
 function status(text, kind) { if (onStatusCb) onStatusCb(text, kind); }
@@ -74,6 +82,7 @@ function wireDataChannel(channel) {
 
 export async function hostStart() {
   mode = 'host';
+  state.localSlot = 0;
   pc = makePeerConnection();
   const channel = pc.createDataChannel('game', { ordered: true });
   wireDataChannel(channel);
@@ -82,6 +91,8 @@ export async function hostStart() {
   await waitForIceComplete(pc);
   return encodeBlob({
     kind: 'offer',
+    role: 'host',
+    slot: 0,
     sdp: pc.localDescription.sdp,
     type: pc.localDescription.type,
   });
@@ -95,6 +106,7 @@ export async function hostAcceptAnswer(blobStr) {
 
 export async function guestStart(offerBlobStr) {
   mode = 'guest';
+  state.localSlot = 1;
   pc = makePeerConnection();
   pc.addEventListener('datachannel', e => wireDataChannel(e.channel));
   const data = decodeBlob(offerBlobStr);
@@ -105,6 +117,8 @@ export async function guestStart(offerBlobStr) {
   await waitForIceComplete(pc);
   return encodeBlob({
     kind: 'answer',
+    role: 'guest',
+    slot: 1,
     sdp: pc.localDescription.sdp,
     type: pc.localDescription.type,
   });
