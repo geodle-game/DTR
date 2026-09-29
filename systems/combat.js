@@ -1,7 +1,8 @@
 import {
-  state, pushLog, startPlayerTurn, livingEnemies, rollIntent, endCombat, cardDef,
+  state, pushLog, startPlayerTurnFor, livingEnemies, rollIntent, endCombat, cardDef,
   forEachRelic, showBossLore, activePlayer, activeBossPassives,
   advanceScript, resetBossScript,
+  markPlayerEndedTurn, allPlayersEndedTurn,
 } from './state.js';
 import { draw, recycleHand, shuffle, makeCard } from './deck.js';
 import {
@@ -14,19 +15,24 @@ import { ENEMY_CARDS } from '../data/enemy-cards.js';
 import { getEnchant } from '../data/enchants.js';
 
 const combat = {
-  attacksThisTurn: 0,
-  hpLostThisCombat: 0,
+  attacksThisTurn: {},
+  hpLostThisCombat: {},
   rampageBonus: {},
 };
 
 export function resetCombatScratch() {
-  combat.attacksThisTurn = 0;
-  combat.hpLostThisCombat = 0;
+  combat.attacksThisTurn = {};
+  combat.hpLostThisCombat = {};
   combat.rampageBonus = {};
 }
 
-// Sum of all HP costs on a card. Used by canPlay to block a card
-// that would drop the player to 0 HP or below.
+function attacksThisTurnFor(player) {
+  return combat.attacksThisTurn[player.id] || 0;
+}
+function hpLostThisCombatFor(player) {
+  return combat.hpLostThisCombat[player.id] || 0;
+}
+
 function hpCostOf(card) {
   const def = CARDS[card.defId];
   if (!def) return 0;
@@ -47,7 +53,7 @@ export function costOf(card, player = activePlayer()) {
   if (player.corruption && def.type === 'skill') cost = 0;
 
   if (def.costReduction?.kind === 'hpLost') {
-    const steps = Math.floor(combat.hpLostThisCombat / def.costReduction.per);
+    const steps = Math.floor(hpLostThisCombatFor(player) / def.costReduction.per);
     cost = Math.max(def.costReduction.min ?? 0, cost - steps);
   }
 
@@ -62,16 +68,15 @@ export function costOf(card, player = activePlayer()) {
 export function canPlay(card, player = activePlayer()) {
   if (!player) return false;
   if (state.turn !== 'player' || state.over) return false;
+  if (player.endedTurn) return false;
   if (card.disabledThisTurn) return false;
   const def = CARDS[card.defId];
   if (def.unplayable) return false;
   if (player.energy < costOf(card, player)) return false;
 
-  // HP-cost cards are unplayable if they'd drop you to 0 or below.
   const hpCost = hpCostOf(card);
   if (hpCost > 0 && player.hp <= hpCost) return false;
 
-  // Boss passive: card-play cap per turn.
   const passives = activeBossPassives();
   if (passives.cardPlayCap != null) {
     const played = player.cardsPlayedThisTurn || 0;
@@ -107,7 +112,9 @@ export function playCard(card, player = activePlayer(), explicitTargetId = null)
 
   const targets = resolveTargets(def.target, explicitTargetId, player);
 
-  if (def.type === 'attack') combat.attacksThisTurn++;
+  if (def.type === 'attack') {
+    combat.attacksThisTurn[player.id] = attacksThisTurnFor(player) + 1;
+  }
 
   const echoActive = player.echoForm && !player.echoUsedThisTurn;
   if (echoActive) player.echoUsedThisTurn = true;
@@ -119,10 +126,7 @@ export function playCard(card, player = activePlayer(), explicitTargetId = null)
   if (burst) player.burstNextSkill = false;
 
   const timesToPlay =
-    1 +
-    (doubleTap ? 1 : 0) +
-    (burst ? 1 : 0) +
-    (echoActive ? 1 : 0);
+    1 + (doubleTap ? 1 : 0) + (burst ? 1 : 0) + (echoActive ? 1 : 0);
 
   for (let i = 0; i < timesToPlay; i++) {
     if (def.xCost) {
@@ -140,12 +144,10 @@ export function playCard(card, player = activePlayer(), explicitTargetId = null)
   }
 
   if (timesToPlay > 1) pushLog(`  Played ${timesToPlay}×!`);
-
   state.currentAnimation = null;
 
   let dest = def.destination ?? 'discard';
   if (player.corruption && def.type === 'skill') dest = 'exhaust';
-
   moveCardToDestination(player, card, dest);
 
   pushLog(`You played ${def.name}.`);
@@ -182,7 +184,7 @@ function damagePlayerHp(player, amount) {
   player.hp = Math.max(0, player.hp - amount);
   const lost = before - player.hp;
   if (lost <= 0) return 0;
-  combat.hpLostThisCombat += lost;
+  combat.hpLostThisCombat[player.id] = hpLostThisCombatFor(player) + lost;
   forEachRelic('onLoseHp', (r) => {
     if (r.goldPerHp) {
       player.gold += r.goldPerHp * lost;
@@ -209,12 +211,13 @@ function resolveTargets(targetKind, explicitId, player) {
   return [chosen];
 }
 
+// Enemies target a random living player.
 function resolveEnemyTargets(enemy, kind) {
   if (kind === 'self') return [enemy];
-  if (kind === 'all-enemies') return state.players.filter(p => p.hp > 0);
   const pool = state.players.filter(p => p.hp > 0);
   if (!pool.length) return [];
-  return [pool[0]];
+  if (kind === 'all-enemies') return pool;   // enemies use 'all-enemies' for "everyone on the other side"
+  return [pool[Math.floor(state.rng() * pool.length)]];
 }
 
 function checkBossPhaseLore(enemy, beforeHp) {
@@ -256,12 +259,8 @@ function applyEffect(eff, targets, card, source) {
       const def = CARDS[card.defId] || ENEMY_CARDS[card.defId];
       const isSpell = def?.type === 'spell';
       for (const t of targets) {
-        const r = dealDamage(
-          source, t,
-          eff.amount + bonus,
-          eff.strengthMultiplier,
-          { isSpell, cardType: def?.type },
-        );
+        const r = dealDamage(source, t, eff.amount + bonus, eff.strengthMultiplier,
+          { isSpell, cardType: def?.type });
         pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}).`);
       }
       break;
@@ -274,7 +273,8 @@ function applyEffect(eff, targets, card, source) {
       const pool = livingEnemies();
       if (!pool.length) break;
       const t = pool[Math.floor(state.rng() * pool.length)];
-      const r = dealDamage(source, t, eff.amount + bonus, undefined, { isSpell, cardType: def?.type });
+      const r = dealDamage(source, t, eff.amount + bonus, undefined,
+        { isSpell, cardType: def?.type });
       pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}).`);
       break;
     }
@@ -290,9 +290,8 @@ function applyEffect(eff, targets, card, source) {
         if (!state.lastHits) state.lastHits = [];
         state.lastHits.push({
           attackerUid: state.players.includes(source) ? 'player' : source.uid,
-          targetUid:   state.players.includes(t) ? 'player' : t.uid,
-          dealt,
-          blocked,
+          targetUid: state.players.includes(t) ? `player${t.id}` : t.uid,
+          dealt, blocked,
           animation: state.currentAnimation || 'slash',
           isSpell: false,
         });
@@ -344,7 +343,7 @@ function applyEffect(eff, targets, card, source) {
 
     case 'finisher': {
       const bonus = enchantDamageBonus(card);
-      const times = Math.max(0, combat.attacksThisTurn - 1);
+      const times = Math.max(0, attacksThisTurnFor(source) - 1);
       for (let i = 0; i < times; i++) {
         const pool = livingEnemies();
         if (!pool.length) break;
@@ -412,7 +411,7 @@ function applyEffect(eff, targets, card, source) {
       source.hp = Math.max(1, source.hp - eff.amount);
       const lost = before - source.hp;
       if (lost > 0) {
-        combat.hpLostThisCombat += lost;
+        combat.hpLostThisCombat[source.id] = hpLostThisCombatFor(source) + lost;
         forEachRelic('onLoseHp', (r) => {
           if (r.goldPerHp) {
             source.gold += r.goldPerHp * lost;
@@ -586,9 +585,7 @@ function applyEffect(eff, targets, card, source) {
         const replaced = t.hand.length;
         t.discardPile.push(...t.hand);
         t.hand = [];
-        for (let i = 0; i < n; i++) {
-          t.hand.push(makeCard(id));
-        }
+        for (let i = 0; i < n; i++) t.hand.push(makeCard(id));
         pushLog(`  ${replaced} card(s) replaced with ${CARDS[id].name}.`);
       }
       break;
@@ -681,7 +678,7 @@ function applyEffect(eff, targets, card, source) {
     }
 
     case 'escapePlan':
-      if (combat.attacksThisTurn > 0) {
+      if (attacksThisTurnFor(source) > 0) {
         source.block += eff.amount;
         pushLog(`  Escape Plan: +${eff.amount} Block.`);
       }
@@ -750,10 +747,7 @@ function applyEffect(eff, targets, card, source) {
       break;
 
     case 'graveRobber': {
-      if (!source.exhaustPile.length) {
-        pushLog('  Exhaust pile is empty.');
-        break;
-      }
+      if (!source.exhaustPile.length) { pushLog('  Exhaust pile is empty.'); break; }
       const idx = Math.floor(state.rng() * source.exhaustPile.length);
       const c = source.exhaustPile[idx];
       const dmg = cardBaseDamage(c.defId);
@@ -770,10 +764,7 @@ function applyEffect(eff, targets, card, source) {
     }
 
     case 'seance': {
-      if (!source.exhaustPile.length) {
-        pushLog('  Exhaust pile is empty.');
-        break;
-      }
+      if (!source.exhaustPile.length) { pushLog('  Exhaust pile is empty.'); break; }
       const idx = Math.floor(state.rng() * source.exhaustPile.length);
       const c = source.exhaustPile.splice(idx, 1)[0];
       source.hand.push(c);
@@ -782,10 +773,7 @@ function applyEffect(eff, targets, card, source) {
     }
 
     case 'necromancersPact': {
-      if (!source.discardPile.length) {
-        pushLog('  Discard pile is empty.');
-        break;
-      }
+      if (!source.discardPile.length) { pushLog('  Discard pile is empty.'); break; }
       const idx = Math.floor(state.rng() * source.discardPile.length);
       const c = source.discardPile.splice(idx, 1)[0];
       const dmg = cardBaseDamage(c.defId);
@@ -807,7 +795,6 @@ function applyEffect(eff, targets, card, source) {
 
 export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}) {
   const isSpell = opts.isSpell === true;
-
   const scale = attacker.damageScale ?? 1;
   const flatBonus = isSpell
     ? outgoingFlatBonus(attacker, true)
@@ -817,23 +804,16 @@ export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}
   dmg *= outgoingMultiplier(attacker);
   dmg *= incomingMultiplier(target);
 
-  // Boss passives on the *target* (resists).
   if (!state.players.includes(target)) {
     const passives = activeBossPassives();
-    if (isSpell && passives.resistSpell != null) {
-      dmg *= (1 - passives.resistSpell);
-    } else if (!isSpell && passives.resistPhysical != null) {
-      dmg *= (1 - passives.resistPhysical);
-    }
+    if (isSpell && passives.resistSpell != null) dmg *= (1 - passives.resistSpell);
+    else if (!isSpell && passives.resistPhysical != null) dmg *= (1 - passives.resistPhysical);
   }
 
-  // Boss passives on the *attacker* (block ignore).
   let ignoreBlockPercent = 0;
   if (!state.players.includes(attacker)) {
     const passives = activeBossPassives();
-    if (passives.ignoreBlockPercent != null) {
-      ignoreBlockPercent = passives.ignoreBlockPercent;
-    }
+    if (passives.ignoreBlockPercent != null) ignoreBlockPercent = passives.ignoreBlockPercent;
   }
 
   if (state.players.includes(attacker) && (target.statuses?.vulnerable || 0) > 0) {
@@ -846,7 +826,6 @@ export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}
   dmg = Math.floor(dmg);
   if (dmg < 0) dmg = 0;
 
-  // Block ignore: reduce the effective block the target has this hit.
   let blockPool = target.block;
   if (ignoreBlockPercent > 0) {
     blockPool = Math.max(0, Math.floor(target.block * (1 - ignoreBlockPercent)));
@@ -857,10 +836,9 @@ export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}
 
   if (!state.lastHits) state.lastHits = [];
   state.lastHits.push({
-    attackerUid: state.players.includes(attacker) ? 'player' : attacker.uid,
-    targetUid:   state.players.includes(target)   ? 'player' : target.uid,
-    dealt,
-    blocked,
+    attackerUid: state.players.includes(attacker) ? `player${attacker.id}` : attacker.uid,
+    targetUid:   state.players.includes(target)   ? `player${target.id}`   : target.uid,
+    dealt, blocked,
     animation: state.currentAnimation || 'slash',
     isSpell,
   });
@@ -884,31 +862,42 @@ function checkEnemiesDead() {
 }
 
 function checkPlayerDead() {
-  if (state.players.every(p => p.hp <= 0)) {
-    pushLog('Defeat.');
-    endCombat(false);
+  if (state.players.every(p => p.hp <= 0) || state.players.some(p => p.hp <= 0)) {
+    // Either player at 0 = loss.
+    if (state.players.some(p => p.hp <= 0)) {
+      pushLog('Defeat.');
+      endCombat(false);
+    }
   }
+}
+
+// ---- Per-player end of turn ----
+
+export function beginPlayerEndTurn(playerIndex) {
+  if (state.turn !== 'player' || state.over) return { allReady: false };
+  const p = state.players[playerIndex];
+  if (!p) return { allReady: false };
+
+  // End-of-turn Burn damage for this player.
+  for (const c of p.hand) {
+    const def = CARDS[c.defId];
+    if (def.endOfTurnDamage) {
+      damagePlayerHp(p, def.endOfTurnDamage);
+      pushLog(`${def.name}: ${p.name} took ${def.endOfTurnDamage}.`);
+    }
+  }
+
+  recycleHand(state, p);
+  tickStatuses(p);
+
+  const allReady = markPlayerEndedTurn(playerIndex);
+  return { allReady };
 }
 
 export function beginEnemyTurn() {
   if (state.turn !== 'player' || state.over) return;
-
-  for (const p of state.players) {
-    for (const c of p.hand) {
-      const def = CARDS[c.defId];
-      if (def.endOfTurnDamage) {
-        damagePlayerHp(p, def.endOfTurnDamage);
-        pushLog(`${def.name}: took ${def.endOfTurnDamage}.`);
-      }
-    }
-  }
-  if (state.players.every(p => p.hp <= 0)) { endCombat(false); return; }
-
-  for (const p of state.players) {
-    recycleHand(state, p);
-    tickStatuses(p);
-  }
   state.turn = 'enemy';
+  // No global cleanup here — per-player cleanup already ran in beginPlayerEndTurn.
 }
 
 export function resolveEnemyTurn() {
@@ -919,8 +908,6 @@ export function resolveEnemyTurn() {
   for (const e of state.enemies) {
     if (e.hp <= 0) continue;
 
-    // Scripted enemies have intentCards (1 or more). Normal enemies
-    // have a single intentCard.
     const cards = e.intentCards?.length
       ? e.intentCards
       : (e.intentCard ? [e.intentCard] : []);
@@ -937,44 +924,42 @@ export function resolveEnemyTurn() {
 
     tickStatuses(e);
 
-    // Scripted bosses advance to the next turn pair. Unscripted bosses
-    // shuffle their deck as usual via rollIntent.
-    if (e.script) {
-      advanceScript(e);
-    }
+    if (e.script) advanceScript(e);
     rollIntent(e);
   }
 
   state.currentAnimation = null;
 
-  if (state.players.every(p => p.hp <= 0)) {
+  if (state.players.some(p => p.hp <= 0)) {
     pushLog('Defeat.');
     endCombat(false);
     return;
   }
 
+  // Per-player start-of-turn effects and new turn.
   for (const p of state.players) {
     if (p.hp <= 0) continue;
     if (p.perTurnStatuses) {
-      for (const entry of p.perTurnStatuses) {
-        applyStatus(p, entry.status, entry.amount);
-      }
+      for (const entry of p.perTurnStatuses) applyStatus(p, entry.status, entry.amount);
     }
     if (p.perTurnHooks) {
       for (const h of p.perTurnHooks) {
-        if (h.kind === 'selfDamage') {
-          damagePlayerHp(p, h.amount);
-        }
+        if (h.kind === 'selfDamage') damagePlayerHp(p, h.amount);
       }
     }
     if (p.hp <= 0) continue;
-    if (p.perTurnEnergy) {
-      p.nextTurnEnergy += p.perTurnEnergy;
-    }
+    if (p.perTurnEnergy) p.nextTurnEnergy += p.perTurnEnergy;
     p.echoUsedThisTurn = false;
   }
 
-  combat.attacksThisTurn = 0;
+  combat.attacksThisTurn = {};
 
-  startPlayerTurn(0);
+  // Begin the next round for every living player.
+  state.combatActivePlayers = state.players
+    .map((p, i) => (p.hp > 0 ? i : -1))
+    .filter(i => i >= 0);
+  for (const i of state.combatActivePlayers) {
+    startPlayerTurnFor(i, false);
+  }
+  state.turn = 'player';
 }
