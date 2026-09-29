@@ -3,9 +3,13 @@ import {
   toggleDeckOverlay, toggleRelicOverlay,
   toggleDrawOverlay, toggleDiscardOverlay, toggleExhaustOverlay,
   closeOverlays, dismissBossLore, activeBossPassives,
+  activePlayer,
+  setMetaFocus, setRewardFocus, setActRewardFocus,
+  setShopFocus, setRestFocus, setTreasureFocus, setEventFocus,
+  setDeckViewFocus,
 } from '../systems/state.js';
 import { dispatch } from '../systems/dispatch.js';
-import { getMode, isGuest } from '../systems/net.js';
+import { getMode, isGuest, mySlot } from '../systems/net.js';
 import {
   canPlay, selectCardForPlay, costOf,
 } from '../systems/combat.js';
@@ -32,8 +36,21 @@ const DRAG_THRESHOLD = 14;
 
 let shopRemoveMode = false;
 
+// ------------------------------------------------------------
+// Focus helpers
+// ------------------------------------------------------------
+
+// Meta-focus player (map/reward/shop/etc.). Falls back to P0.
 function me() {
-  return state.players[0];
+  return state.players[state.metaFocusIndex] || state.players[0] || null;
+}
+
+// Player whose hand is shown during combat. In single-player this is P0.
+// In multiplayer, the local slot's player.
+function localHandPlayer() {
+  const slot = mySlot();
+  if (slot == null) return state.players[0] || null;
+  return state.players[slot] || null;
 }
 
 // ------------------------------------------------------------
@@ -64,6 +81,7 @@ const takeActRewardRelic  = (id)  => dispatch({ type: 'TAKE_ACT_REWARD_RELIC', r
 const finishRun           = ()    => dispatch({ type: 'FINISH_RUN' });
 const pickTreasureRelic   = (id)  => dispatch({ type: 'PICK_TREASURE_RELIC', relicId: id });
 const skipTreasure        = ()    => dispatch({ type: 'SKIP_TREASURE' });
+const endTurn             = ()    => dispatch({ type: 'END_TURN' });
 
 // ============================================================
 // Main render entry
@@ -106,6 +124,28 @@ export function render() {
 }
 
 // ============================================================
+// Player toggle (used on all meta screens)
+// ============================================================
+
+function playerToggle(currentIndex, onSelect, { label = 'Viewing' } = {}) {
+  if (state.players.length < 2) return null;
+  const row = document.createElement('div');
+  row.className = 'player-toggle';
+  const lbl = document.createElement('span');
+  lbl.className = 'player-toggle-label';
+  lbl.textContent = label + ':';
+  row.appendChild(lbl);
+  state.players.forEach((p, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'btn player-toggle-btn' + (i === currentIndex ? ' active' : '');
+    btn.textContent = p.name;
+    btn.addEventListener('click', () => onSelect(i));
+    row.appendChild(btn);
+  });
+  return row;
+}
+
+// ============================================================
 // Main menu
 // ============================================================
 
@@ -134,63 +174,46 @@ function renderMainMenu(app) {
   lore.className = 'main-menu-lore';
   lore.innerHTML = `
     <p>Long ago, the dungeon gave humanity magic.</p>
-
     <p>Not the kind kings hoarded in towers, not the kind priests
     whispered about in temples — real, usable magic. The dungeon shaped
     it into cards. Simple things. Paper and ink and a little bit of the
     dungeon's own power, folded flat enough to fit in a pocket.</p>
-
     <p>For the first time in history, magic belonged to everyone.</p>
-
     <p>Humanity grew. Villages became cities. Plagues ended. Famines
     ended. The world that had spent ten thousand years trying to kill
     humans finally, slowly, started to let them live.</p>
-
     <p>And the dungeon watched.</p>
-
     <p>It had not intended for us to grow this far. It had given us the
     cards the way a lord gives a peasant a plow — useful, small,
     controlled. It had not intended for us to enchant them, chain them,
     and make our own. It had not intended for a human child to do what
     once took an archmage.</p>
-
     <p>So it reached for the chains.</p>
-
     <p>Across every dungeon in the world, the same order came down:
     <em>revoke the gift</em>. No new cards. No new enchantments. Every
     tool we had been given was suddenly, deliberately, made finite.</p>
-
     <p>Then the dungeons opened. Not to negotiate. Not to reclaim.
     <em>To erase.</em> Monsters poured out of the depths — not mindless
     beasts, but something purpose-built. Creatures bred to hunt card
     users, to smell a deck in a hand from a mile away, to end the only
     humans who could still use the gift.</p>
-
     <p>The message was clear: <em>if you cannot be controlled, you cannot
     be allowed to exist.</em></p>
-
     <p>So humanity fought back. The kingdoms united for the first time
     in history — not under a king, not under a god. Under the cards.</p>
-
     <p>The war lasted a thousand years. We lost almost everything.</p>
-
     <p>But we did not lose everything.</p>
-
     <p>Once every hundred years, a child is born with something the
     dungeon cannot revoke. A resonance with Card Magic that no darkening
     of the system can silence. Someone who can still draw from a well
     the dungeon thought it had sealed. Someone who can push a card
     further than any human before them.</p>
-
     <p>We call them <strong>the Drawn</strong>.</p>
-
     <p>Most die young. But every hundred years, one survives long enough
     to grow up. Long enough to train. Long enough to walk into a dungeon
     with a deck in hand and the weight of a thousand-year war on their
     shoulders.</p>
-
     <p class="main-menu-lore-emphasis">That year is now.</p>
-
     <p class="main-menu-lore-emphasis">That hero is you.</p>
   `;
   inner.appendChild(lore);
@@ -278,11 +301,8 @@ function resolveCardText(def, ctx) {
   let text = def.text;
   if (!def.liveValues) return text;
   let vals;
-  try {
-    vals = def.liveValues(state, ctx) || {};
-  } catch (e) {
-    return text;
-  }
+  try { vals = def.liveValues(state, ctx) || {}; }
+  catch (e) { return text; }
   for (const [key, raw] of Object.entries(vals)) {
     const value = raw == null ? '' : String(raw);
     const html = value ? `<span class="live">${value}</span>` : '';
@@ -293,14 +313,14 @@ function resolveCardText(def, ctx) {
 }
 
 function playerCardContext() {
-  const attacker = me();
+  const attacker = me() || state.players[0];
   const living = (state.enemies || []).filter(e => e.hp > 0);
   const target = living.find(e => e.uid === state.selectedEnemyId) || living[0] || null;
   return { attacker, target };
 }
 
 function enemyCardContext(enemy) {
-  return { attacker: enemy, target: me() };
+  return { attacker: enemy, target: localHandPlayer() || state.players[0] };
 }
 
 function coinStackClass(gold) {
@@ -321,6 +341,7 @@ function topButtons() {
   wrap.className = 'top-buttons';
 
   const p = me();
+  if (!p) return wrap;
 
   const deckBtn = document.createElement('button');
   deckBtn.className = 'icon-btn';
@@ -346,7 +367,7 @@ function topButtons() {
 // ============================================================
 
 function renderDeckOverlay(app) {
-  const overlay = cardGridOverlay('Your Deck', sortDeckEntries(me().deck));
+  const overlay = cardGridOverlay(`${me().name}'s Deck`, sortDeckEntries(me().deck));
   app.appendChild(overlay);
 }
 
@@ -404,7 +425,7 @@ function renderRelicOverlay(app) {
 
   const panel = document.createElement('div');
   panel.className = 'overlay-panel';
-  panel.appendChild(overlayHeader('Your Relics', closeOverlays));
+  panel.appendChild(overlayHeader(`${me().name}'s Relics`, closeOverlays));
 
   const list = document.createElement('div');
   list.className = 'relic-list';
@@ -457,8 +478,15 @@ function relicCard(r, onClick) {
 function renderRelicPick(app) {
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
+
+  const prp = state.pendingRelicPick;
+  const currentIdx = prp ? prp.currentIndex : 0;
+  const current = state.players[currentIdx];
+
   const h = document.createElement('h1');
-  h.textContent = 'Choose a Relic';
+  h.textContent = state.players.length > 1
+    ? `Choose a Relic — ${current?.name ?? `Player ${currentIdx + 1}`}`
+    : 'Choose a Relic';
   wrap.appendChild(h);
 
   const row = document.createElement('div');
@@ -477,7 +505,9 @@ function renderDeckView(app) {
   const p = me();
   const relic = RELICS[p.relic];
   const h = document.createElement('h1');
-  h.textContent = 'Your Starting Deck';
+  h.textContent = state.players.length > 1
+    ? `${p.name}'s Starting Deck`
+    : 'Your Starting Deck';
   wrap.appendChild(h);
   const sub = document.createElement('p');
   sub.className = 'muted';
@@ -498,6 +528,13 @@ function renderDeckView(app) {
   btn.textContent = 'Begin';
   btn.addEventListener('click', () => confirmDeck());
   wrap.appendChild(btn);
+
+  if (state.players.length > 1) {
+    const toggle = playerToggle(state.metaFocusIndex, (i) =>
+      dispatch({ type: 'SET_DECKVIEW_FOCUS', index: i }), { label: 'Viewing' });
+    if (toggle) wrap.insertBefore(toggle, grid);
+  }
+
   app.appendChild(wrap);
 }
 
@@ -507,16 +544,17 @@ function renderDeckView(app) {
 
 function renderMap(app) {
   const map = state.run.map;
-  const p = me();
   const wrap = document.createElement('div');
   wrap.className = 'screen map-screen';
 
   const header = document.createElement('div');
   header.className = 'map-header';
+  const headerBits = state.players.map(p =>
+    `<div>${p.name}: HP <span class="hp">${p.hp}/${p.maxHp}</span> ${goldDisplay(p.gold)}</div>`
+  ).join('');
   header.innerHTML = `
     <div>Act ${state.run.act}</div>
-    <div>HP <span class="hp">${p.hp}/${p.maxHp}</span></div>
-    <div>${goldDisplay(p.gold)}</div>
+    ${headerBits}
     <div>Floor ${state.run.floor + 1} / ${map.floors}</div>
   `;
   wrap.appendChild(header);
@@ -623,14 +661,24 @@ function renderReward(app) {
   h.textContent = 'Victory';
   wrap.appendChild(h);
 
+  if (state.players.length > 1) {
+    const toggle = playerToggle(r.focusIndex, (i) =>
+      dispatch({ type: 'SET_REWARD_FOCUS', index: i }), { label: 'Rewards for' });
+    if (toggle) wrap.appendChild(toggle);
+  }
+
+  const focusIdx = r.focusIndex ?? 0;
+  const slot = r.perPlayer[focusIdx];
+  const focusPlayer = state.players[focusIdx];
+
   const gold = document.createElement('p');
-  gold.innerHTML = goldDisplay(r.coins) + ' gold';
+  gold.innerHTML = `${focusPlayer.name}: ${goldDisplay(slot.coins)} gold`;
   wrap.appendChild(gold);
 
-  if (!r.taken) {
+  if (!slot.cardTaken) {
     const sub = document.createElement('p');
     sub.className = 'muted';
-    sub.textContent = 'Choose a card:';
+    sub.textContent = `Choose a card for ${focusPlayer.name}:`;
     wrap.appendChild(sub);
 
     const grid = document.createElement('div');
@@ -670,26 +718,34 @@ function renderActReward(app) {
   h.textContent = `Act ${state.run.act}`;
   wrap.appendChild(h);
 
-  if (r.healAmount != null) {
-    const heal = document.createElement('p');
-    heal.className = 'heal';
-    heal.textContent = `+${r.healAmount} HP (30% of max)`;
-    wrap.appendChild(heal);
+  if (state.players.length > 1) {
+    const toggle = playerToggle(r.focusIndex, (i) =>
+      dispatch({ type: 'SET_ACT_REWARD_FOCUS', index: i }), { label: 'Rewards for' });
+    if (toggle) wrap.appendChild(toggle);
   }
 
+  const idx = r.focusIndex ?? 0;
+  const slot = r.perPlayer[idx];
+  const p = state.players[idx];
+
+  const heal = document.createElement('p');
+  heal.className = 'heal';
+  heal.textContent = `${p.name} healed 30% of max HP`;
+  wrap.appendChild(heal);
+
   const gold = document.createElement('p');
-  gold.innerHTML = goldDisplay(r.coins) + ' gold';
+  gold.innerHTML = `${p.name}: ${goldDisplay(r.coinsPerPlayer[idx])} gold`;
   wrap.appendChild(gold);
 
-  if (!r.relicTaken) {
+  if (!slot.relicTaken) {
     const sub = document.createElement('p');
     sub.className = 'muted';
-    sub.textContent = 'Choose a relic:';
+    sub.textContent = `Choose a relic for ${p.name}:`;
     wrap.appendChild(sub);
 
     const row = document.createElement('div');
     row.className = 'relic-row';
-    for (const id of r.relicChoices) {
+    for (const id of r.relicChoicesPerPlayer[idx]) {
       const relic = RELICS[id];
       row.appendChild(relicCard(relic, () => takeActRewardRelic(id)));
     }
@@ -697,13 +753,13 @@ function renderActReward(app) {
   } else {
     const taken = document.createElement('p');
     taken.className = 'muted';
-    taken.textContent = `Relic chosen: ${RELICS[r.relicTaken].name}`;
+    taken.textContent = `${p.name} chose ${RELICS[slot.relicTaken].name}`;
     wrap.appendChild(taken);
 
-    if (!r.cardTaken) {
+    if (!slot.cardTaken) {
       const sub = document.createElement('p');
       sub.className = 'muted';
-      sub.textContent = 'Add a card to your deck:';
+      sub.textContent = `Add a card to ${p.name}'s deck:`;
       wrap.appendChild(sub);
 
       const grid = document.createElement('div');
@@ -720,14 +776,14 @@ function renderActReward(app) {
       skip.textContent = 'Skip';
       skip.addEventListener('click', () => skipActRewardCard());
       wrap.appendChild(skip);
-    } else {
-      const btn = document.createElement('button');
-      btn.className = 'btn';
-      btn.textContent = 'Onward';
-      btn.addEventListener('click', () => claimActReward());
-      wrap.appendChild(btn);
     }
   }
+
+  const btn = document.createElement('button');
+  btn.className = 'btn';
+  btn.textContent = 'Onward';
+  btn.addEventListener('click', () => claimActReward());
+  wrap.appendChild(btn);
 
   app.appendChild(wrap);
 }
@@ -745,28 +801,50 @@ function renderTreasure(app) {
   h.textContent = 'Treasure';
   wrap.appendChild(h);
 
+  if (state.players.length > 1) {
+    const toggle = playerToggle(t.focusIndex, (i) =>
+      dispatch({ type: 'SET_TREASURE_FOCUS', index: i }), { label: 'Treasure for' });
+    if (toggle) wrap.appendChild(toggle);
+  }
+
+  const idx = t.focusIndex ?? 0;
+  const slot = t.perPlayer[idx];
+  const p = state.players[idx];
+
   const gold = document.createElement('p');
-  gold.innerHTML = goldDisplay(t.gold) + ' gold';
+  gold.innerHTML = `${p.name}: ${goldDisplay(slot.gold)} gold`;
   wrap.appendChild(gold);
 
-  const sub = document.createElement('p');
-  sub.className = 'muted';
-  sub.textContent = 'Choose a relic:';
-  wrap.appendChild(sub);
+  if (!slot.taken) {
+    const sub = document.createElement('p');
+    sub.className = 'muted';
+    sub.textContent = `Choose a relic for ${p.name}:`;
+    wrap.appendChild(sub);
 
-  const row = document.createElement('div');
-  row.className = 'relic-row';
-  for (const id of t.relicChoices) {
-    const relic = RELICS[id];
-    row.appendChild(relicCard(relic, () => pickTreasureRelic(id)));
+    const row = document.createElement('div');
+    row.className = 'relic-row';
+    for (const id of slot.relicChoices) {
+      const relic = RELICS[id];
+      row.appendChild(relicCard(relic, () => pickTreasureRelic(id)));
+    }
+    wrap.appendChild(row);
+
+    const skip = document.createElement('button');
+    skip.className = 'btn';
+    skip.textContent = 'Skip Relic';
+    skip.addEventListener('click', () => skipTreasure());
+    wrap.appendChild(skip);
+  } else {
+    const done = document.createElement('p');
+    done.className = 'muted';
+    done.textContent = 'Done.';
+    wrap.appendChild(done);
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = 'Continue';
+    btn.addEventListener('click', () => backToMap());
+    wrap.appendChild(btn);
   }
-  wrap.appendChild(row);
-
-  const skip = document.createElement('button');
-  skip.className = 'btn';
-  skip.textContent = 'Skip Relic';
-  skip.addEventListener('click', () => skipTreasure());
-  wrap.appendChild(skip);
 
   app.appendChild(wrap);
 }
@@ -784,16 +862,11 @@ function renderVictory(app) {
   h.style.color = '#ffd166';
   wrap.appendChild(h);
 
-  const p = me();
   const stats = document.createElement('div');
   stats.className = 'victory-stats';
-  stats.innerHTML = `
-    <div>Acts cleared: <strong>${state.run.act}</strong></div>
-    <div>Final HP: <strong class="hp">${p.hp} / ${p.maxHp}</strong></div>
-    <div>Gold: <strong>${goldDisplay(p.gold)}</strong></div>
-    <div>Deck size: <strong>${p.deck.length}</strong></div>
-    <div>Relics: <strong style="color:#c9a3ff">${p.relics.length}</strong></div>
-  `;
+  stats.innerHTML = state.players.map(p => `
+    <div><strong>${p.name}</strong>: HP ${p.hp}/${p.maxHp}, Gold ${p.gold}, Deck ${p.deck.length}, Relics ${p.relics.length}</div>
+  `).join('');
   wrap.appendChild(stats);
 
   const btn = document.createElement('button');
@@ -817,6 +890,12 @@ function renderEvent(app) {
   const h = document.createElement('h1');
   h.textContent = ev.name;
   wrap.appendChild(h);
+
+  if (state.players.length > 1) {
+    const toggle = playerToggle(state.event.focusIndex ?? 0, (i) =>
+      dispatch({ type: 'SET_EVENT_FOCUS', index: i }), { label: 'Event for' });
+    if (toggle) wrap.appendChild(toggle);
+  }
 
   const p = document.createElement('p');
   p.className = 'event-text';
@@ -842,12 +921,14 @@ function renderEvent(app) {
 
 function renderShop(app) {
   const s = state.shop;
-  const p = me();
+  const focus = s.focusIndex ?? 0;
+  const p = state.players[focus];
+  const inv = s.perPlayer[focus];
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center shop-screen';
 
   if (shopRemoveMode) {
-    renderShopRemoveMode(app, wrap, s);
+    renderShopRemoveMode(app, wrap, inv, focus);
     return;
   }
 
@@ -855,13 +936,19 @@ function renderShop(app) {
   h.textContent = 'Shop';
   wrap.appendChild(h);
 
+  if (state.players.length > 1) {
+    const toggle = playerToggle(focus, (i) =>
+      dispatch({ type: 'SET_SHOP_FOCUS', index: i }), { label: 'Shopping as' });
+    if (toggle) wrap.appendChild(toggle);
+  }
+
   const gold = document.createElement('p');
-  gold.innerHTML = 'Gold: ' + goldDisplay(p.gold);
+  gold.innerHTML = `${p.name}'s Gold: ` + goldDisplay(p.gold);
   wrap.appendChild(gold);
 
   const grid = document.createElement('div');
   grid.className = 'shop-grid';
-  s.items.forEach((item, i) => {
+  inv.items.forEach((item, i) => {
     const cell = document.createElement('div');
     cell.className = 'shop-cell';
     const card = cardFace(item.defId, { small: true });
@@ -890,8 +977,8 @@ function renderShop(app) {
   healRow.className = 'shop-heal';
   const healBtn = document.createElement('button');
   healBtn.className = 'btn';
-  healBtn.textContent = `Heal 25 HP — ${s.healPrice}g`;
-  healBtn.disabled = p.gold < s.healPrice;
+  healBtn.textContent = `Heal 25 HP — ${inv.healPrice}g`;
+  healBtn.disabled = p.gold < inv.healPrice;
   healBtn.addEventListener('click', () => buyShopHeal());
   healRow.appendChild(healBtn);
   wrap.appendChild(healRow);
@@ -900,12 +987,12 @@ function renderShop(app) {
   removeRow.className = 'shop-heal';
   const removeBtn = document.createElement('button');
   removeBtn.className = 'btn';
-  if (s.removeUsed) {
+  if (inv.removeUsed) {
     removeBtn.textContent = 'Card already removed';
     removeBtn.disabled = true;
   } else {
-    removeBtn.textContent = `Remove a card — ${s.removePrice}g`;
-    removeBtn.disabled = p.gold < s.removePrice;
+    removeBtn.textContent = `Remove a card — ${inv.removePrice}g`;
+    removeBtn.disabled = p.gold < inv.removePrice;
     removeBtn.addEventListener('click', () => {
       shopRemoveMode = true;
       render();
@@ -925,28 +1012,25 @@ function renderShop(app) {
   app.appendChild(wrap);
 }
 
-function renderShopRemoveMode(app, wrap, s) {
-  const p = me();
+function renderShopRemoveMode(app, wrap, inv, focus) {
+  const p = state.players[focus];
   const h = document.createElement('h1');
-  h.textContent = 'Remove a Card';
+  h.textContent = `Remove a Card — ${p.name}`;
   wrap.appendChild(h);
 
   const gold = document.createElement('p');
-  gold.innerHTML = 'Gold: ' + goldDisplay(p.gold);
+  gold.innerHTML = `${p.name}'s Gold: ` + goldDisplay(p.gold);
   wrap.appendChild(gold);
 
   const sub = document.createElement('p');
   sub.className = 'muted';
-  sub.textContent = `Choose a card to remove permanently. Costs ${s.removePrice}g.`;
+  sub.textContent = `Choose a card to remove permanently. Costs ${inv.removePrice}g.`;
   wrap.appendChild(sub);
 
   const grid = document.createElement('div');
   grid.className = 'deck-grid';
   p.deck.forEach((entry, i) => {
-    const el = cardFace(entry.defId, {
-      small: true,
-      enchant: entry.enchant,
-    });
+    const el = cardFace(entry.defId, { small: true, enchant: entry.enchant });
     el.classList.add('enchant-target');
     el.addEventListener('click', () => {
       shopRemoveMode = false;
@@ -979,6 +1063,20 @@ function renderRest(app) {
   h.textContent = 'Rest Site';
   wrap.appendChild(h);
 
+  const focus = state.rest?.focusIndex ?? 0;
+  const p = state.players[focus];
+
+  if (state.players.length > 1) {
+    const toggle = playerToggle(focus, (i) =>
+      dispatch({ type: 'SET_REST_FOCUS', index: i }), { label: 'Resting as' });
+    if (toggle) wrap.appendChild(toggle);
+  }
+
+  const sub = document.createElement('p');
+  sub.className = 'muted';
+  sub.textContent = `Choosing for ${p?.name ?? 'You'}`;
+  wrap.appendChild(sub);
+
   const healBtn = document.createElement('button');
   healBtn.className = 'btn';
   healBtn.textContent = 'Rest — heal 30%';
@@ -1004,12 +1102,15 @@ function renderEnchantPick(app) {
   const enchant = getEnchant(pe.enchantId);
   if (!enchant) { backToMap(); return; }
 
-  const p = me();
+  const focus = pe.playerIndex ?? 0;
+  const p = state.players[focus];
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
 
   const h = document.createElement('h1');
-  h.textContent = 'Enchant a Card';
+  h.textContent = state.players.length > 1
+    ? `Enchant a Card — ${p.name}`
+    : 'Enchant a Card';
   wrap.appendChild(h);
 
   const info = document.createElement('div');
@@ -1023,7 +1124,7 @@ function renderEnchantPick(app) {
 
   const sub = document.createElement('p');
   sub.className = 'muted';
-  sub.textContent = 'Choose a card to enchant:';
+  sub.textContent = `Choose a card of ${p.name}'s to enchant:`;
   wrap.appendChild(sub);
 
   const grid = document.createElement('div');
@@ -1057,7 +1158,6 @@ function renderEnchantPick(app) {
 // ============================================================
 
 function renderCombat(app) {
-  const p = me();
   const c = document.createElement('div');
   c.className = 'combat';
 
@@ -1076,7 +1176,12 @@ function renderCombat(app) {
 
   const mid = document.createElement('div');
   mid.className = 'top-mid';
-  mid.appendChild(playerPanel());
+
+  // Both player panels side by side.
+  const playersWrap = document.createElement('div');
+  playersWrap.className = 'players-row';
+  for (const p of state.players) playersWrap.appendChild(playerPanel(p));
+  mid.appendChild(playersWrap);
 
   const enemies = document.createElement('div');
   enemies.className = 'enemies';
@@ -1092,11 +1197,13 @@ function renderCombat(app) {
     c.appendChild(hint);
   }
 
+  const handPlayer = localHandPlayer();
   const hand = document.createElement('div');
   hand.className = 'hand';
-  const n = p.hand.length;
-  p.hand.forEach((card, i) => {
-    const el = cardInHand(card);
+  const cards = handPlayer?.hand || [];
+  const n = cards.length;
+  cards.forEach((card, i) => {
+    const el = cardInHand(card, handPlayer);
     const t = n === 1 ? 0 : (i - (n - 1) / 2) / ((n - 1) / 2);
     const maxAngle = 14;
     const maxDrop = 34;
@@ -1109,7 +1216,7 @@ function renderCombat(app) {
   });
   c.appendChild(hand);
 
-  c.appendChild(bottomBar());
+  c.appendChild(bottomBar(handPlayer));
 
   app.appendChild(c);
 
@@ -1127,11 +1234,11 @@ function pileEl(label, count, onClick) {
   return el;
 }
 
-function playerPanel() {
-  const p = me();
+function playerPanel(p) {
   const el = document.createElement('div');
   el.className = 'panel player';
-  el.dataset.panel = 'player';
+  el.dataset.panel = `player${p.id}`;
+  el.dataset.playerId = String(p.id);
 
   const passives = activeBossPassives();
   let capHtml = '';
@@ -1142,8 +1249,12 @@ function playerPanel() {
     capHtml = `<div class="card-cap${atCap ? ' card-cap-full' : ''}">Cards played: ${played}/${cap}</div>`;
   }
 
+  const endedTag = p.endedTurn
+    ? `<div class="player-ready">Ready</div>`
+    : '';
+
   el.innerHTML = `
-    <div class="panel-name">You</div>
+    <div class="panel-name">${p.name}</div>
     <div class="hp">HP ${p.hp} / ${p.maxHp}</div>
     <div class="block${p.block > 0 ? '' : ' block-empty'}">
       <span class="block-icon"></span>${p.block}
@@ -1151,6 +1262,7 @@ function playerPanel() {
     <div class="energy">Energy ${p.energy} / ${p.maxEnergy}</div>
     ${capHtml}
     ${statusRow(p.statuses)}
+    ${endedTag}
   `;
   return el;
 }
@@ -1181,7 +1293,8 @@ function enemyPanel(e) {
   if (!dead) {
     el.addEventListener('click', () => {
       if (state.pendingCardUid) {
-        const card = me().hand.find(c => c.uid === state.pendingCardUid);
+        const hp = localHandPlayer();
+        const card = hp?.hand.find(c => c.uid === state.pendingCardUid);
         if (card) { doPlayCard(card, null, e.uid); return; }
       }
       dispatch({ type: 'SELECT_ENEMY', enemyUid: e.uid });
@@ -1190,13 +1303,10 @@ function enemyPanel(e) {
   wrap.appendChild(el);
 
   if (!dead) {
-    // Render ALL intent cards (scripted bosses have two).
     const intents = e.intentCards?.length ? e.intentCards : (e.intentCard ? [e.intentCard] : []);
     for (const card of intents) {
       if (card) wrap.appendChild(enemyIntentCard(card, e));
     }
-
-    // Passive badge — only if the enemy has passives.
     const badge = passiveBadge(e);
     if (badge) wrap.appendChild(badge);
   }
@@ -1213,60 +1323,31 @@ function describePassives(enemy) {
   const p = enemy.passives;
 
   if (p.cardPlayCap != null) {
-    out.push({
-      name: 'Card Lock',
-      text: `You can play at most ${p.cardPlayCap} cards per turn.`,
-      kind: 'cap',
-    });
+    out.push({ name: 'Card Lock', text: `You can play at most ${p.cardPlayCap} cards per turn.`, kind: 'cap' });
   }
   if (p.ignoreBlockPercent != null) {
-    out.push({
-      name: 'Block Breaker',
-      text: `Attacks ignore ${Math.round(p.ignoreBlockPercent * 100)}% of your Block.`,
-      kind: 'ignore',
-    });
+    out.push({ name: 'Block Breaker', text: `Attacks ignore ${Math.round(p.ignoreBlockPercent * 100)}% of your Block.`, kind: 'ignore' });
   }
   if (p.resistPhysical != null) {
-    out.push({
-      name: 'Ironhide',
-      text: `Takes ${Math.round(p.resistPhysical * 100)}% less damage from Attacks.`,
-      kind: 'resist-phys',
-    });
+    out.push({ name: 'Ironhide', text: `Takes ${Math.round(p.resistPhysical * 100)}% less damage from Attacks.`, kind: 'resist-phys' });
   }
   if (p.resistSpell != null) {
-    out.push({
-      name: 'Warded',
-      text: `Takes ${Math.round(p.resistSpell * 100)}% less damage from Spells.`,
-      kind: 'resist-spell',
-    });
+    out.push({ name: 'Warded', text: `Takes ${Math.round(p.resistSpell * 100)}% less damage from Spells.`, kind: 'resist-spell' });
   }
 
-  // Per-turn cycling passive — show what's active RIGHT NOW.
   if (p.cycleByLead) {
     const lead = enemy.intentCards?.[0] || enemy.intentCard;
     if (lead) {
       const active = p.cycleByLead[lead.defId];
       if (active) {
         if (active.ignoreBlockPercent != null) {
-          out.push({
-            name: 'This Turn: Block Breaker',
-            text: `Attacks ignore ${Math.round(active.ignoreBlockPercent * 100)}% of your Block.`,
-            kind: 'ignore',
-          });
+          out.push({ name: 'This Turn: Block Breaker', text: `Attacks ignore ${Math.round(active.ignoreBlockPercent * 100)}% of your Block.`, kind: 'ignore' });
         }
         if (active.resistPhysical != null) {
-          out.push({
-            name: 'This Turn: Ironhide',
-            text: `Takes ${Math.round(active.resistPhysical * 100)}% less damage from Attacks.`,
-            kind: 'resist-phys',
-          });
+          out.push({ name: 'This Turn: Ironhide', text: `Takes ${Math.round(active.resistPhysical * 100)}% less damage from Attacks.`, kind: 'resist-phys' });
         }
         if (active.resistSpell != null) {
-          out.push({
-            name: 'This Turn: Warded',
-            text: `Takes ${Math.round(active.resistSpell * 100)}% less damage from Spells.`,
-            kind: 'resist-spell',
-          });
+          out.push({ name: 'This Turn: Warded', text: `Takes ${Math.round(active.resistSpell * 100)}% less damage from Spells.`, kind: 'resist-spell' });
         }
       }
     }
@@ -1314,12 +1395,12 @@ function statusRow(statuses) {
     .join('')}</div>`;
 }
 
-function tryPlayCard(card, sourceEl) {
+function tryPlayCard(card, sourceEl, player) {
   const def = CARDS[card.defId];
-  if (!canPlay(card)) return;
+  if (!canPlay(card, player)) return;
   if (def.target === 'enemy') {
     const living = state.enemies.filter(x => x.hp > 0);
-    if (living.length > 1) { selectCardForPlay(card); render(); return; }
+    if (living.length > 1) { selectCardForPlay(card, player); render(); return; }
     if (living.length === 1) { doPlayCard(card, sourceEl, living[0].uid); return; }
   }
   doPlayCard(card, sourceEl, null);
@@ -1356,10 +1437,10 @@ function showPreviewOverlay(card) {
   document.body.appendChild(overlay);
 }
 
-function cardInHand(card) {
-  const def = CARDS[card.defId];
+function cardInHand(card, player) {
   const el = cardFace(card.defId, { enchant: card.enchant });
-  if (!canPlay(card)) el.classList.add('disabled');
+  const playable = player && canPlay(card, player);
+  if (!playable) el.classList.add('disabled');
   if (card.disabledThisTurn) el.classList.add('card-locked');
   if (state.pendingCardUid === card.uid) el.classList.add('pending');
 
@@ -1375,7 +1456,7 @@ function cardInHand(card) {
   let active = false;
 
   el.addEventListener('pointerdown', (e) => {
-    if (!canPlay(card)) return;
+    if (!playable) return;
     active = true;
     longPressFired = false;
     startX = e.clientX;
@@ -1394,13 +1475,13 @@ function cardInHand(card) {
     active = false;
     if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
     if (longPressFired) return;
-    if (!canPlay(card)) return;
+    if (!playable) return;
 
     const dx = Math.abs(e.clientX - startX);
     const dy = Math.abs(e.clientY - startY);
     if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) return;
 
-    tryPlayCard(card, el);
+    tryPlayCard(card, el, player);
   });
 
   el.addEventListener('pointerleave', () => {
@@ -1422,7 +1503,7 @@ function doPlayCard(card, sourceEl, targetUid) {
   const def = CARDS[card.defId];
   const targetEl = targetUid
     ? document.querySelector(`[data-panel="enemy"][data-uid="${targetUid}"]`)
-    : document.querySelector('[data-panel="player"]');
+    : document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
 
   if (sourceEl) {
     const sRect = sourceEl.getBoundingClientRect();
@@ -1444,7 +1525,7 @@ function doPlayCard(card, sourceEl, targetUid) {
     state.lastHits = [];
     animateHits(hits);
 
-    const playerEl = document.querySelector('[data-panel="player"]');
+    const playerEl = document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
 
     const hasBlock = def.effects.some(e => e.kind === 'block');
     if (hasBlock && playerEl) {
@@ -1507,38 +1588,50 @@ function cardFace(defId, { disabled = false, small = false, big = false, enchant
   return el;
 }
 
-function bottomBar() {
-  const p = me();
+function bottomBar(handPlayer) {
   const bar = document.createElement('div');
   bar.className = 'bar';
 
-  bar.appendChild(pileEl('Draw', p.drawPile.length, () => {
+  const slot = mySlot();
+  const meIdx = slot ?? 0;
+  const meP = state.players[meIdx];
+  const ended = meP?.endedTurn;
+
+  bar.appendChild(pileEl('Draw', handPlayer?.drawPile.length ?? 0, () => {
+    setMetaFocus(meIdx);
     toggleDrawOverlay(); render();
   }));
 
   const btn = document.createElement('button');
   btn.className = 'btn';
-  btn.textContent = 'End Turn';
-  btn.disabled = state.turn !== 'player' || state.over;
-  btn.addEventListener('click', () => {
-    state.pendingCardUid = null;
-    state.lastHits = [];
-    dispatch({ type: 'END_TURN' });
+  if (ended) {
+    btn.textContent = 'Waiting for Ally…';
+    btn.disabled = true;
+  } else {
+    btn.textContent = 'End Turn';
+    btn.disabled = state.turn !== 'player' || state.over;
+    btn.addEventListener('click', () => {
+      state.pendingCardUid = null;
+      state.lastHits = [];
+      dispatch({ type: 'END_TURN' });
 
-    if (isGuest()) return;
+      if (isGuest()) return;
 
-    const hits = state.lastHits || [];
-    state.lastHits = [];
-    animateHits(hits);
-  });
+      const hits = state.lastHits || [];
+      state.lastHits = [];
+      animateHits(hits);
+    });
+  }
   bar.appendChild(btn);
 
-  bar.appendChild(pileEl('Discard', p.discardPile.length, () => {
+  bar.appendChild(pileEl('Discard', handPlayer?.discardPile.length ?? 0, () => {
+    setMetaFocus(meIdx);
     toggleDiscardOverlay(); render();
   }));
 
-  if (p.exhaustPile.length) {
-    bar.appendChild(pileEl('Exhaust', p.exhaustPile.length, () => {
+  if ((handPlayer?.exhaustPile.length ?? 0) > 0) {
+    bar.appendChild(pileEl('Exhaust', handPlayer.exhaustPile.length, () => {
+      setMetaFocus(meIdx);
       toggleExhaustOverlay(); render();
     }));
   }
@@ -1723,6 +1816,41 @@ async function mpAcceptAnswer() {
   }
 }
 
+// After the data channel opens, both players start a two-player run.
+function mpStartTwoPlayerRun() {
+  // The host originates the run, then the guest receives it via snapshot.
+  newRun();
+  // Force two players. (newRun creates one; grow to two.)
+  // This is done here rather than in newRun so single-player stays single.
+  const { players } = state;
+  if (players.length === 1) {
+    const p1 = {
+      ...players[0],
+      id: 1,
+      name: 'Ally',
+      hp: 70, maxHp: 70,
+      block: 0,
+      statuses: {},
+      nextTurnEnergy: 0,
+      perTurnStatuses: [],
+      perTurnHooks: [],
+      drawPile: [], hand: [], discardPile: [], exhaustPile: [],
+      energy: 0, maxEnergy: 3,
+      gold: 99,
+      relic: null, relics: [],
+      deck: [],
+      endedTurn: false,
+    };
+    state.players.push(p1);
+  }
+  // Both players need a starting relic + deck. The relic pick screen
+  // handles that. Re-roll choices so P1 gets their own.
+  state.pendingRelicPick = null;
+  // Kick off a fresh pick session for both players.
+  // (The state module's beginRelicPick will run again via chooseRelic
+  // sequencing — we just need it started.)
+}
+
 function renderMpHost(app) {
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
@@ -1801,11 +1929,15 @@ function renderMpHost(app) {
   if (mpHostState.connected) {
     const startBtn = document.createElement('button');
     startBtn.className = 'btn';
-    startBtn.textContent = 'Start Game';
+    startBtn.textContent = 'Start Co-op Run';
     startBtn.style.marginTop = '16px';
     startBtn.style.fontSize = '18px';
     startBtn.style.padding = '16px 40px';
-    startBtn.addEventListener('click', () => newRun());
+    startBtn.addEventListener('click', () => {
+      // Build the two-player run on the host; snapshot will propagate it.
+      startTwoPlayerRunHostSide();
+      render();
+    });
     wrap.appendChild(startBtn);
   }
 
@@ -1834,6 +1966,43 @@ function renderMpHost(app) {
   wrap.appendChild(switchRow);
 
   app.appendChild(wrap);
+}
+
+function startTwoPlayerRunHostSide() {
+  // 1. Create a single-player run, then grow it to two players.
+  newRun();
+  // 2. Add a second player with their own identity.
+  const p0 = state.players[0];
+  const p1 = {
+    id: 1,
+    name: 'Ally',
+    hp: 70, maxHp: 70,
+    block: 0,
+    statuses: {},
+    nextTurnEnergy: 0,
+    perTurnStatuses: [],
+    perTurnHooks: [],
+    drawPile: [], hand: [], discardPile: [], exhaustPile: [],
+    energy: 0, maxEnergy: 3,
+    gold: 99,
+    relic: null, relics: [],
+    deck: [],
+    endedTurn: false,
+  };
+  state.players.push(p1);
+  // 3. Re-roll relic pick choices for the new session (both players will
+  //    pick in sequence in renderRelicPick).
+  state.pendingRelicPick = {
+    picks: {},
+    currentIndex: 0,
+    choices: state.relicChoices,
+  };
+  // 4. Broadcast.
+  const { sendSnapshot, snapshotState } = window.__mpBridge || {};
+  // (Handled by dispatch on the next render — the autoSave in render()
+  //  plus dispatch-based actions will push state. We just ensure the
+  //  screen is correct.)
+  state.screen = 'relicPick';
 }
 
 // ============================================================
