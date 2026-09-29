@@ -542,7 +542,7 @@ export function nextAct() {
 
 export function takeActRewardCard(defId) {
   if (!state.actReward || state.actReward.cardTaken) return;
-  if (!grantCard(defId, 'actReward:card', { once: true })) return;
+  if (!grantCard(defId, 'actReward:card')) return;
   state.actReward.cardTaken = true;
 }
 
@@ -648,7 +648,7 @@ export function claimReward() {
 
 export function takeRewardCard(defId) {
   if (!state.reward || state.reward.taken) return;
-  if (!grantCard(defId, 'reward:combat', { once: true })) return;
+  if (!grantCard(defId, 'reward:combat')) return;
   state.reward.taken = true;
   pushLog(`Added ${CARDS[defId].name} to your deck.`);
 }
@@ -676,7 +676,7 @@ function applyMetaEffect(eff) {
   else if (eff.kind === 'damageSelf') p.hp = Math.max(1, p.hp - eff.amount);
   else if (eff.kind === 'grantRandomCard') {
     const [id] = rollCardChoices(state.rng, 1);
-    if (id) grantCard(id, 'event:grantRandomCard', { once: true });
+    if (id) grantCard(id, 'event:grantRandomCard');
   }
 }
 
