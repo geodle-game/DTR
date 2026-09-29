@@ -147,3 +147,97 @@
 .enemy-passive-text {
   color: #c8cdd7;
 }
+
+/* ============================================================
+   TWO-PLAYER CO-OP
+   ============================================================ */
+
+/* Row of player panels, side by side. */
+.players-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+/* Each player panel keeps its own min-width but can grow. */
+.players-row .panel.player {
+  flex: 1 1 220px;
+  max-width: 320px;
+}
+
+/* "Ready" badge on a player who has pressed End Turn. */
+.player-ready {
+  margin-top: 6px;
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #6bff9e;
+  background: rgba(107, 255, 158, .08);
+  border: 1px solid rgba(107, 255, 158, .35);
+  border-radius: 4px;
+  padding: 2px 6px;
+  text-shadow: 0 0 8px rgba(107, 255, 158, .6);
+}
+
+/* Meta-screen player toggle (reward / shop / rest / treasure / event). */
+.player-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, #232833, #1a1e26);
+  border: 1px solid #3a4250;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .3);
+}
+
+.player-toggle-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: #8b93a1;
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.player-toggle-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  background: #2a2f3a;
+  color: #c8cdd7;
+  box-shadow: none;
+}
+
+.player-toggle-btn:hover {
+  filter: brightness(1.15);
+}
+
+.player-toggle-btn.active {
+  background: linear-gradient(180deg, #9d7cff, #7a55ff);
+  color: white;
+  box-shadow: 0 2px 0 #5433c9, 0 4px 12px rgba(143, 107, 255, .35);
+}
+
+/* When both players are present, tighten the combat top layout. */
+.combat .top-mid {
+  gap: 20px;
+}
+
+.combat .players-row + .enemies {
+  margin-left: 8px;
+}
+
+/* On narrow screens, stack player panels above enemies. */
+@media (max-width: 720px) {
+  .players-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .players-row .panel.player {
+    max-width: none;
+  }
+}
