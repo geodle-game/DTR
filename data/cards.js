@@ -431,8 +431,8 @@ export const CARDS = {
   },
   foresight: {
     id: 'foresight', name: 'Foresight', cost: 0, rarity: 'rare',
-    type: 'skill', target: 'self', destination: 'draw', retain: true,
-    text: 'Gain 2 Block. Draw 1. Retain. Shuffle this back into your draw pile.',
+    type: 'skill', target: 'self', destination: 'exhaust', retain: true,
+    text: 'Gain 2 Block. Draw 1. Exhaust.',
     effects: [
       { kind: 'block', amount: 2 },
       { kind: 'draw', amount: 1 },
