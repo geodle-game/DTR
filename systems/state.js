@@ -11,7 +11,7 @@ import { rollShop } from '../data/shop.js';
 import { bannerForCombat } from '../data/banners.js';
 import { rollEnchant, getEnchant } from '../data/enchants.js';
 import { BOSSES } from '../data/bosses/index.js';
-import { clearSave } from './save.js';
+import { clearSave, checkIntegrity } from './save.js';
 
 const BOSS_LORE = {};
 for (const bossModule of BOSSES) {
@@ -29,15 +29,10 @@ export const state = {
   rng: null,
   run: null,
   players: [],
-  // --- turn / focus ---
-  // During combat both players act simultaneously; combatActivePlayers
-  // holds every living player index. Outside combat, metaFocusIndex
-  // says whose deck/gold/relics the UI is showing.
   combatActivePlayers: [],
   metaFocusIndex: 0,
-  activePlayerIndex: 0,   // legacy alias for metaFocusIndex
-  endedTurn: [],          // boolean per player, combat only
-  // --- core ---
+  activePlayerIndex: 0,
+  endedTurn: [],
   enemies: [],
   turn: 'player',
   over: false,
@@ -64,11 +59,8 @@ export const state = {
   combatBanner: null,
   lastEncounterId: null,
   deathPage: 0,
-  // MP role: null in single-player, 0 or 1 in multiplayer.
   localSlot: null,
 };
-
-// ---- Focus helpers ----
 
 export function activePlayer() {
   return state.players[state.metaFocusIndex] || state.players[0] || null;
@@ -254,9 +246,8 @@ export function getGrantLog() {
   return grantLog.slice();
 }
 
-if (typeof window !== 'undefined') {
-  window.__grantLog = getGrantLog;
-}
+// (Removed the window.__grantLog assignment. Use ?devtools=1 in main.js
+//  if you need to inspect the log in your own session.)
 
 // ---- Run lifecycle ----
 
@@ -313,11 +304,9 @@ export function newRun(seed = Date.now()) {
   beginRelicPick();
 }
 
-// ---- Relic pick (per-player) ----
-
 function beginRelicPick() {
   state.pendingRelicPick = {
-    picks: {},        // index -> relicId
+    picks: {},
     currentIndex: 0,
     choices: rollRelicChoices(state.rng, [], 3),
   };
@@ -517,6 +506,9 @@ export function backToMap() {
 }
 
 export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
+  // Integrity sweep before combat starts — catches any live tampering.
+  checkIntegrity(state);
+
   state.combatKind = sourceKind;
   state.lastEncounterId = encounterId;
   state.combatBanner = bannerForCombat(sourceKind, state.rng);
@@ -546,6 +538,19 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
     p.maxEnergy = 3; p.energy = 0; p.cardsPlayedThisTurn = 0;
     p.endedTurn = false;
 
+    // Reset transient flags that could leak across combats.
+    delete p.rupture;
+    delete p.juggernaut;
+    delete p.feelNoPain;
+    delete p.corruption;
+    delete p.echoForm;
+    delete p.darkEmbrace;
+    delete p.demonForm;
+    delete p.perTurnEnergy;
+    p.doubleTapNextAttack = false;
+    p.burstNextSkill = false;
+    p.echoUsedThisTurn = false;
+
     forEachRelic('combatStart', (r) => {
       if (r.block) p.block += r.block;
       if (r.heal) p.hp = Math.min(p.maxHp, p.hp + r.heal);
@@ -567,6 +572,9 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
   state.combatActivePlayers = state.players.map((_, i) => i);
   state.endedTurn = state.players.map(() => false);
   setPhase(null);
+
+  // One more integrity pass — catches anything injected by the relic loop.
+  checkIntegrity(state);
 
   for (const e of state.enemies) {
     if (e.isBoss) { showBossLore(e.id, 'start'); e.loreTriggered.start = true; }
@@ -767,6 +775,9 @@ export function resetBossScript(enemy) {
 }
 
 export function startPlayerTurnFor(playerIndex, isFirstTurn = false) {
+  // Integrity sweep on every turn — catches live console edits.
+  checkIntegrity(state);
+
   const p = state.players[playerIndex];
   if (!p) return;
   p.endedTurn = false;
@@ -1002,7 +1013,8 @@ export function skipEnchant() {
 
 export function debugFightDungeonCore() { newCombat('final-boss', 'boss'); }
 export function debugFightFallenDrawn() { newCombat('act3-boss', 'boss'); }
-export function debugFightWarden() { newCombat('act4-boss', 'boss'); }
+export function debugFightWarden() { debugFightWardenImpl(); }
+function debugFightWardenImpl() { newCombat('act4-boss', 'boss'); }
 
 // ---- Combat turn bookkeeping ----
 
