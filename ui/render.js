@@ -840,7 +840,7 @@ function renderEvent(app) {
 // Shop
 // ============================================================
 
-function renderShop(app) 
+function renderShop(app) {
   const s = state.shop;
   const p = me();
   const wrap = document.createElement('div');
@@ -924,6 +924,7 @@ function renderShop(app)
   wrap.appendChild(leave);
   app.appendChild(wrap);
 }
+
 function renderShopRemoveMode(app, wrap, s) {
   const p = me();
   const h = document.createElement('h1');
@@ -966,6 +967,7 @@ function renderShopRemoveMode(app, wrap, s) {
 
   app.appendChild(wrap);
 }
+
 // ============================================================
 // Rest
 // ============================================================
