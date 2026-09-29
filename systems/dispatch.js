@@ -56,7 +56,7 @@ export function dispatch(action) {
     return;
   }
 
-  applyAction(tagged);
+  applyAction(tagged, /* fromNetwork */ false);
 
   if (mode === 'host') {
     sendSnapshot(snapshotState());
@@ -68,14 +68,15 @@ export function dispatch(action) {
 // ---- Network callbacks ----
 
 onAction(action => {
-  // Guest → host.
+  // Guest → host. This path is always "from network": the host must
+  // apply the guest's action regardless of the host's own local slot.
   const slot = localSlot();
   if (slot != null && action.actorId != null && action.actorId === slot) {
     // Guard against a confused guest echoing host actions.
     return;
   }
   state.lastHits = [];
-  applyAction(action);
+  applyAction(action, /* fromNetwork */ true);
   sendSnapshot(snapshotState());
   render();
   if (state.lastHits?.length) {
@@ -94,10 +95,16 @@ onSnapshot(snap => {
 
 // ---- Action handlers ----
 
-function applyAction(action) {
+function applyAction(action, fromNetwork = false) {
   const mode = getMode();
   const slot = localSlot();
-  if (mode !== 'guest' && slot != null && action.actorId != null) {
+
+  // Slot filter for LOCAL UI actions only. When an action arrives from
+  // the network (fromNetwork === true) it's already been attributed to
+  // an actorId, and the host must apply it — even if the host's own
+  // local slot differs. Filtering network actions here would silently
+  // drop every guest action, which is exactly the bug this flag fixes.
+  if (!fromNetwork && mode !== 'guest' && slot != null && action.actorId != null) {
     if (action.actorId !== slot) {
       return;
     }
