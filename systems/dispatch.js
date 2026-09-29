@@ -1,3 +1,7 @@
+// ============================================================
+// systems/dispatch.js
+// ============================================================
+
 import {
   state, newRun, chooseRelic, confirmDeck, startNode, backToMap,
   claimReward, takeRewardCard, skipRewardCard,
@@ -11,6 +15,7 @@ import {
   setMetaFocus, setRewardFocus, setActRewardFocus,
   setShopFocus, setRestFocus, setTreasureFocus, setEventFocus,
   setDeckViewFocus,
+  startCoopRun,
 } from './state.js';
 import {
   playCard, beginPlayerEndTurn, beginEnemyTurn, resolveEnemyTurn,
@@ -30,8 +35,8 @@ function localSlot() {
 
 function isMyAction(action) {
   const slot = localSlot();
-  if (slot == null) return true;              // single-player: any action is mine
-  if (action.actorId == null) return true;    // legacy/no-actor actions
+  if (slot == null) return true;
+  if (action.actorId == null) return true;
   return action.actorId === slot;
 }
 
@@ -40,14 +45,13 @@ function isMyAction(action) {
 export function dispatch(action) {
   const mode = getMode();
 
-  // Tag outgoing actions with our slot so the receiver can validate.
   const tagged = { ...action };
   if (tagged.actorId == null && localSlot() != null) {
     tagged.actorId = localSlot();
   }
 
   if (mode === 'guest') {
-    if (!isMyAction(tagged)) return;          // don't forward other player's actions
+    if (!isMyAction(tagged)) return;
     sendAction(tagged);
     return;
   }
@@ -66,11 +70,8 @@ export function dispatch(action) {
 onAction(action => {
   // Guest → host.
   const slot = localSlot();
-  // Host is slot 0; guest's actions should be tagged slot 1.
-  // (We trust the handshake, but sanity-check.)
   if (slot != null && action.actorId != null && action.actorId === slot) {
-    // Guard against a malicious/confused guest echoing host actions.
-    // Drop silently.
+    // Guard against a confused guest echoing host actions.
     return;
   }
   state.lastHits = [];
@@ -94,15 +95,10 @@ onSnapshot(snap => {
 // ---- Action handlers ----
 
 function applyAction(action) {
-  // Local-only guard: single-player or host is authoritative.
   const mode = getMode();
   const slot = localSlot();
   if (mode !== 'guest' && slot != null && action.actorId != null) {
-    // Host may only apply its own actions from the UI, or the guest's
-    // actions forwarded through onAction. onAction paths call applyAction
-    // directly, so this branch only sees local UI actions.
     if (action.actorId !== slot) {
-      // Not ours — ignore.
       return;
     }
   }
@@ -110,6 +106,7 @@ function applyAction(action) {
   switch (action.type) {
     // ---- Run lifecycle ----
     case 'NEW_RUN':           newRun(action.seed); break;
+    case 'START_COOP_RUN':    startCoopRun(action.seed); break;
     case 'CHOOSE_RELIC':      chooseRelic(action.relicId); break;
     case 'CONFIRM_DECK':      confirmDeck(); break;
     case 'RETURN_TO_MAIN_MENU': returnToMainMenu(); break;
@@ -130,8 +127,6 @@ function applyAction(action) {
 
     // ---- Combat ----
     case 'PLAY_CARD': {
-      // Each player may only play their own cards. We infer "own" from
-      // the actorId and the card's location in that player's hand.
       const actorIdx = action.actorId ?? 0;
       const player = state.players[actorIdx];
       if (!player) return false;
