@@ -909,15 +909,16 @@ function renderEvent(app) {
 
   const idx = localViewIndex();
   const done = state.event.done[idx];
+  const player = state.players[idx];
 
   const h = document.createElement('h1');
   h.textContent = done ? 'Waiting for the other player…' : ev.name;
   wrap.appendChild(h);
 
-  const p = document.createElement('p');
-  p.className = 'event-text';
-  p.textContent = ev.text;
-  wrap.appendChild(p);
+  const text = document.createElement('p');
+  text.className = 'event-text';
+  text.textContent = ev.text;
+  wrap.appendChild(text);
 
   if (done) {
     const wait = document.createElement('p');
@@ -931,6 +932,12 @@ function renderEvent(app) {
       const btn = document.createElement('button');
       btn.className = 'btn choice-btn';
       btn.textContent = c.label;
+
+      const allowed = typeof c.condition !== 'function' || c.condition(player);
+      if (!allowed) {
+        btn.disabled = true;
+        btn.title = 'You do not meet the requirements.';
+      }
       btn.addEventListener('click', () => pickEventChoice(i));
       choices.appendChild(btn);
     });
@@ -1135,7 +1142,6 @@ function renderEnchantPick(app) {
   const pe = state.pendingEnchant;
   const idx = localViewIndex();
 
-  // Only the player actually picking an enchant sees this screen.
   if (!pe || pe.playerIndex !== idx) {
     if (state.rest) { renderRest(app); return; }
     renderMap(app);
