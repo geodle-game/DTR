@@ -4,9 +4,7 @@ import {
   toggleDrawOverlay, toggleDiscardOverlay, toggleExhaustOverlay,
   closeOverlays, dismissBossLore, activeBossPassives,
   activePlayer,
-  setMetaFocus, setRewardFocus, setActRewardFocus,
-  setShopFocus, setRestFocus, setTreasureFocus, setEventFocus,
-  setDeckViewFocus,
+  setMetaFocus, setDeckViewFocus,
 } from '../systems/state.js';
 import { dispatch } from '../systems/dispatch.js';
 import { getMode, isGuest, mySlot } from '../systems/net.js';
@@ -40,8 +38,13 @@ let shopRemoveMode = false;
 // Focus helpers
 // ------------------------------------------------------------
 
+function localViewIndex() {
+  const slot = mySlot();
+  return slot ?? 0;
+}
+
 function me() {
-  return state.players[state.metaFocusIndex] || state.players[0] || null;
+  return state.players[localViewIndex()] || state.players[0] || null;
 }
 
 function localHandPlayer() {
@@ -65,6 +68,7 @@ const pickEventChoice     = (i)   => dispatch({ type: 'PICK_EVENT_CHOICE', index
 const buyShopCard         = (i)   => dispatch({ type: 'BUY_SHOP_CARD', index: i });
 const buyShopHeal         = ()    => dispatch({ type: 'BUY_SHOP_HEAL' });
 const buyShopRemove       = (i)   => dispatch({ type: 'BUY_SHOP_REMOVE', index: i });
+const shopDone            = ()    => dispatch({ type: 'SHOP_DONE' });
 const restHeal            = ()    => dispatch({ type: 'REST_HEAL' });
 const restEnchantStart    = ()    => dispatch({ type: 'REST_ENCHANT_START' });
 const applyEnchant        = (i)   => dispatch({ type: 'APPLY_ENCHANT', index: i });
@@ -119,28 +123,6 @@ export function render() {
   if (state.bossLore) renderBossLore(app);
 
   autoSave(state);
-}
-
-// ============================================================
-// Player toggle (used on all meta screens)
-// ============================================================
-
-function playerToggle(currentIndex, onSelect, { label = 'Viewing' } = {}) {
-  if (state.players.length < 2) return null;
-  const row = document.createElement('div');
-  row.className = 'player-toggle';
-  const lbl = document.createElement('span');
-  lbl.className = 'player-toggle-label';
-  lbl.textContent = label + ':';
-  row.appendChild(lbl);
-  state.players.forEach((p, i) => {
-    const btn = document.createElement('button');
-    btn.className = 'btn player-toggle-btn' + (i === currentIndex ? ' active' : '');
-    btn.textContent = p.name;
-    btn.addEventListener('click', () => onSelect(i));
-    row.appendChild(btn);
-  });
-  return row;
 }
 
 // ============================================================
@@ -478,34 +460,45 @@ function renderRelicPick(app) {
   wrap.className = 'screen screen-center';
 
   const prp = state.pendingRelicPick;
-  const currentIdx = prp ? prp.currentIndex : 0;
-  const current = state.players[currentIdx];
+  const idx = localViewIndex();
+  const current = state.players[idx];
+  const choices = prp?.choicesByPlayer?.[idx] || [];
+  const done = prp?.done?.[idx];
 
   const h = document.createElement('h1');
-  h.textContent = state.players.length > 1
-    ? `Choose a Relic — ${current?.name ?? `Player ${currentIdx + 1}`}`
-    : 'Choose a Relic';
+  if (done) {
+    h.textContent = `Waiting for the other player…`;
+  } else {
+    h.textContent = `Choose a Relic — ${current?.name ?? `Player ${idx + 1}`}`;
+  }
   wrap.appendChild(h);
 
-  const row = document.createElement('div');
-  row.className = 'relic-row';
-  for (const id of state.relicChoices) {
-    const r = RELICS[id];
-    row.appendChild(relicCard(r, () => chooseRelic(id)));
+  if (done) {
+    const wait = document.createElement('p');
+    wait.className = 'muted';
+    wait.textContent = 'You already chose. Sit tight.';
+    wrap.appendChild(wait);
+  } else {
+    const row = document.createElement('div');
+    row.className = 'relic-row';
+    for (const id of choices) {
+      const r = RELICS[id];
+      row.appendChild(relicCard(r, () => chooseRelic(id)));
+    }
+    wrap.appendChild(row);
   }
-  wrap.appendChild(row);
+
   app.appendChild(wrap);
 }
 
 function renderDeckView(app) {
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
-  const p = me();
+  const idx = localViewIndex();
+  const p = state.players[idx];
   const relic = RELICS[p.relic];
   const h = document.createElement('h1');
-  h.textContent = state.players.length > 1
-    ? `${p.name}'s Starting Deck`
-    : 'Your Starting Deck';
+  h.textContent = `${p.name}'s Starting Deck`;
   wrap.appendChild(h);
   const sub = document.createElement('p');
   sub.className = 'muted';
@@ -521,16 +514,18 @@ function renderDeckView(app) {
   });
   wrap.appendChild(grid);
 
-  const btn = document.createElement('button');
-  btn.className = 'btn';
-  btn.textContent = 'Begin';
-  btn.addEventListener('click', () => confirmDeck());
-  wrap.appendChild(btn);
-
-  if (state.players.length > 1) {
-    const toggle = playerToggle(state.metaFocusIndex, (i) =>
-      dispatch({ type: 'SET_DECKVIEW_FOCUS', index: i }), { label: 'Viewing' });
-    if (toggle) wrap.insertBefore(toggle, grid);
+  const alreadyDone = state.pendingConfirm?.done?.[idx];
+  if (alreadyDone) {
+    const wait = document.createElement('p');
+    wait.className = 'muted';
+    wait.textContent = 'Waiting for the other player…';
+    wrap.appendChild(wait);
+  } else {
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = 'Begin';
+    btn.addEventListener('click', () => confirmDeck());
+    wrap.appendChild(btn);
   }
 
   app.appendChild(wrap);
@@ -683,33 +678,36 @@ function renderReward(app) {
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
 
+  const idx = localViewIndex();
+  const slot = r.perPlayer[idx];
+  const p = state.players[idx];
+
   const h = document.createElement('h1');
-  h.textContent = 'Victory';
+  h.textContent = slot.done ? 'Waiting for the other player…' : 'Victory';
   wrap.appendChild(h);
 
-  if (state.players.length > 1) {
-    const toggle = playerToggle(r.focusIndex, (i) =>
-      dispatch({ type: 'SET_REWARD_FOCUS', index: i }), { label: 'Rewards for' });
-    if (toggle) wrap.appendChild(toggle);
-  }
-
-  const focusIdx = r.focusIndex ?? 0;
-  const slot = r.perPlayer[focusIdx];
-  const focusPlayer = state.players[focusIdx];
-
   const gold = document.createElement('p');
-  gold.innerHTML = `${focusPlayer.name}: ${goldDisplay(slot.coins)} gold`;
+  gold.innerHTML = `${p.name}: ${goldDisplay(slot.coins)} gold`;
   wrap.appendChild(gold);
+
+  if (slot.done) {
+    const wait = document.createElement('p');
+    wait.className = 'muted';
+    wait.textContent = 'You already finished your reward. Sit tight.';
+    wrap.appendChild(wait);
+    app.appendChild(wrap);
+    return;
+  }
 
   if (!slot.cardTaken) {
     const sub = document.createElement('p');
     sub.className = 'muted';
-    sub.textContent = `Choose a card for ${focusPlayer.name}:`;
+    sub.textContent = `Choose a card for ${p.name}:`;
     wrap.appendChild(sub);
 
     const grid = document.createElement('div');
     grid.className = 'deck-grid';
-    for (const id of r.cards) {
+    for (const id of slot.cardChoices) {
       const el = cardFace(id, { small: true });
       el.addEventListener('click', () => takeRewardCard(id));
       grid.appendChild(el);
@@ -718,9 +716,14 @@ function renderReward(app) {
 
     const skip = document.createElement('button');
     skip.className = 'btn';
-    skip.textContent = 'Skip';
+    skip.textContent = 'Skip Card';
     skip.addEventListener('click', () => skipRewardCard());
     wrap.appendChild(skip);
+  } else {
+    const taken = document.createElement('p');
+    taken.className = 'muted';
+    taken.textContent = slot.cardTaken ? 'Card picked (or skipped).' : '';
+    wrap.appendChild(taken);
   }
 
   const btn = document.createElement('button');
@@ -728,6 +731,7 @@ function renderReward(app) {
   btn.textContent = 'Continue';
   btn.addEventListener('click', () => claimReward());
   wrap.appendChild(btn);
+
   app.appendChild(wrap);
 }
 
@@ -740,19 +744,13 @@ function renderActReward(app) {
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
 
-  const h = document.createElement('h1');
-  h.textContent = `Act ${state.run.act}`;
-  wrap.appendChild(h);
-
-  if (state.players.length > 1) {
-    const toggle = playerToggle(r.focusIndex, (i) =>
-      dispatch({ type: 'SET_ACT_REWARD_FOCUS', index: i }), { label: 'Rewards for' });
-    if (toggle) wrap.appendChild(toggle);
-  }
-
-  const idx = r.focusIndex ?? 0;
+  const idx = localViewIndex();
   const slot = r.perPlayer[idx];
   const p = state.players[idx];
+
+  const h = document.createElement('h1');
+  h.textContent = slot.done ? 'Waiting for the other player…' : `Act ${state.run.act}`;
+  wrap.appendChild(h);
 
   const heal = document.createElement('p');
   heal.className = 'heal';
@@ -760,8 +758,17 @@ function renderActReward(app) {
   wrap.appendChild(heal);
 
   const gold = document.createElement('p');
-  gold.innerHTML = `${p.name}: ${goldDisplay(r.coinsPerPlayer[idx])} gold`;
+  gold.innerHTML = `${p.name}: ${goldDisplay(slot.coins)} gold`;
   wrap.appendChild(gold);
+
+  if (slot.done) {
+    const wait = document.createElement('p');
+    wait.className = 'muted';
+    wait.textContent = 'You already finished your rewards. Sit tight.';
+    wrap.appendChild(wait);
+    app.appendChild(wrap);
+    return;
+  }
 
   if (!slot.relicTaken) {
     const sub = document.createElement('p');
@@ -771,45 +778,43 @@ function renderActReward(app) {
 
     const row = document.createElement('div');
     row.className = 'relic-row';
-    for (const id of r.relicChoicesPerPlayer[idx]) {
+    for (const id of slot.relicChoices) {
       const relic = RELICS[id];
       row.appendChild(relicCard(relic, () => takeActRewardRelic(id)));
     }
     wrap.appendChild(row);
-  } else {
+  } else if (!slot.cardTaken) {
     const taken = document.createElement('p');
     taken.className = 'muted';
-    taken.textContent = `${p.name} chose ${RELICS[slot.relicTaken].name}`;
+    taken.textContent = `Relic chosen: ${RELICS[slot.relicTaken].name}`;
     wrap.appendChild(taken);
 
-    if (!slot.cardTaken) {
-      const sub = document.createElement('p');
-      sub.className = 'muted';
-      sub.textContent = `Add a card to ${p.name}'s deck:`;
-      wrap.appendChild(sub);
+    const sub = document.createElement('p');
+    sub.className = 'muted';
+    sub.textContent = `Add a card to ${p.name}'s deck:`;
+    wrap.appendChild(sub);
 
-      const grid = document.createElement('div');
-      grid.className = 'deck-grid';
-      for (const id of r.cards) {
-        const el = cardFace(id, { small: true });
-        el.addEventListener('click', () => takeActRewardCard(id));
-        grid.appendChild(el);
-      }
-      wrap.appendChild(grid);
-
-      const skip = document.createElement('button');
-      skip.className = 'btn';
-      skip.textContent = 'Skip';
-      skip.addEventListener('click', () => skipActRewardCard());
-      wrap.appendChild(skip);
+    const grid = document.createElement('div');
+    grid.className = 'deck-grid';
+    for (const id of slot.cardChoices) {
+      const el = cardFace(id, { small: true });
+      el.addEventListener('click', () => takeActRewardCard(id));
+      grid.appendChild(el);
     }
-  }
+    wrap.appendChild(grid);
 
-  const btn = document.createElement('button');
-  btn.className = 'btn';
-  btn.textContent = 'Onward';
-  btn.addEventListener('click', () => claimActReward());
-  wrap.appendChild(btn);
+    const skip = document.createElement('button');
+    skip.className = 'btn';
+    skip.textContent = 'Skip Card';
+    skip.addEventListener('click', () => skipActRewardCard());
+    wrap.appendChild(skip);
+  } else {
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = 'Onward';
+    btn.addEventListener('click', () => claimActReward());
+    wrap.appendChild(btn);
+  }
 
   app.appendChild(wrap);
 }
@@ -823,25 +828,24 @@ function renderTreasure(app) {
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
 
-  const h = document.createElement('h1');
-  h.textContent = 'Treasure';
-  wrap.appendChild(h);
-
-  if (state.players.length > 1) {
-    const toggle = playerToggle(t.focusIndex, (i) =>
-      dispatch({ type: 'SET_TREASURE_FOCUS', index: i }), { label: 'Treasure for' });
-    if (toggle) wrap.appendChild(toggle);
-  }
-
-  const idx = t.focusIndex ?? 0;
+  const idx = localViewIndex();
   const slot = t.perPlayer[idx];
   const p = state.players[idx];
+
+  const h = document.createElement('h1');
+  h.textContent = slot.taken ? 'Waiting for the other player…' : 'Treasure';
+  wrap.appendChild(h);
 
   const gold = document.createElement('p');
   gold.innerHTML = `${p.name}: ${goldDisplay(slot.gold)} gold`;
   wrap.appendChild(gold);
 
-  if (!slot.taken) {
+  if (slot.taken) {
+    const wait = document.createElement('p');
+    wait.className = 'muted';
+    wait.textContent = 'You already chose. Sit tight.';
+    wrap.appendChild(wait);
+  } else {
     const sub = document.createElement('p');
     sub.className = 'muted';
     sub.textContent = `Choose a relic for ${p.name}:`;
@@ -860,16 +864,6 @@ function renderTreasure(app) {
     skip.textContent = 'Skip Relic';
     skip.addEventListener('click', () => skipTreasure());
     wrap.appendChild(skip);
-  } else {
-    const done = document.createElement('p');
-    done.className = 'muted';
-    done.textContent = 'Done.';
-    wrap.appendChild(done);
-    const btn = document.createElement('button');
-    btn.className = 'btn';
-    btn.textContent = 'Continue';
-    btn.addEventListener('click', () => backToMap());
-    wrap.appendChild(btn);
   }
 
   app.appendChild(wrap);
@@ -913,31 +907,36 @@ function renderEvent(app) {
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
 
-  const h = document.createElement('h1');
-  h.textContent = ev.name;
-  wrap.appendChild(h);
+  const idx = localViewIndex();
+  const done = state.event.done[idx];
 
-  if (state.players.length > 1) {
-    const toggle = playerToggle(state.event.focusIndex ?? 0, (i) =>
-      dispatch({ type: 'SET_EVENT_FOCUS', index: i }), { label: 'Event for' });
-    if (toggle) wrap.appendChild(toggle);
-  }
+  const h = document.createElement('h1');
+  h.textContent = done ? 'Waiting for the other player…' : ev.name;
+  wrap.appendChild(h);
 
   const p = document.createElement('p');
   p.className = 'event-text';
   p.textContent = ev.text;
   wrap.appendChild(p);
 
-  const choices = document.createElement('div');
-  choices.className = 'choice-col';
-  ev.choices.forEach((c, i) => {
-    const btn = document.createElement('button');
-    btn.className = 'btn choice-btn';
-    btn.textContent = c.label;
-    btn.addEventListener('click', () => pickEventChoice(i));
-    choices.appendChild(btn);
-  });
-  wrap.appendChild(choices);
+  if (done) {
+    const wait = document.createElement('p');
+    wait.className = 'muted';
+    wait.textContent = 'You already chose. Sit tight.';
+    wrap.appendChild(wait);
+  } else {
+    const choices = document.createElement('div');
+    choices.className = 'choice-col';
+    ev.choices.forEach((c, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'btn choice-btn';
+      btn.textContent = c.label;
+      btn.addEventListener('click', () => pickEventChoice(i));
+      choices.appendChild(btn);
+    });
+    wrap.appendChild(choices);
+  }
+
   app.appendChild(wrap);
 }
 
@@ -947,11 +946,23 @@ function renderEvent(app) {
 
 function renderShop(app) {
   const s = state.shop;
-  const focus = s.focusIndex ?? 0;
+  const focus = localViewIndex();
   const p = state.players[focus];
   const inv = s.perPlayer[focus];
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center shop-screen';
+
+  if (inv.done) {
+    const h = document.createElement('h1');
+    h.textContent = 'Waiting for the other player…';
+    wrap.appendChild(h);
+    const wait = document.createElement('p');
+    wait.className = 'muted';
+    wait.textContent = 'Done shopping. Sit tight.';
+    wrap.appendChild(wait);
+    app.appendChild(wrap);
+    return;
+  }
 
   if (shopRemoveMode) {
     renderShopRemoveMode(app, wrap, inv, focus);
@@ -961,12 +972,6 @@ function renderShop(app) {
   const h = document.createElement('h1');
   h.textContent = 'Shop';
   wrap.appendChild(h);
-
-  if (state.players.length > 1) {
-    const toggle = playerToggle(focus, (i) =>
-      dispatch({ type: 'SET_SHOP_FOCUS', index: i }), { label: 'Shopping as' });
-    if (toggle) wrap.appendChild(toggle);
-  }
 
   const gold = document.createElement('p');
   gold.innerHTML = `${p.name}'s Gold: ` + goldDisplay(p.gold);
@@ -1027,14 +1032,15 @@ function renderShop(app) {
   removeRow.appendChild(removeBtn);
   wrap.appendChild(removeRow);
 
-  const leave = document.createElement('button');
-  leave.className = 'btn';
-  leave.textContent = 'Leave';
-  leave.addEventListener('click', () => {
+  const done = document.createElement('button');
+  done.className = 'btn';
+  done.textContent = 'Done Shopping';
+  done.addEventListener('click', () => {
     shopRemoveMode = false;
-    backToMap();
+    shopDone();
   });
-  wrap.appendChild(leave);
+  wrap.appendChild(done);
+
   app.appendChild(wrap);
 }
 
@@ -1085,35 +1091,38 @@ function renderShopRemoveMode(app, wrap, inv, focus) {
 function renderRest(app) {
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
-  const h = document.createElement('h1');
-  h.textContent = 'Rest Site';
-  wrap.appendChild(h);
 
-  const focus = state.rest?.focusIndex ?? 0;
+  const focus = localViewIndex();
   const p = state.players[focus];
+  const done = state.rest.done[focus];
 
-  if (state.players.length > 1) {
-    const toggle = playerToggle(focus, (i) =>
-      dispatch({ type: 'SET_REST_FOCUS', index: i }), { label: 'Resting as' });
-    if (toggle) wrap.appendChild(toggle);
-  }
+  const h = document.createElement('h1');
+  h.textContent = done ? 'Waiting for the other player…' : 'Rest Site';
+  wrap.appendChild(h);
 
   const sub = document.createElement('p');
   sub.className = 'muted';
   sub.textContent = `Choosing for ${p?.name ?? 'You'}`;
   wrap.appendChild(sub);
 
-  const healBtn = document.createElement('button');
-  healBtn.className = 'btn';
-  healBtn.textContent = 'Rest — heal 30%';
-  healBtn.addEventListener('click', () => restHeal());
-  wrap.appendChild(healBtn);
+  if (done) {
+    const wait = document.createElement('p');
+    wait.className = 'muted';
+    wait.textContent = 'You already rested. Sit tight.';
+    wrap.appendChild(wait);
+  } else {
+    const healBtn = document.createElement('button');
+    healBtn.className = 'btn';
+    healBtn.textContent = 'Rest — heal 30%';
+    healBtn.addEventListener('click', () => restHeal());
+    wrap.appendChild(healBtn);
 
-  const enchantBtn = document.createElement('button');
-  enchantBtn.className = 'btn';
-  enchantBtn.textContent = 'Enchant a card';
-  enchantBtn.addEventListener('click', () => restEnchantStart());
-  wrap.appendChild(enchantBtn);
+    const enchantBtn = document.createElement('button');
+    enchantBtn.className = 'btn';
+    enchantBtn.textContent = 'Enchant a card';
+    enchantBtn.addEventListener('click', () => restEnchantStart());
+    wrap.appendChild(enchantBtn);
+  }
 
   app.appendChild(wrap);
 }
@@ -1124,19 +1133,24 @@ function renderRest(app) {
 
 function renderEnchantPick(app) {
   const pe = state.pendingEnchant;
-  if (!pe) { renderMap(app); return; }
+  const idx = localViewIndex();
+
+  // Only the player actually picking an enchant sees this screen.
+  if (!pe || pe.playerIndex !== idx) {
+    if (state.rest) { renderRest(app); return; }
+    renderMap(app);
+    return;
+  }
+
   const enchant = getEnchant(pe.enchantId);
   if (!enchant) { backToMap(); return; }
 
-  const focus = pe.playerIndex ?? 0;
-  const p = state.players[focus];
+  const p = state.players[idx];
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
 
   const h = document.createElement('h1');
-  h.textContent = state.players.length > 1
-    ? `Enchant a Card — ${p.name}`
-    : 'Enchant a Card';
+  h.textContent = `Enchant a Card — ${p.name}`;
   wrap.appendChild(h);
 
   const info = document.createElement('div');
@@ -1274,7 +1288,10 @@ function playerPanel(p) {
     capHtml = `<div class="card-cap${atCap ? ' card-cap-full' : ''}">Cards played: ${played}/${cap}</div>`;
   }
 
-  const endedTag = p.endedTurn
+  const downTag = p.hp <= 0
+    ? `<div class="player-ready" style="color:#e05c5c;border-color:#e05c5c">Down</div>`
+    : '';
+  const endedTag = (p.endedTurn && p.hp > 0)
     ? `<div class="player-ready">Ready</div>`
     : '';
 
@@ -1287,6 +1304,7 @@ function playerPanel(p) {
     <div class="energy">Energy ${p.energy} / ${p.maxEnergy}</div>
     ${capHtml}
     ${statusRow(p.statuses)}
+    ${downTag}
     ${endedTag}
   `;
   return el;
@@ -1620,6 +1638,7 @@ function bottomBar(handPlayer) {
   const slot = mySlot();
   const meIdx = slot ?? 0;
   const meP = state.players[meIdx];
+  const dead = meP && meP.hp <= 0;
   const ended = meP?.endedTurn;
 
   bar.appendChild(pileEl('Draw', handPlayer?.drawPile.length ?? 0, () => {
@@ -1629,8 +1648,11 @@ function bottomBar(handPlayer) {
 
   const btn = document.createElement('button');
   btn.className = 'btn';
-  if (ended) {
-    btn.textContent = 'Waiting for Ally…';
+  if (dead) {
+    btn.textContent = 'Down';
+    btn.disabled = true;
+  } else if (ended) {
+    btn.textContent = 'Waiting…';
     btn.disabled = true;
   } else {
     btn.textContent = 'End Turn';
