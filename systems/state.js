@@ -337,7 +337,6 @@ export function newRun(seed = Date.now()) {
 export function startCoopRun(seed = Date.now()) {
   newRun(seed);
   state.players.push(makePlayer(1, 70, 70));
-  // Re-roll relic pick so both players get their own choices.
   beginRelicPick();
   state.screen = 'relicPick';
 }
@@ -628,7 +627,6 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
 export function endCombat(win) {
   if (state.over) return;
   if (win) {
-    // Revive any fallen allies at 1 HP before we apply post-combat effects.
     for (const p of state.players) {
       if (p.hp <= 0) {
         p.hp = 1;
@@ -885,8 +883,16 @@ export function pickEventChoice(index, actorId) {
   if (!choice) return;
   const focus = actorId ?? 0;
   if (state.event.done[focus]) return;
+  const p = state.players[focus];
+  if (!p) return;
+
+  if (typeof choice.condition === 'function' && !choice.condition(p)) {
+    pushLog(`Cannot choose: ${choice.label}`);
+    return;
+  }
+
   for (const eff of choice.effects) applyMetaEffect(eff, focus);
-  pushLog(`Event (${state.players[focus]?.name}): ${ev.name} → ${choice.label}`);
+  pushLog(`Event (${p.name}): ${ev.name} → ${choice.label}`);
   state.event.done[focus] = true;
   if (state.players.every((_, i) => state.event.done[i])) {
     setPhase(null);
@@ -897,12 +903,85 @@ export function pickEventChoice(index, actorId) {
 function applyMetaEffect(eff, recipientIndex) {
   const p = state.players[recipientIndex];
   if (!p) return;
-  if (eff.kind === 'heal') p.hp = Math.min(p.maxHp, p.hp + eff.amount);
-  else if (eff.kind === 'gold') p.gold = Math.max(0, p.gold + eff.amount);
-  else if (eff.kind === 'damageSelf') p.hp = Math.max(1, p.hp - eff.amount);
-  else if (eff.kind === 'grantRandomCard') {
-    const [id] = rollCardChoices(state.rng, 1);
-    if (id) grantCard(id, 'event:grantRandomCard', { recipientIndex });
+
+  switch (eff.kind) {
+    case 'heal':
+      p.hp = Math.min(p.maxHp, p.hp + eff.amount);
+      break;
+
+    case 'gold':
+      p.gold = Math.max(0, p.gold + eff.amount);
+      break;
+
+    case 'damageSelf':
+      p.hp = Math.max(1, p.hp - eff.amount);
+      break;
+
+    case 'grantRandomCard': {
+      const [id] = rollCardChoices(state.rng, 1);
+      if (id) grantCard(id, 'event:grantRandomCard', { recipientIndex });
+      break;
+    }
+
+    case 'grantSpecificCard':
+      if (eff.defId) {
+        grantCard(eff.defId, `event:grantSpecificCard`, { recipientIndex });
+      }
+      break;
+
+    case 'maxHp':
+      p.maxHp += eff.amount;
+      p.hp += eff.amount;
+      pushLog(`${p.name}'s max HP +${eff.amount}.`);
+      break;
+
+    case 'enchantRandomCard': {
+      const eligible = p.deck
+        .map((e, i) => (e.enchant ? -1 : i))
+        .filter(i => i >= 0);
+      if (!eligible.length) {
+        pushLog(`${p.name} has nothing to enchant.`);
+        break;
+      }
+      const idx = eligible[Math.floor(state.rng() * eligible.length)];
+      const enchant = rollEnchant(state.rng);
+      p.deck[idx].enchant = enchant.id;
+      pushLog(`${p.name}'s ${CARDS[p.deck[idx].defId].name} is enchanted with ${enchant.name}.`);
+      break;
+    }
+
+    case 'addRandomRelic': {
+      const pool = rollRelicChoices(state.rng, p.relics, 1);
+      if (!pool.length) {
+        pushLog(`${p.name} has every relic already.`);
+        break;
+      }
+      p.relics.push(pool[0]);
+      p.relic = p.relic || pool[0];
+      pushLog(`${p.name} gained ${RELICS[pool[0]].name}.`);
+      break;
+    }
+
+    case 'removeRandomCard': {
+      const removable = p.deck
+        .map((e, i) => ({ e, i }))
+        .filter(({ e }) => {
+          const def = CARDS[e.defId];
+          return def && def.rarity !== 'starter' && def.rarity !== 'status';
+        });
+      if (!removable.length) {
+        pushLog(`${p.name} has no removable card.`);
+        break;
+      }
+      const pick = removable[Math.floor(state.rng() * removable.length)];
+      const removedName = CARDS[pick.e.defId].name;
+      p.deck.splice(pick.i, 1);
+      pushLog(`${p.name} lost ${removedName}.`);
+      break;
+    }
+
+    default:
+      console.warn('[event] Unknown effect kind:', eff.kind);
   }
 }
 
