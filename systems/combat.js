@@ -67,6 +67,7 @@ export function costOf(card, player = activePlayer()) {
 
 export function canPlay(card, player = activePlayer()) {
   if (!player) return false;
+  if (player.hp <= 0) return false;
   if (state.turn !== 'player' || state.over) return false;
   if (player.endedTurn) return false;
   if (card.disabledThisTurn) return false;
@@ -184,6 +185,14 @@ function damagePlayerHp(player, amount) {
   player.hp = Math.max(0, player.hp - amount);
   const lost = before - player.hp;
   if (lost <= 0) return 0;
+
+  // If this killed the player, auto-mark them as ended this turn so the
+  // party can move on without them.
+  if (player.hp <= 0 && !player.endedTurn) {
+    player.endedTurn = true;
+    if (Array.isArray(state.endedTurn)) state.endedTurn[player.id] = true;
+  }
+
   combat.hpLostThisCombat[player.id] = hpLostThisCombatFor(player) + lost;
   forEachRelic('onLoseHp', (r) => {
     if (r.goldPerHp) {
@@ -211,12 +220,11 @@ function resolveTargets(targetKind, explicitId, player) {
   return [chosen];
 }
 
-// Enemies target a random living player.
 function resolveEnemyTargets(enemy, kind) {
   if (kind === 'self') return [enemy];
   const pool = state.players.filter(p => p.hp > 0);
   if (!pool.length) return [];
-  if (kind === 'all-enemies') return pool;   // enemies use 'all-enemies' for "everyone on the other side"
+  if (kind === 'all-enemies') return pool;
   return [pool[Math.floor(state.rng() * pool.length)]];
 }
 
@@ -862,12 +870,9 @@ function checkEnemiesDead() {
 }
 
 function checkPlayerDead() {
-  if (state.players.every(p => p.hp <= 0) || state.players.some(p => p.hp <= 0)) {
-    // Either player at 0 = loss.
-    if (state.players.some(p => p.hp <= 0)) {
-      pushLog('Defeat.');
-      endCombat(false);
-    }
+  if (state.players.every(p => p.hp <= 0)) {
+    pushLog('Defeat.');
+    endCombat(false);
   }
 }
 
@@ -877,6 +882,7 @@ export function beginPlayerEndTurn(playerIndex) {
   if (state.turn !== 'player' || state.over) return { allReady: false };
   const p = state.players[playerIndex];
   if (!p) return { allReady: false };
+  if (p.endedTurn) return { allReady: allPlayersEndedTurn() };
 
   // End-of-turn Burn damage for this player.
   for (const c of p.hand) {
@@ -890,6 +896,13 @@ export function beginPlayerEndTurn(playerIndex) {
   recycleHand(state, p);
   tickStatuses(p);
 
+  // If the last living player just died to Burn, the run ends here.
+  if (state.players.every(x => x.hp <= 0)) {
+    pushLog('Defeat.');
+    endCombat(false);
+    return { allReady: false };
+  }
+
   const allReady = markPlayerEndedTurn(playerIndex);
   return { allReady };
 }
@@ -897,7 +910,6 @@ export function beginPlayerEndTurn(playerIndex) {
 export function beginEnemyTurn() {
   if (state.turn !== 'player' || state.over) return;
   state.turn = 'enemy';
-  // No global cleanup here — per-player cleanup already ran in beginPlayerEndTurn.
 }
 
 export function resolveEnemyTurn() {
@@ -930,7 +942,7 @@ export function resolveEnemyTurn() {
 
   state.currentAnimation = null;
 
-  if (state.players.some(p => p.hp <= 0)) {
+  if (state.players.every(p => p.hp <= 0)) {
     pushLog('Defeat.');
     endCombat(false);
     return;
@@ -952,9 +964,14 @@ export function resolveEnemyTurn() {
     p.echoUsedThisTurn = false;
   }
 
+  if (state.players.every(p => p.hp <= 0)) {
+    pushLog('Defeat.');
+    endCombat(false);
+    return;
+  }
+
   combat.attacksThisTurn = {};
 
-  // Begin the next round for every living player.
   state.combatActivePlayers = state.players
     .map((p, i) => (p.hp > 0 ? i : -1))
     .filter(i => i >= 0);
