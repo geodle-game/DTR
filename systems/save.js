@@ -8,14 +8,14 @@ import { CARDS } from '../data/cards.js';
 import { RELICS } from '../data/relics.js';
 
 const SAVE_KEY = 'drawnToRuin.save';
-const SAVE_VERSION = 4;   // bumped: sanitization on load
+const SAVE_VERSION = 5;   // bumped: per-player relic/reward state
 
 const SAFE_SCREENS = new Set([
   'map', 'shop', 'rest', 'event', 'treasure', 'reward',
   'actReward', 'enchantPick', 'deckView', 'relicPick',
 ]);
 
-const MAX_STAT = 9999;         // hp / maxHp / block ceiling
+const MAX_STAT = 9999;
 const MAX_GOLD = 999999;
 const MAX_ENERGY = 99;
 const MAX_STATUS = 999;
@@ -35,10 +35,6 @@ function clampInt(v, min, max, fallback = min) {
   return Math.max(min, Math.min(max, n));
 }
 
-/**
- * Convert an arbitrary object into a legal player. Drops anything that
- * isn't a known card or relic id and clamps every numeric field.
- */
 export function sanitizePlayer(raw) {
   if (!raw || typeof raw !== 'object') return null;
 
@@ -71,7 +67,7 @@ export function sanitizePlayer(raw) {
 
   return {
     id: clampInt(raw.id, 0, 1, 0),
-    name: typeof raw.name === 'string' ? raw.name.slice(0, 32) : 'You',
+    name: typeof raw.name === 'string' ? raw.name.slice(0, 32) : 'Player',
     hp: clampInt(raw.hp, 1, MAX_STAT, 70),
     maxHp: clampInt(raw.maxHp, 1, MAX_STAT, 70),
     block: clampInt(raw.block, 0, MAX_STAT, 0),
@@ -90,16 +86,6 @@ export function sanitizePlayer(raw) {
   };
 }
 
-/**
- * Live integrity check. Mutates the state in-place, clamping anything
- * that's out of range back to a sane value. Returns an array of
- * corrections made (empty = clean).
- *
- * Called from `newCombat` and `startPlayerTurn`, so any live tampering
- * — console edits, bookmarklets, corrupted network snapshots — gets
- * corrected on the very next turn, and the player sees a clamped value
- * rather than a game-ending one.
- */
 export function checkIntegrity(state) {
   const warnings = [];
   if (!state || !Array.isArray(state.players)) return warnings;
@@ -148,7 +134,6 @@ export function checkIntegrity(state) {
       }
     }
 
-    // Reset transient per-combat flags that may have leaked in.
     if (typeof p.rupture === 'number' && (p.rupture > 20 || !Number.isFinite(p.rupture))) {
       p.rupture = 20;
       warnings.push('rupture clamped');
@@ -163,7 +148,6 @@ export function checkIntegrity(state) {
     }
   }
 
-  // Cap the run's grant-usage map so it can't grow unbounded.
   if (state.run && state.run._grantUsed && typeof state.run._grantUsed === 'object') {
     const keys = Object.keys(state.run._grantUsed);
     if (keys.length > MAX_GRANT_USED_KEYS) {
@@ -196,6 +180,7 @@ function snapshot(state) {
     endedTurn: state.endedTurn,
     relicChoices: state.relicChoices,
     pendingRelicPick: state.pendingRelicPick,
+    pendingConfirm: state.pendingConfirm,
     reward: state.reward,
     shop: state.shop,
     rest: state.rest,
@@ -271,7 +256,6 @@ export function restoreRun(state, save) {
   state.endedTurn = Array.isArray(save.endedTurn) ? save.endedTurn.slice(0, 2) : [];
   state.localSlot = save.localSlot ?? null;
 
-  // Back-compat getters on run (P0 only).
   if (state.players[0]) {
     const p = state.players[0];
     Object.defineProperty(state.run, 'hp', {
@@ -296,6 +280,7 @@ export function restoreRun(state, save) {
 
   state.relicChoices = save.relicChoices || [];
   state.pendingRelicPick = save.pendingRelicPick ?? null;
+  state.pendingConfirm = save.pendingConfirm ?? null;
 
   state.reward = save.reward ?? null;
   state.shop = save.shop ?? null;
@@ -325,6 +310,5 @@ export function restoreRun(state, save) {
 
   state.screen = save.screen || 'map';
 
-  // Final pass — catches anything the sanitizer missed.
   checkIntegrity(state);
 }
