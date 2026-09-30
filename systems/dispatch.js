@@ -5,16 +5,14 @@
 import {
   state, newRun, chooseRelic, confirmDeck, startNode, backToMap,
   claimReward, takeRewardCard, skipRewardCard,
-  pickEventChoice, buyShopCard, buyShopHeal, buyShopRemove,
+  pickEventChoice, buyShopCard, buyShopHeal, buyShopRemove, shopDone,
   restHeal, restEnchantStart, applyEnchant, skipEnchant,
   returnToMainMenu, nextAct, claimActReward,
   takeActRewardCard, skipActRewardCard, takeActRewardRelic,
   finishRun, pickTreasureRelic, skipTreasure,
   activePlayer,
   markPlayerEndedTurn, allPlayersEndedTurn,
-  setMetaFocus, setRewardFocus, setActRewardFocus,
-  setShopFocus, setRestFocus, setTreasureFocus, setEventFocus,
-  setDeckViewFocus,
+  setMetaFocus, setDeckViewFocus,
   startCoopRun,
 } from './state.js';
 import {
@@ -49,7 +47,6 @@ export function dispatch(action) {
     tagged.actorId = localSlot();
   }
 
-  // DEBUG
   console.log('[dispatch]', mode, 'slot=', localSlot(), 'action=', tagged);
 
   if (mode === 'guest') {
@@ -82,7 +79,6 @@ onAction(action => {
     return;
   }
 
-  // DEBUG: does the card exist in the actor's hand?
   if (action.type === 'PLAY_CARD') {
     const idx = action.actorId ?? 0;
     const p = state.players[idx];
@@ -134,23 +130,17 @@ function applyAction(action, fromNetwork = false) {
     // ---- Run lifecycle ----
     case 'NEW_RUN':           newRun(action.seed); break;
     case 'START_COOP_RUN':    startCoopRun(action.seed); break;
-    case 'CHOOSE_RELIC':      chooseRelic(action.relicId); break;
-    case 'CONFIRM_DECK':      confirmDeck(); break;
+    case 'CHOOSE_RELIC':      chooseRelic(action.relicId, action.actorId); break;
+    case 'CONFIRM_DECK':      confirmDeck(action.actorId); break;
     case 'RETURN_TO_MAIN_MENU': returnToMainMenu(); break;
 
     // ---- Map ----
     case 'START_NODE':        startNode(action.nodeId); break;
     case 'BACK_TO_MAP':       backToMap(); break;
 
-    // ---- Focus (meta screens) ----
+    // ---- Focus ----
     case 'SET_META_FOCUS':    setMetaFocus(action.index); break;
     case 'SET_DECKVIEW_FOCUS': setDeckViewFocus(action.index); break;
-    case 'SET_REWARD_FOCUS':  setRewardFocus(action.index); break;
-    case 'SET_ACT_REWARD_FOCUS': setActRewardFocus(action.index); break;
-    case 'SET_SHOP_FOCUS':    setShopFocus(action.index); break;
-    case 'SET_REST_FOCUS':    setRestFocus(action.index); break;
-    case 'SET_TREASURE_FOCUS': setTreasureFocus(action.index); break;
-    case 'SET_EVENT_FOCUS':   setEventFocus(action.index); break;
 
     // ---- Combat ----
     case 'PLAY_CARD': {
@@ -213,32 +203,33 @@ function applyAction(action, fromNetwork = false) {
       return true;
 
     // ---- Rewards ----
-    case 'CLAIM_REWARD':       claimReward(); break;
-    case 'TAKE_REWARD_CARD':   takeRewardCard(action.defId); break;
-    case 'SKIP_REWARD_CARD':   skipRewardCard(); break;
-    case 'PICK_EVENT_CHOICE':  pickEventChoice(action.index); break;
+    case 'CLAIM_REWARD':       claimReward(action.actorId); break;
+    case 'TAKE_REWARD_CARD':   takeRewardCard(action.defId, action.actorId); break;
+    case 'SKIP_REWARD_CARD':   skipRewardCard(action.actorId); break;
+    case 'PICK_EVENT_CHOICE':  pickEventChoice(action.index, action.actorId); break;
 
     // ---- Shop ----
-    case 'BUY_SHOP_CARD':      buyShopCard(action.index); break;
-    case 'BUY_SHOP_HEAL':      buyShopHeal(); break;
-    case 'BUY_SHOP_REMOVE':    buyShopRemove(action.index); break;
+    case 'BUY_SHOP_CARD':      buyShopCard(action.index, action.actorId); break;
+    case 'BUY_SHOP_HEAL':      buyShopHeal(action.actorId); break;
+    case 'BUY_SHOP_REMOVE':    buyShopRemove(action.index, action.actorId); break;
+    case 'SHOP_DONE':          shopDone(action.actorId); break;
 
     // ---- Rest ----
-    case 'REST_HEAL':          restHeal(); break;
-    case 'REST_ENCHANT_START': restEnchantStart(); break;
+    case 'REST_HEAL':          restHeal(action.actorId); break;
+    case 'REST_ENCHANT_START': restEnchantStart(action.actorId); break;
     case 'APPLY_ENCHANT':      applyEnchant(action.index); break;
     case 'SKIP_ENCHANT':       skipEnchant(); break;
 
     // ---- Act transition ----
     case 'NEXT_ACT':           nextAct(); break;
-    case 'CLAIM_ACT_REWARD':   claimActReward(); break;
-    case 'TAKE_ACT_REWARD_CARD':   takeActRewardCard(action.defId); break;
-    case 'SKIP_ACT_REWARD_CARD':   skipActRewardCard(); break;
-    case 'TAKE_ACT_REWARD_RELIC':  takeActRewardRelic(action.relicId); break;
+    case 'CLAIM_ACT_REWARD':   claimActReward(action.actorId); break;
+    case 'TAKE_ACT_REWARD_CARD':   takeActRewardCard(action.defId, action.actorId); break;
+    case 'SKIP_ACT_REWARD_CARD':   skipActRewardCard(action.actorId); break;
+    case 'TAKE_ACT_REWARD_RELIC':  takeActRewardRelic(action.relicId, action.actorId); break;
 
     // ---- Treasure ----
-    case 'PICK_TREASURE_RELIC': pickTreasureRelic(action.relicId); break;
-    case 'SKIP_TREASURE':       skipTreasure(); break;
+    case 'PICK_TREASURE_RELIC': pickTreasureRelic(action.relicId, action.actorId); break;
+    case 'SKIP_TREASURE':       skipTreasure(action.actorId); break;
 
     // ---- End ----
     case 'FINISH_RUN':          finishRun(); break;
