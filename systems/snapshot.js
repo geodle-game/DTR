@@ -24,6 +24,9 @@ export function snapshotState() {
     shop: state.shop,
     rest: state.rest,
     pendingEnchant: state.pendingEnchant,
+    pendingRelicPick: state.pendingRelicPick,
+    pendingConfirm: state.pendingConfirm,
+    relicChoices: state.relicChoices,
     bossLore: state.bossLore,
     lastHits: state.lastHits,
   };
@@ -48,6 +51,9 @@ export function restoreSnapshot(s) {
   state.shop = s.shop ?? null;
   state.rest = s.rest ?? null;
   state.pendingEnchant = s.pendingEnchant ?? null;
+  state.pendingRelicPick = s.pendingRelicPick ?? null;
+  state.pendingConfirm = s.pendingConfirm ?? null;
+  state.relicChoices = s.relicChoices ?? [];
   state.bossLore = s.bossLore ?? null;
   state.lastHits = s.lastHits || [];
 
