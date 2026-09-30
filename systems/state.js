@@ -52,6 +52,7 @@ export const state = {
   rest: null,
   pendingEnchant: null,
   pendingRelicPick: null,
+  pendingConfirm: null,
   overlays: { deck: false, relics: false, draw: false, discard: false, exhaust: false },
   log: [],
   relicChoices: [],
@@ -174,7 +175,7 @@ export function hasRelicTrigger(trigger, player = activePlayer()) {
 function makePlayer(index, hp, maxHp) {
   return {
     id: index,
-    name: index === 0 ? 'You' : 'Ally',
+    name: index === 0 ? 'Player 1' : 'Player 2',
     hp, maxHp,
     block: 0,
     statuses: {},
@@ -289,7 +290,6 @@ export function newRun(seed = Date.now()) {
   state.activePlayerIndex = 0;
   state.combatActivePlayers = [];
   state.endedTurn = [];
-  state.pendingRelicPick = null;
 
   Object.defineProperty(state.run, 'hp', {
     get() { return state.players[0].hp; }, set(v) { state.players[0].hp = v; }, configurable: true,
@@ -325,60 +325,55 @@ export function newRun(seed = Date.now()) {
   state.bossLore = null;
   state.lastEncounterId = null;
   state.deathPage = 0;
+  state.event = null;
+  state.shop = null;
+  state.rest = null;
+  state.reward = null;
+  state.actReward = null;
 
   beginRelicPick();
 }
 
 export function startCoopRun(seed = Date.now()) {
   newRun(seed);
-  // newRun creates one player; grow it to two for co-op.
   state.players.push(makePlayer(1, 70, 70));
-  // Re-roll relic pick choices for the two-player sequence.
-  state.pendingRelicPick = {
-    picks: {},
-    currentIndex: 0,
-    choices: rollRelicChoices(state.rng, [], 3),
-  };
-  state.relicChoices = state.pendingRelicPick.choices;
-  state.metaFocusIndex = 0;
-  state.activePlayerIndex = 0;
+  // Re-roll relic pick so both players get their own choices.
+  beginRelicPick();
   state.screen = 'relicPick';
 }
 
 function beginRelicPick() {
-  state.pendingRelicPick = {
-    picks: {},
-    currentIndex: 0,
-    choices: rollRelicChoices(state.rng, [], 3),
-  };
-  state.relicChoices = state.pendingRelicPick.choices;
+  const choicesByPlayer = {};
+  const doneByPlayer = {};
+  for (let i = 0; i < state.players.length; i++) {
+    choicesByPlayer[i] = rollRelicChoices(state.rng, [], 3);
+    doneByPlayer[i] = false;
+  }
+  state.pendingRelicPick = { done: doneByPlayer, choicesByPlayer };
+  state.relicChoices = choicesByPlayer[0] || [];
   state.screen = 'relicPick';
 }
 
-export function chooseRelic(relicId) {
+export function chooseRelic(relicId, actorId) {
   const prp = state.pendingRelicPick;
   if (!prp) return;
-  if (!prp.choices.includes(relicId)) return;
-  const idx = prp.currentIndex;
+  const idx = actorId ?? 0;
+  if (prp.done[idx]) return;
+  const choices = prp.choicesByPlayer?.[idx];
+  if (!choices || !choices.includes(relicId)) return;
   const p = state.players[idx];
   if (!p) return;
   p.relic = relicId;
   p.relics = [relicId];
   p.deck = randomStartingDeck(state.rng, 15).map(defId => ({ defId, enchant: null }));
-  prp.picks[idx] = relicId;
-  prp.currentIndex += 1;
+  prp.done[idx] = true;
 
-  if (prp.currentIndex >= state.players.length) {
+  if (state.players.every((_, i) => prp.done[i])) {
     state.pendingRelicPick = null;
+    state.pendingConfirm = { done: {} };
     state.metaFocusIndex = 0;
     state.activePlayerIndex = 0;
     state.screen = 'deckView';
-  } else {
-    prp.choices = rollRelicChoices(state.rng, [], 3);
-    state.relicChoices = prp.choices;
-    state.metaFocusIndex = prp.currentIndex;
-    state.activePlayerIndex = prp.currentIndex;
-    state.screen = 'relicPick';
   }
 }
 
@@ -387,11 +382,16 @@ export function setDeckViewFocus(index) {
   state.activePlayerIndex = index;
 }
 
-export function confirmDeck() {
-  state.run.map = generateMap(state.rng);
-  state.run.currentNodeId = null;
-  state.run.floor = -1;
-  state.screen = 'map';
+export function confirmDeck(actorId) {
+  if (!state.pendingConfirm) state.pendingConfirm = { done: {} };
+  state.pendingConfirm.done[actorId ?? 0] = true;
+  if (state.players.every((_, i) => state.pendingConfirm.done[i])) {
+    state.pendingConfirm = null;
+    state.run.map = generateMap(state.rng);
+    state.run.currentNodeId = null;
+    state.run.floor = -1;
+    state.screen = 'map';
+  }
 }
 
 export function closeOverlays() {
@@ -431,7 +431,7 @@ export function startNode(nodeId) {
   } else if (node.type === 'boss') {
     newCombat(pickEncounter('boss'), 'boss');
   } else if (node.type === 'event') {
-    state.event = { data: randomEvent(state.rng), focusIndex: 0 };
+    state.event = { data: randomEvent(state.rng), done: {} };
     setPhase('event');
     state.screen = 'event';
   } else if (node.type === 'shop') {
@@ -441,22 +441,22 @@ export function startNode(nodeId) {
         healPrice: 60,
         removePrice: 30,
         removeUsed: false,
+        done: false,
       })),
-      focusIndex: 0,
     };
     setPhase('shop');
     state.screen = 'shop';
   } else if (node.type === 'rest') {
-    state.rest = { healedBy: {}, focusIndex: 0 };
+    state.rest = { done: {} };
     setPhase(null);
     state.screen = 'rest';
   } else if (node.type === 'treasure') {
     const perPlayer = state.players.map((p) => {
       const relicChoices = rollRelicChoices(state.rng, p.relics, 3);
       const gold = 30 + Math.floor(state.rng() * 20);
-      return { relicChoices, gold, taken: false, focusIndex: 0 };
+      return { relicChoices, gold, taken: false };
     });
-    state.treasure = { perPlayer, focusIndex: 0 };
+    state.treasure = { perPlayer };
     setPhase(null);
     state.screen = 'treasure';
   } else {
@@ -465,43 +465,42 @@ export function startNode(nodeId) {
   }
 }
 
-export function pickTreasureRelic(relicId) {
+// ---- Treasure ----
+
+export function pickTreasureRelic(relicId, actorId) {
   if (!state.treasure) return;
-  const idx = state.treasure.focusIndex;
-  const slot = state.treasure.perPlayer[idx];
+  const focus = actorId ?? 0;
+  const slot = state.treasure.perPlayer[focus];
   if (!slot || slot.taken) return;
   if (!slot.relicChoices.includes(relicId)) return;
-  const p = state.players[idx];
+  const p = state.players[focus];
   if (!p) return;
   p.relics.push(relicId);
   p.relic = p.relic || relicId;
   p.gold += slot.gold;
   pushLog(`Treasure (${p.name}): ${RELICS[relicId].name}. +${slot.gold} gold.`);
   slot.taken = true;
-  advanceTreasureFocus();
+  advanceTreasure();
 }
 
-export function skipTreasure() {
+export function skipTreasure(actorId) {
   if (!state.treasure) return;
-  const idx = state.treasure.focusIndex;
-  const slot = state.treasure.perPlayer[idx];
+  const focus = actorId ?? 0;
+  const slot = state.treasure.perPlayer[focus];
   if (!slot || slot.taken) return;
-  const p = state.players[idx];
+  const p = state.players[focus];
   if (p) p.gold += slot.gold;
   pushLog(`Skipped treasure (${p?.name}). +${slot.gold} gold.`);
   slot.taken = true;
-  advanceTreasureFocus();
+  advanceTreasure();
 }
 
-function advanceTreasureFocus() {
+function advanceTreasure() {
   const t = state.treasure;
   if (!t) return;
-  const next = t.perPlayer.findIndex(s => !s.taken);
-  if (next === -1) {
+  if (t.perPlayer.every(s => s.taken)) {
     state.treasure = null;
     backToMap();
-  } else {
-    t.focusIndex = next;
   }
 }
 
@@ -547,7 +546,6 @@ export function backToMap() {
 }
 
 export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
-  // Integrity sweep before combat starts — catches any live tampering.
   checkIntegrity(state);
 
   state.combatKind = sourceKind;
@@ -579,7 +577,6 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
     p.maxEnergy = 3; p.energy = 0; p.cardsPlayedThisTurn = 0;
     p.endedTurn = false;
 
-    // Reset transient flags that could leak across combats.
     delete p.rupture;
     delete p.juggernaut;
     delete p.feelNoPain;
@@ -614,7 +611,6 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
   state.endedTurn = state.players.map(() => false);
   setPhase(null);
 
-  // One more integrity pass — catches anything injected by the relic loop.
   checkIntegrity(state);
 
   for (const e of state.enemies) {
@@ -632,6 +628,13 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
 export function endCombat(win) {
   if (state.over) return;
   if (win) {
+    // Revive any fallen allies at 1 HP before we apply post-combat effects.
+    for (const p of state.players) {
+      if (p.hp <= 0) {
+        p.hp = 1;
+        pushLog(`${p.name} is revived at 1 HP.`);
+      }
+    }
     for (const p of state.players) {
       forEachRelic('combatEnd', (r) => {
         if (r.heal) p.hp = Math.min(p.maxHp, p.hp + r.heal);
@@ -678,14 +681,13 @@ export function endCombat(win) {
       });
       return c;
     });
-    const cards = rollCardChoices(state.rng, 3);
     state.reward = {
       perPlayer: state.players.map((_, i) => ({
         coins: coins[i],
+        cardChoices: rollCardChoices(state.rng, 3),
         cardTaken: false,
+        done: false,
       })),
-      cards,
-      focusIndex: 0,
     };
     setPhase('reward');
   }
@@ -703,75 +705,66 @@ export function nextAct() {
   state.run.map = generateMap(state.rng);
   state.run.currentNodeId = null;
   state.run.floor = -1;
-  const relicChoicesPerPlayer = state.players.map(p =>
-    rollRelicChoices(state.rng, p.relics, 3));
-  const cards = rollCardChoices(state.rng, 3);
   state.actReward = {
-    coinsPerPlayer: state.players.map(() => 50 + Math.floor(state.rng() * 30)),
-    cards,
-    relicChoicesPerPlayer,
-    focusIndex: 0,
-    perPlayer: state.players.map(() => ({
+    perPlayer: state.players.map((p) => ({
+      coins: 50 + Math.floor(state.rng() * 30),
+      cardChoices: rollCardChoices(state.rng, 3),
+      relicChoices: rollRelicChoices(state.rng, p.relics, 3),
       cardTaken: false,
       relicTaken: null,
-      coinsClaimed: false,
+      done: false,
     })),
   };
   setPhase('actReward');
   state.screen = 'actReward';
 }
 
-export function takeActRewardCard(defId) {
+export function takeActRewardCard(defId, actorId) {
   if (!state.actReward) return;
-  const idx = state.actReward.focusIndex;
-  const slot = state.actReward.perPlayer[idx];
-  if (!slot || slot.cardTaken) return;
-  if (!grantCard(defId, 'actReward:card', { recipientIndex: idx })) return;
+  const focus = actorId ?? 0;
+  const slot = state.actReward.perPlayer[focus];
+  if (!slot || slot.cardTaken || slot.done) return;
+  if (!slot.cardChoices.includes(defId)) return;
+  if (!grantCard(defId, 'actReward:card', { recipientIndex: focus })) return;
   slot.cardTaken = true;
 }
 
-export function skipActRewardCard() {
+export function skipActRewardCard(actorId) {
   if (!state.actReward) return;
-  const idx = state.actReward.focusIndex;
-  const slot = state.actReward.perPlayer[idx];
-  if (slot) slot.cardTaken = true;
+  const focus = actorId ?? 0;
+  const slot = state.actReward.perPlayer[focus];
+  if (slot && !slot.done) slot.cardTaken = true;
 }
 
-export function takeActRewardRelic(relicId) {
+export function takeActRewardRelic(relicId, actorId) {
   if (!state.actReward) return;
-  const idx = state.actReward.focusIndex;
-  const slot = state.actReward.perPlayer[idx];
-  if (!slot || slot.relicTaken) return;
-  const choices = state.actReward.relicChoicesPerPlayer[idx];
-  if (!choices.includes(relicId)) return;
-  const p = state.players[idx];
+  const focus = actorId ?? 0;
+  const slot = state.actReward.perPlayer[focus];
+  if (!slot || slot.relicTaken || slot.done) return;
+  if (!slot.relicChoices.includes(relicId)) return;
+  const p = state.players[focus];
   if (!p) return;
   p.relics.push(relicId);
   p.relic = p.relic || relicId;
   slot.relicTaken = relicId;
 }
 
-export function claimActReward() {
+export function claimActReward(actorId) {
   if (!state.actReward) return;
   const ar = state.actReward;
-  for (let i = 0; i < state.players.length; i++) {
-    const p = state.players[i];
-    const slot = ar.perPlayer[i];
-    if (!slot || slot.coinsClaimed) continue;
-    const coins = ar.coinsPerPlayer[i] ?? 0;
-    p.gold += coins;
-    slot.coinsClaimed = true;
-    pushLog(`Act ${state.run.act} (${p.name}): +${coins} gold.`);
+  const focus = actorId ?? 0;
+  const slot = ar.perPlayer[focus];
+  if (!slot || slot.done) return;
+  const p = state.players[focus];
+  if (!p) return;
+  p.gold += slot.coins;
+  slot.done = true;
+  pushLog(`Act ${state.run.act} (${p.name}): +${slot.coins} gold.`);
+  if (ar.perPlayer.every(s => s.done)) {
+    state.actReward = null;
+    setPhase(null);
+    state.screen = 'map';
   }
-  state.actReward = null;
-  setPhase(null);
-  state.screen = 'map';
-}
-
-export function setActRewardFocus(index) {
-  if (!state.actReward) return;
-  if (index < 0 || index >= state.players.length) return;
-  state.actReward.focusIndex = index;
 }
 
 export function finishRun() {
@@ -816,11 +809,14 @@ export function resetBossScript(enemy) {
 }
 
 export function startPlayerTurnFor(playerIndex, isFirstTurn = false) {
-  // Integrity sweep on every turn — catches live tampering.
   checkIntegrity(state);
 
   const p = state.players[playerIndex];
   if (!p) return;
+  if (p.hp <= 0) {
+    p.endedTurn = true;
+    return;
+  }
   p.endedTurn = false;
   p.cardsPlayedThisTurn = 0;
   for (const c of p.hand) delete c.disabledThisTurn;
@@ -847,82 +843,55 @@ export function livingEnemies() {
   return state.enemies.filter(e => e.hp > 0);
 }
 
-export function claimRewardFor(index) {
+export function claimReward(actorId) {
   if (!state.reward) return;
-  const slot = state.reward.perPlayer[index];
-  if (!slot || slot.coinsClaimed) return;
-  const p = state.players[index];
+  const focus = actorId ?? 0;
+  const slot = state.reward.perPlayer[focus];
+  if (!slot || slot.done) return;
+  const p = state.players[focus];
   if (!p) return;
   p.gold += slot.coins;
-  slot.coinsClaimed = true;
+  slot.done = true;
   pushLog(`${p.name} +${slot.coins} gold.`);
+  if (state.reward.perPlayer.every(s => s.done)) {
+    state.reward = null;
+    setPhase(null);
+    backToMap();
+  }
 }
 
-export function claimReward() {
+export function takeRewardCard(defId, actorId) {
   if (!state.reward) return;
-  for (let i = 0; i < state.players.length; i++) claimRewardFor(i);
-  state.reward = null;
-  setPhase(null);
-  backToMap();
-}
-
-export function takeRewardCard(defId) {
-  if (!state.reward) return;
-  const idx = state.reward.focusIndex;
-  const slot = state.reward.perPlayer[idx];
-  if (!slot || slot.cardTaken) return;
-  if (!grantCard(defId, 'reward:combat', { recipientIndex: idx })) return;
+  const focus = actorId ?? 0;
+  const slot = state.reward.perPlayer[focus];
+  if (!slot || slot.cardTaken || slot.done) return;
+  if (!slot.cardChoices.includes(defId)) return;
+  if (!grantCard(defId, 'reward:combat', { recipientIndex: focus })) return;
   slot.cardTaken = true;
-  pushLog(`${state.players[idx].name} added ${CARDS[defId].name} to their deck.`);
+  pushLog(`${state.players[focus].name} added ${CARDS[defId].name} to their deck.`);
 }
 
-export function skipRewardCard() {
+export function skipRewardCard(actorId) {
   if (!state.reward) return;
-  const idx = state.reward.focusIndex;
-  const slot = state.reward.perPlayer[idx];
-  if (slot) slot.cardTaken = true;
+  const focus = actorId ?? 0;
+  const slot = state.reward.perPlayer[focus];
+  if (slot && !slot.done) slot.cardTaken = true;
 }
 
-export function setRewardFocus(index) {
-  if (!state.reward) return;
-  if (index < 0 || index >= state.players.length) return;
-  state.reward.focusIndex = index;
-}
-
-export function setShopFocus(index) {
-  if (!state.shop) return;
-  if (index < 0 || index >= state.players.length) return;
-  state.shop.focusIndex = index;
-}
-
-export function setRestFocus(index) {
-  if (!state.rest) return;
-  if (index < 0 || index >= state.players.length) return;
-  state.rest.focusIndex = index;
-}
-
-export function setTreasureFocus(index) {
-  if (!state.treasure) return;
-  if (index < 0 || index >= state.players.length) return;
-  state.treasure.focusIndex = index;
-}
-
-export function setEventFocus(index) {
-  if (!state.event) return;
-  if (index < 0 || index >= state.players.length) return;
-  state.event.focusIndex = index;
-}
-
-export function pickEventChoice(index) {
+export function pickEventChoice(index, actorId) {
   if (!state.event) return;
   const ev = state.event.data;
   const choice = ev.choices[index];
   if (!choice) return;
-  const focus = state.event.focusIndex ?? 0;
+  const focus = actorId ?? 0;
+  if (state.event.done[focus]) return;
   for (const eff of choice.effects) applyMetaEffect(eff, focus);
   pushLog(`Event (${state.players[focus]?.name}): ${ev.name} → ${choice.label}`);
-  setPhase(null);
-  backToMap();
+  state.event.done[focus] = true;
+  if (state.players.every((_, i) => state.event.done[i])) {
+    setPhase(null);
+    backToMap();
+  }
 }
 
 function applyMetaEffect(eff, recipientIndex) {
@@ -937,12 +906,12 @@ function applyMetaEffect(eff, recipientIndex) {
   }
 }
 
-export function buyShopCard(index) {
+export function buyShopCard(index, actorId) {
   if (!state.shop) return;
-  const focus = state.shop.focusIndex;
+  const focus = actorId ?? 0;
   const p = state.players[focus];
   const inv = state.shop.perPlayer[focus];
-  if (!p || !inv) return;
+  if (!p || !inv || inv.done) return;
   const item = inv.items[index];
   if (!item || item.sold) return;
   if (p.gold < item.price) return;
@@ -952,24 +921,24 @@ export function buyShopCard(index) {
   pushLog(`${p.name} bought ${CARDS[item.defId].name} for ${item.price} gold.`);
 }
 
-export function buyShopHeal() {
+export function buyShopHeal(actorId) {
   if (!state.shop) return;
-  const focus = state.shop.focusIndex;
+  const focus = actorId ?? 0;
   const p = state.players[focus];
   const inv = state.shop.perPlayer[focus];
-  if (!p || !inv) return;
+  if (!p || !inv || inv.done) return;
   if (p.gold < inv.healPrice) return;
   p.gold -= inv.healPrice;
   p.hp = Math.min(p.maxHp, p.hp + 25);
   pushLog(`${p.name} healed 25 HP.`);
 }
 
-export function buyShopRemove(index) {
+export function buyShopRemove(index, actorId) {
   if (!state.shop) return;
-  const focus = state.shop.focusIndex;
+  const focus = actorId ?? 0;
   const p = state.players[focus];
   const inv = state.shop.perPlayer[focus];
-  if (!p || !inv || inv.removeUsed) return;
+  if (!p || !inv || inv.removeUsed || inv.done) return;
   if (p.gold < inv.removePrice) return;
   if (index < 0 || index >= p.deck.length) return;
   p.gold -= inv.removePrice;
@@ -978,35 +947,53 @@ export function buyShopRemove(index) {
   pushLog(`${p.name} removed ${CARDS[removed.defId].name} for ${inv.removePrice} gold.`);
 }
 
-export function restHeal() {
+export function shopDone(actorId) {
+  if (!state.shop) return;
+  const focus = actorId ?? 0;
+  const inv = state.shop.perPlayer[focus];
+  if (!inv || inv.done) return;
+  inv.done = true;
+  if (state.shop.perPlayer.every(x => x.done)) {
+    state.shop = null;
+    setPhase(null);
+    backToMap();
+  }
+}
+
+export function restHeal(actorId) {
   if (!state.rest) return;
-  const focus = state.rest.focusIndex;
+  const focus = actorId ?? 0;
+  if (state.rest.done[focus]) return;
   const p = state.players[focus];
   if (!p) return;
   const amount = Math.floor(p.maxHp * 0.3);
   p.hp = Math.min(p.maxHp, p.hp + amount);
-  state.rest.healedBy[focus] = true;
+  state.rest.done[focus] = true;
   pushLog(`${p.name} rested, healed ${amount}.`);
-  advanceRestFocus();
+  finishRest(focus);
 }
 
-function advanceRestFocus() {
+function finishRest(focus) {
   if (!state.rest) return;
-  const next = state.players.findIndex((_, i) => !state.rest.healedBy[i]);
-  if (next === -1) backToMap();
-  else state.rest.focusIndex = next;
+  if (state.players.every((_, i) => state.rest.done[i])) {
+    state.rest = null;
+    backToMap();
+  } else {
+    state.screen = 'rest';
+  }
 }
 
-export function restEnchantStart() {
+export function restEnchantStart(actorId) {
   if (!state.rest) return;
-  const focus = state.rest.focusIndex;
+  const focus = actorId ?? 0;
+  if (state.rest.done[focus]) return;
   const p = state.players[focus];
   if (!p) return;
   const eligible = p.deck.map((entry, i) => entry.enchant ? -1 : i).filter(i => i >= 0);
   if (eligible.length === 0) {
     pushLog(`${p.name} has no enchantable cards.`);
-    state.rest.healedBy[focus] = true;
-    advanceRestFocus();
+    state.rest.done[focus] = true;
+    finishRest(focus);
     return;
   }
   const enchant = rollEnchant(state.rng);
@@ -1033,8 +1020,8 @@ export function applyEnchant(index) {
   pushLog(`Enchanted ${CARDS[entry.defId].name} with ${enchant.name} (${p.name}).`);
   state.pendingEnchant = null;
   if (state.rest) {
-    state.rest.healedBy[focus] = true;
-    advanceRestFocus();
+    state.rest.done[focus] = true;
+    finishRest(focus);
   } else {
     backToMap();
   }
@@ -1045,8 +1032,8 @@ export function skipEnchant() {
   const focus = state.pendingEnchant.playerIndex ?? 0;
   state.pendingEnchant = null;
   if (state.rest) {
-    state.rest.healedBy[focus] = true;
-    advanceRestFocus();
+    state.rest.done[focus] = true;
+    finishRest(focus);
   } else {
     backToMap();
   }
@@ -1061,13 +1048,23 @@ export function debugFightWarden() { newCombat('act4-boss', 'boss'); }
 export function markPlayerEndedTurn(playerIndex) {
   if (!isCombat()) return false;
   const p = state.players[playerIndex];
-  if (!p || p.hp <= 0) return false;
-  if (p.endedTurn) return false;
+  if (!p) return false;
+  if (p.hp <= 0) {
+    p.endedTurn = true;
+    state.endedTurn = state.players.map(x => !!x.endedTurn);
+    return allPlayersEndedTurn();
+  }
+  if (p.endedTurn) return allPlayersEndedTurn();
   p.endedTurn = true;
   state.endedTurn = state.players.map(x => !!x.endedTurn);
   return allPlayersEndedTurn();
 }
 
 export function allPlayersEndedTurn() {
-  return state.combatActivePlayers.every(i => state.players[i]?.endedTurn);
+  return state.combatActivePlayers.every(i => {
+    const p = state.players[i];
+    if (!p) return true;
+    if (p.hp <= 0) return true;
+    return !!p.endedTurn;
+  });
 }
