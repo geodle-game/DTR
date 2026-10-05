@@ -10,8 +10,11 @@
 // ctx = { attacker, target, allTargets }
 // Empty string hides the placeholder.
 
+import { getClassMods } from './classes.js';
+
 // --- Damage math shared by player AND enemy cards ---
 // `isSpell` swaps the flat stat bonus from Strength → Focus.
+// Class modifiers are applied here if the attacker/target is a player.
 export function damageFromContext(attacker, target, base, strengthMultiplier = 1, isSpell = false) {
   if (!attacker || !target) return null;
   const scale = attacker.damageScale ?? 1;
@@ -21,6 +24,16 @@ export function damageFromContext(attacker, target, base, strengthMultiplier = 1
   let dmg = (base * scale) + flatBonus;
   if (attacker.statuses?.weak) dmg *= 0.75;
   if (target.statuses?.vulnerable) dmg *= 1.5;
+
+  if (attacker.classId) {
+    const mods = getClassMods(attacker.classId);
+    dmg *= isSpell ? mods.magicDamage : mods.physicalDamage;
+  }
+  if (target.classId) {
+    const mods = getClassMods(target.classId);
+    dmg *= mods.damageTaken;
+  }
+
   return Math.max(0, Math.floor(dmg));
 }
 
@@ -56,7 +69,7 @@ export function liveAoE(base, opts = {}) {
 
 export const CARDS = {
   // ================================================================
-  // STARTER
+  // STARTER — Vanguard
   // ================================================================
   strike: {
     id: 'strike', name: 'Strike', cost: 1, rarity: 'starter',
@@ -92,6 +105,43 @@ export const CARDS = {
       { kind: 'applyStatus', status: 'weak', amount: 1 },
     ],
     liveValues: liveDamage(3),
+  },
+
+  // ================================================================
+  // STARTER — Magnus
+  // ================================================================
+  'arcane-spark': {
+    id: 'arcane-spark', name: 'Arcane Spark', cost: 1, rarity: 'starter',
+    type: 'spell', target: 'enemy', destination: 'discard',
+    animation: 'magic',
+    text: 'Deal 6 damage.{live}',
+    effects: [{ kind: 'damage', amount: 6 }],
+    liveValues: liveDamage(6, { spell: true }),
+  },
+
+  // ================================================================
+  // STARTER — Priest
+  // ================================================================
+  mend: {
+    id: 'mend', name: 'Mend', cost: 1, rarity: 'starter',
+    type: 'skill', target: 'self', destination: 'discard',
+    text: 'Heal 6 HP.',
+    effects: [{ kind: 'heal', amount: 6 }],
+  },
+  blessing: {
+    id: 'blessing', name: 'Blessing', cost: 1, rarity: 'starter',
+    type: 'skill', target: 'self', destination: 'discard',
+    text: 'Gain 8 Block.',
+    effects: [{ kind: 'block', amount: 8 }],
+  },
+  sanctuary: {
+    id: 'sanctuary', name: 'Sanctuary', cost: 2, rarity: 'starter',
+    type: 'skill', target: 'self', destination: 'discard',
+    text: 'Heal 4 HP. Gain 10 Block.',
+    effects: [
+      { kind: 'heal', amount: 4 },
+      { kind: 'block', amount: 10 },
+    ],
   },
 
   // ================================================================
