@@ -1,16 +1,16 @@
 // ============================================================
-// THE WARDEN — Act 4 boss
+// THE SENTINEL — Act 4 boss
 //
-// The Core's silent enforcer. Built from the dungeon's oldest
-// defenses. Does not speak, does not negotiate. Just blocks
-// the final door with everything it has.
+// The Asteri's oldest defense. Built before the Collapse to guard
+// the deepest doors and never given the order to stand down. It
+// has been running the same command for centuries.
 //
 // Passive: caps the player at 10 cards played per turn.
 // ============================================================
 
 export const ENEMY = {
   id: 'the-warden',
-  name: 'The Warden',
+  name: 'The Sentinel',
   hp: 260,
   isBoss: true,
   phaseThresholds: { phase2: 0.6, phase3: 0.25 },
@@ -72,31 +72,32 @@ export const CARDS = {
 export const LORE = {
   start: [
     'Something enormous rises from the floor.',
-    'It has no face. No voice. Just a wall of arms and stone and old, patient iron.',
-    'The Core made it to be the last thing standing between you and itself.',
+    'It has no face. No voice. Just a wall of stone and old, patient iron covered in Script that has not stopped glowing.',
+    'The Asteri built it. Before the Collapse, before the Disappearance, before any of this had a name.',
+    'It was made to guard the deepest doors. It never received the order to stand down.',
     'It does not speak. It does not need to.',
   ],
   phase2: [
-    'A wall of stone folds away. Another takes its place.',
-    'The Warden does not tire. The Warden does not think. The Warden simply is.',
+    'A wall of stone folds away. Another takes its place. The Script on its chest has never dimmed.',
+    'It has been running the same command for centuries. It has never been told it is over.',
+    'It does not tire. It does not think. It simply is.',
   ],
   phase3: [
     'It is breaking. It is still standing.',
-    'The floor beneath it hums with the Core\'s voice.',
+    'The floor beneath it hums with something older than Asteri work — the thing the machine was built to reach.',
     'The final door is just past it.',
   ],
   onDeath: [
-    'The Warden cracks.',
+    'The Sentinel cracks.',
     'It falls without a sound — a wall that finally learned how.',
+    'The Script on its chest fades for the first time in a thousand years.',
     'Behind it, the final door opens.',
-    'You can feel the Core waiting on the other side. Not afraid. Not angry. Just… patient.',
-    'It has been waiting a thousand years. It can wait a few more seconds.',
+    'You can feel something waiting on the other side. Not afraid. Not angry. Just patient.',
+    'It has been waiting a very long time. It can wait a few more seconds.',
   ],
   onPlayerDeath: [
-    'The Warden closes over you like a tomb.',
-    'You do not hear the Core. You do not hear anything.',
-    'But your hand closes around the amulet at your chest.',
-    'It is warm. It has always been warm.',
-    'It pulls you back.',
+    'The Sentinel closes over you like a tomb.',
+    'You do not hear the machine. You do not hear anything.',
+    'But your hand closes around the fragment at your chest.',
   ],
 };
