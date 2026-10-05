@@ -1,6 +1,19 @@
-export const FLOORS = 15;
+// ============================================================
+// data/maps.js
+// Map generation constants and per-mode floor layouts.
+// ============================================================
+
 export const WIDTH = 7;
-export const BOSS_FLOOR = FLOORS;
+
+// MC2: the long campaign. 15 acts, 15 regular floors each.
+export const FLOORS_MC2 = 15;
+
+// MC1: the short prologue. 5 acts, 4 regular floors each (+1 boss = 5 total).
+export const FLOORS_MC1 = 4;
+
+// Legacy export so nothing that imports FLOORS breaks.
+export const FLOORS = FLOORS_MC2;
+export const BOSS_FLOOR = FLOORS_MC2;
 
 export const NODE_TYPES = {
   monster:   { id: 'monster',   label: 'Monster',   color: '#ff6b6b', symbol: '⚔' },
@@ -12,44 +25,78 @@ export const NODE_TYPES = {
   boss:      { id: 'boss',      label: 'Boss',      color: '#e05c5c', symbol: '☠' },
 };
 
-// Per-floor type weights. Higher weight = more likely that a node on
-// that floor rolls that type. Floors generate 2-5 nodes, so a 15%
-// weight on a 4-node floor means roughly 0-1 rest nodes there.
-//
-// Rest distribution: starts ~10% at floor 3, ramps to ~20-25% mid-act,
-// and lands at ~40-50% right before the boss.
+// ============================================================
+// MC2 LAYOUT — 15 regular floors. Unchanged from before.
+// ============================================================
 export function act1Layout() {
   return {
     floorWeights: [
-      // 0-1: safe opener, monsters only.
       { monster: 1 },                                              // 0
       { monster: 1 },                                              // 1
-
-      // 2-5: early act. Events and shops start showing up, first rests.
       { monster: 0.6,  event: 0.3,  shop: 0.1 },                   // 2
       { monster: 0.5,  event: 0.25, elite: 0.15, rest: 0.1 },      // 3
       { monster: 0.45, event: 0.25, treasure: 0.15, rest: 0.15 },  // 4
       { monster: 0.45, event: 0.25, elite: 0.15, rest: 0.15 },     // 5
-
-      // 6-9: mid act. Rest is a regular option here.
       { monster: 0.4,  event: 0.25, shop: 0.15, rest: 0.2 },       // 6
       { monster: 0.4,  event: 0.25, elite: 0.15, treasure: 0.1, rest: 0.1 }, // 7
       { monster: 0.4,  event: 0.2,  shop: 0.15, elite: 0.1, rest: 0.15 },    // 8
       { monster: 0.4,  event: 0.2,  elite: 0.2, rest: 0.2 },       // 9
-
-      // 10-11: late act. More rest, more elites for challenge.
       { monster: 0.35, event: 0.2,  elite: 0.15, rest: 0.2, shop: 0.1 }, // 10
       { monster: 0.35, event: 0.2,  elite: 0.15, rest: 0.2, shop: 0.1 }, // 11
-
-      // 12-13: final stretch. Rest is common so the player can heal up.
       { monster: 0.3,  event: 0.2,  elite: 0.15, rest: 0.25, treasure: 0.1 }, // 12
       { monster: 0.25, event: 0.15, elite: 0.15, rest: 0.35, shop: 0.1 },      // 13
-
-      // 14: guaranteed rest/shop/elite before the boss.
-      { rest: 1 },            // 14
-
-      // 15: boss.
+      { rest: 1 },                                                 // 14
       { boss: 1 },                                                 // 15
     ],
   };
+}
+
+// ============================================================
+// MC1 LAYOUT — 4 regular floors + boss. No elites. Tighter ramp.
+// ============================================================
+export function prologueLayout() {
+  return {
+    floorWeights: [
+      { monster: 1 },                                            // 0
+      { monster: 0.75, event: 0.25 },                            // 1
+      { monster: 0.6,  event: 0.2,  rest: 0.2 },                 // 2
+      { monster: 0.65, shop: 0.15, rest: 0.2 },                  // 3
+      { rest: 1 },                                               // 4 (pre-boss)
+      { boss: 1 },                                               // 5
+    ],
+  };
+}
+
+// ============================================================
+// Mode config — read by systems at runtime.
+// ============================================================
+export const RUN_MODES = {
+  mc1: {
+    id: 'mc1',
+    label: 'Prologue',
+    actsTotal: 5,
+    regularFloors: FLOORS_MC1,
+    enemyHpMult: 0.6,
+    enemyDmgMult: 0.5,
+    allowElites: false,
+    nodeCountMin: 2,
+    nodeCountMax: 3,
+    plotArmor: true,
+  },
+  mc2: {
+    id: 'mc2',
+    label: 'Descent',
+    actsTotal: 15,
+    regularFloors: FLOORS_MC2,
+    enemyHpMult: 1.0,
+    enemyDmgMult: 1.0,
+    allowElites: true,
+    nodeCountMin: 2,
+    nodeCountMax: 5,
+    plotArmor: false,
+  },
+};
+
+export function getModeConfig(mode) {
+  return RUN_MODES[mode] ?? RUN_MODES.mc2;
 }
