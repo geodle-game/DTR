@@ -13,6 +13,7 @@ import { CARDS, cardBaseDamage } from '../data/cards.js';
 import { RELICS } from '../data/relics.js';
 import { ENEMY_CARDS } from '../data/enemy-cards.js';
 import { getEnchant } from '../data/enchants.js';
+import { getClassMods } from '../data/classes.js';
 
 const combat = {
   attacksThisTurn: {},
@@ -186,8 +187,6 @@ function damagePlayerHp(player, amount) {
   const lost = before - player.hp;
   if (lost <= 0) return 0;
 
-  // If this killed the player, auto-mark them as ended this turn so the
-  // party can move on without them.
   if (player.hp <= 0 && !player.endedTurn) {
     player.endedTurn = true;
     if (Array.isArray(state.endedTurn)) state.endedTurn[player.id] = true;
@@ -395,6 +394,12 @@ function applyEffect(eff, targets, card, source) {
         forEachRelic('onBlockGain', (r) => {
           if (r.blockBonus) amount += r.blockBonus;
         }, source);
+        if (source.classId) {
+          const mods = getClassMods(source.classId);
+          const def = CARDS[card.defId] || ENEMY_CARDS[card.defId];
+          const isSpellCard = def?.type === 'spell';
+          amount = Math.floor(amount * (isSpellCard ? mods.magicBlock : mods.physicalBlock));
+        }
       }
       source.block += amount;
       pushLog(`  ${source.name || 'You'} gained ${amount} block.`);
@@ -409,10 +414,16 @@ function applyEffect(eff, targets, card, source) {
       break;
     }
 
-    case 'heal':
-      source.hp = Math.min(source.maxHp, source.hp + eff.amount);
-      pushLog(`  ${source.name || 'You'} healed ${eff.amount}.`);
+    case 'heal': {
+      let amount = eff.amount;
+      if (state.players.includes(source) && source.classId) {
+        const mods = getClassMods(source.classId);
+        amount = Math.floor(amount * mods.healPower);
+      }
+      source.hp = Math.min(source.maxHp, source.hp + amount);
+      pushLog(`  ${source.name || 'You'} healed ${amount}.`);
       break;
+    }
 
     case 'loseHpSelf': {
       const before = source.hp;
@@ -447,7 +458,14 @@ function applyEffect(eff, targets, card, source) {
 
     case 'applyStatus':
       for (const t of targets) {
-        applyStatus(t, eff.status, eff.amount);
+        let amount = eff.amount;
+        if (state.players.includes(source) && source.classId) {
+          const mods = getClassMods(source.classId);
+          if (eff.status !== 'strength' && eff.status !== 'focus') {
+            amount = Math.floor(amount * mods.statusPotency);
+          }
+        }
+        applyStatus(t, eff.status, amount);
         if (eff.status === 'strength' && state.players.includes(t)) {
           forEachRelic('onGainStrength', (r) => {
             if (r.blockOnStrength) {
@@ -456,7 +474,7 @@ function applyEffect(eff, targets, card, source) {
             }
           }, t);
         }
-        pushLog(`  ${t.name || 'You'} gained ${eff.amount} ${eff.status}.`);
+        pushLog(`  ${t.name || 'You'} gained ${amount} ${eff.status}.`);
       }
       break;
 
@@ -812,6 +830,16 @@ export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}
   dmg *= outgoingMultiplier(attacker);
   dmg *= incomingMultiplier(target);
 
+  // ---- Class modifiers ----
+  if (state.players.includes(attacker) && attacker.classId) {
+    const mods = getClassMods(attacker.classId);
+    dmg *= isSpell ? mods.magicDamage : mods.physicalDamage;
+  }
+  if (state.players.includes(target) && target.classId) {
+    const mods = getClassMods(target.classId);
+    dmg *= mods.damageTaken;
+  }
+
   if (!state.players.includes(target)) {
     const passives = activeBossPassives();
     if (isSpell && passives.resistSpell != null) dmg *= (1 - passives.resistSpell);
@@ -884,7 +912,6 @@ export function beginPlayerEndTurn(playerIndex) {
   if (!p) return { allReady: false };
   if (p.endedTurn) return { allReady: allPlayersEndedTurn() };
 
-  // End-of-turn Burn damage for this player.
   for (const c of p.hand) {
     const def = CARDS[c.defId];
     if (def.endOfTurnDamage) {
@@ -896,7 +923,6 @@ export function beginPlayerEndTurn(playerIndex) {
   recycleHand(state, p);
   tickStatuses(p);
 
-  // If the last living player just died to Burn, the run ends here.
   if (state.players.every(x => x.hp <= 0)) {
     pushLog('Defeat.');
     endCombat(false);
@@ -948,7 +974,6 @@ export function resolveEnemyTurn() {
     return;
   }
 
-  // Per-player start-of-turn effects and new turn.
   for (const p of state.players) {
     if (p.hp <= 0) continue;
     if (p.perTurnStatuses) {
