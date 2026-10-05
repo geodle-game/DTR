@@ -11,8 +11,9 @@ import {
   takeActRewardCard, skipActRewardCard, takeActRewardRelic,
   finishRun, pickTreasureRelic, skipTreasure,
   activePlayer, setMetaFocus, setDeckViewFocus,
-  startCoopRun, restartAct,
+  startCoopRun, restartAct, triggerPlotArmor,
   advanceAbsorption, completeAbsorption,
+  recallTo, openRecallScreen, closeRecallScreen,
 } from './state.js';
 import {
   playCard, beginPlayerEndTurn, beginEnemyTurn, resolveEnemyTurn,
@@ -24,6 +25,10 @@ import { snapshotState, restoreSnapshot } from './snapshot.js';
 import { render } from '../ui/render.js';
 import { animateHits } from '../ui/animations.js';
 
+// ------------------------------------------------------------
+// Local slot / network helpers
+// ------------------------------------------------------------
+
 function localSlot() {
   return state.localSlot;
 }
@@ -34,6 +39,10 @@ function isMyAction(action) {
   if (action.actorId == null) return true;
   return action.actorId === slot;
 }
+
+// ------------------------------------------------------------
+// Public dispatch
+// ------------------------------------------------------------
 
 export function dispatch(action) {
   const mode = getMode();
@@ -50,6 +59,7 @@ export function dispatch(action) {
       console.warn('[dispatch] guest REJECTED its own action:', tagged);
       return;
     }
+    console.log('[dispatch] guest → sendAction', tagged);
     sendAction(tagged);
     return;
   }
@@ -63,10 +73,28 @@ export function dispatch(action) {
   render();
 }
 
+// ------------------------------------------------------------
+// Network callbacks
+// ------------------------------------------------------------
+
 onAction(action => {
+  console.log('[onAction] host received from guest:', action);
+
   const slot = localSlot();
   if (slot != null && action.actorId != null && action.actorId === slot) {
+    console.warn('[onAction] host rejected echo of own action');
     return;
+  }
+
+  if (action.type === 'PLAY_CARD') {
+    const idx = action.actorId ?? 0;
+    const p = state.players[idx];
+    const handUids = p ? p.hand.map(c => c.uid) : [];
+    const found = p ? p.hand.find(c => c.uid === action.cardUid) : null;
+    console.log('[onAction][PLAY_CARD] actorIdx=', idx,
+      'cardUid=', action.cardUid,
+      'found=', !!found,
+      'hand=', handUids);
   }
 
   state.lastHits = [];
@@ -81,11 +109,21 @@ onAction(action => {
 });
 
 onSnapshot(snap => {
+  console.log('[onSnapshot] guest received snapshot',
+    'screen=', snap.screen,
+    'turn=', snap.turn,
+    'p1Energy=', snap.players?.[1]?.energy,
+    'enemies[0].hp=', snap.enemies?.[0]?.hp,
+    'lastHits=', snap.lastHits?.length);
   const hits = (snap.lastHits || []).slice();
   restoreSnapshot(snap);
   render();
   if (hits.length) setTimeout(() => animateHits(hits), 30);
 });
+
+// ------------------------------------------------------------
+// Action handler
+// ------------------------------------------------------------
 
 function applyAction(action, fromNetwork = false) {
   const mode = getMode();
@@ -111,6 +149,11 @@ function applyAction(action, fromNetwork = false) {
     case 'START_NODE':           startNode(action.nodeId); break;
     case 'BACK_TO_MAP':          backToMap(); break;
 
+    // ---- Recall (map teleport) ----
+    case 'OPEN_RECALL':          openRecallScreen(); break;
+    case 'CLOSE_RECALL':         closeRecallScreen(); break;
+    case 'RECALL_TO':            recallTo(action.act, action.nodeId, action.actorId); break;
+
     // ---- Focus ----
     case 'SET_META_FOCUS':       setMetaFocus(action.index); break;
     case 'SET_DECKVIEW_FOCUS':   setDeckViewFocus(action.index); break;
@@ -119,16 +162,38 @@ function applyAction(action, fromNetwork = false) {
     case 'PLAY_CARD': {
       const actorIdx = action.actorId ?? 0;
       const player = state.players[actorIdx];
-      if (!player) return false;
+      if (!player) {
+        console.warn('[PLAY_CARD] FAIL: no player at index', actorIdx);
+        return false;
+      }
       const card = player.hand.find(c => c.uid === action.cardUid);
-      if (!card) return false;
-      return playCard(card, player, action.targetUid ?? null);
+      if (!card) {
+        console.warn('[PLAY_CARD] FAIL: card not in hand',
+          'looking for uid', action.cardUid,
+          'in P' + actorIdx + ' hand of', player.hand.map(c => c.uid));
+        return false;
+      }
+      const result = playCard(card, player, action.targetUid ?? null);
+      if (!result) {
+        console.warn('[PLAY_CARD] FAIL: playCard returned false',
+          'def=', card.defId,
+          'energy=', player.energy,
+          'ended=', player.endedTurn,
+          'turn=', state.turn,
+          'over=', state.over);
+      }
+      return result;
     }
 
     case 'END_TURN': {
-      if (state.turn !== 'player' || state.over) return false;
+      if (state.turn !== 'player' || state.over) {
+        console.warn('[END_TURN] rejected, turn/over =', state.turn, state.over);
+        return false;
+      }
       const actorIdx = action.actorId ?? 0;
+      console.log('[END_TURN] P' + actorIdx + ' ending');
       const { allReady } = beginPlayerEndTurn(actorIdx);
+      console.log('[END_TURN] allReady=', allReady);
       if (state.over) return true;
       if (allReady) {
         beginEnemyTurn();
@@ -149,7 +214,8 @@ function applyAction(action, fromNetwork = false) {
       state.pendingCardUid = null;
       return true;
 
-    // ---- Plot armor ----
+    // ---- Plot armor (MC1 act restart) ----
+    case 'TRIGGER_PLOT_ARMOR':   triggerPlotArmor(); break;
     case 'RESTART_ACT':          restartAct(); break;
 
     // ---- Absorption (MC1 ending) ----
