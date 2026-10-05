@@ -11,6 +11,7 @@ import { rollShop } from '../data/shop.js';
 import { bannerForCombat } from '../data/banners.js';
 import { rollEnchant, getEnchant } from '../data/enchants.js';
 import { BOSSES } from '../data/bosses/index.js';
+import { CLASSES, getClass, playableClasses, isCardAllowedForClass } from '../data/classes.js';
 import { clearSave, checkIntegrity } from './save.js';
 
 const BOSS_LORE = {};
@@ -53,6 +54,7 @@ export const state = {
   pendingEnchant: null,
   pendingRelicPick: null,
   pendingConfirm: null,
+  pendingClassPick: null,
   overlays: { deck: false, relics: false, draw: false, discard: false, exhaust: false },
   log: [],
   relicChoices: [],
@@ -176,6 +178,7 @@ function makePlayer(index, hp, maxHp) {
   return {
     id: index,
     name: index === 0 ? 'Player 1' : 'Player 2',
+    classId: null,
     hp, maxHp,
     block: 0,
     statuses: {},
@@ -248,6 +251,12 @@ export function grantCard(defId, source = 'unknown', opts = {}) {
     return false;
   }
 
+  if (player.classId && !isCardAllowedForClass(defId, player.classId)) {
+    console.warn(`[deckGuard] REJECTED ${defId} — class "${player.classId}" cannot use it.`);
+    pushGrantLog({ defId, source, recipientIndex, allowed: false, reason: 'class-banned' });
+    return false;
+  }
+
   const phase = run.phase || null;
   if (!ALLOWED_GRANT_PHASES.has(phase)) {
     console.warn(`[deckGuard] REJECTED ${defId} (source: ${source}) — phase "${phase}".`);
@@ -310,7 +319,6 @@ export function newRun(seed = Date.now()) {
     get() { return state.players[0].deck; }, set(v) { state.players[0].deck = v; }, configurable: true,
   });
 
-  state.screen = 'relicPick';
   state.log = [];
   state.over = false;
   state.result = null;
@@ -331,14 +339,42 @@ export function newRun(seed = Date.now()) {
   state.reward = null;
   state.actReward = null;
 
-  beginRelicPick();
+  beginClassPick();
 }
 
 export function startCoopRun(seed = Date.now()) {
   newRun(seed);
   state.players.push(makePlayer(1, 70, 70));
-  beginRelicPick();
-  state.screen = 'relicPick';
+  beginClassPick();
+}
+
+function beginClassPick() {
+  const done = {};
+  for (let i = 0; i < state.players.length; i++) done[i] = false;
+  state.pendingClassPick = { done };
+  state.screen = 'classPick';
+}
+
+export function pickClass(classId, actorId) {
+  const pcp = state.pendingClassPick;
+  if (!pcp) return;
+  const idx = actorId ?? 0;
+  if (pcp.done[idx]) return;
+  const cls = CLASSES[classId];
+  if (!cls || cls.locked) return;
+  const p = state.players[idx];
+  if (!p) return;
+
+  p.classId = classId;
+  p.hp = cls.startHp;
+  p.maxHp = cls.startHp;
+  p.deck = cls.starterDeck().map(defId => ({ defId, enchant: null }));
+
+  pcp.done[idx] = true;
+  if (state.players.every((_, i) => pcp.done[i])) {
+    state.pendingClassPick = null;
+    beginRelicPick();
+  }
 }
 
 function beginRelicPick() {
@@ -364,7 +400,6 @@ export function chooseRelic(relicId, actorId) {
   if (!p) return;
   p.relic = relicId;
   p.relics = [relicId];
-  p.deck = randomStartingDeck(state.rng, 15).map(defId => ({ defId, enchant: null }));
   prp.done[idx] = true;
 
   if (state.players.every((_, i) => prp.done[i])) {
@@ -435,8 +470,8 @@ export function startNode(nodeId) {
     state.screen = 'event';
   } else if (node.type === 'shop') {
     state.shop = {
-      perPlayer: state.players.map(() => ({
-        items: rollShop(state.rng, 5),
+      perPlayer: state.players.map((p) => ({
+        items: rollShop(state.rng, 5, p.classId),
         healPrice: 60,
         removePrice: 30,
         removeUsed: false,
@@ -680,9 +715,9 @@ export function endCombat(win) {
       return c;
     });
     state.reward = {
-      perPlayer: state.players.map((_, i) => ({
+      perPlayer: state.players.map((p, i) => ({
         coins: coins[i],
-        cardChoices: rollCardChoices(state.rng, 3),
+        cardChoices: rollCardChoices(state.rng, 3, p.classId),
         cardTaken: false,
         done: false,
       })),
@@ -706,7 +741,7 @@ export function nextAct() {
   state.actReward = {
     perPlayer: state.players.map((p) => ({
       coins: 50 + Math.floor(state.rng() * 30),
-      cardChoices: rollCardChoices(state.rng, 3),
+      cardChoices: rollCardChoices(state.rng, 3, p.classId),
       relicChoices: rollRelicChoices(state.rng, p.relics, 3),
       cardTaken: false,
       relicTaken: null,
@@ -918,7 +953,7 @@ function applyMetaEffect(eff, recipientIndex) {
       break;
 
     case 'grantRandomCard': {
-      const [id] = rollCardChoices(state.rng, 1);
+      const [id] = rollCardChoices(state.rng, 1, p.classId);
       if (id) grantCard(id, 'event:grantRandomCard', { recipientIndex });
       break;
     }
