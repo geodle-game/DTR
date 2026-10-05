@@ -1,18 +1,23 @@
-import { FLOORS, WIDTH, act1Layout } from '../data/maps.js';
+import { WIDTH, getModeConfig, act1Layout, prologueLayout } from '../data/maps.js';
 
-export function generateMap(rng) {
-  const layout = act1Layout();
+export function generateMap(rng, mode = 'mc2') {
+  const config = getModeConfig(mode);
+  const floors = config.regularFloors;
+  const layout = mode === 'mc1' ? prologueLayout() : act1Layout();
+
   const nodes = [];
   const id = (f, c) => `n_${f}_${c}`;
 
-  // 1. Place nodes per floor, roll types with floor-level variety caps.
-  for (let f = 0; f < FLOORS; f++) {
+  for (let f = 0; f < floors; f++) {
     const weights = layout.floorWeights[f] || { monster: 1 };
-    const count = f === FLOORS - 1 ? 1 : (2 + Math.floor(rng() * (WIDTH - 3)));
+    const count = f === floors - 1
+      ? 1
+      : (config.nodeCountMin
+          + Math.floor(rng() * (config.nodeCountMax - config.nodeCountMin + 1)));
     const cols = pickColumns(rng, count, WIDTH);
 
     const types = cols.map(() => weightedPick(rng, weights));
-    enforceFloorVariety(types, weights, f, rng);
+    enforceFloorVariety(types, weights, f, rng, config);
 
     for (let i = 0; i < cols.length; i++) {
       const c = cols[i];
@@ -27,14 +32,13 @@ export function generateMap(rng) {
     }
   }
 
-  // 2. Connect each node to 1-2 nodes on the next floor.
   const byFloor = {};
   for (const n of nodes) {
     byFloor[n.floor] = byFloor[n.floor] || [];
     byFloor[n.floor].push(n);
   }
 
-  for (let f = 0; f < FLOORS - 1; f++) {
+  for (let f = 0; f < floors - 1; f++) {
     const cur = byFloor[f];
     const nxt = byFloor[f + 1];
     if (!cur || !nxt) continue;
@@ -59,11 +63,9 @@ export function generateMap(rng) {
     }
   }
 
-  // 3. Guarantee no path can have more than 2 non-combat nodes in a row.
-  enforcePathVariety(nodes, FLOORS);
+  enforcePathVariety(nodes, floors, config);
 
-  // 4. Boss floor: single node, all last-floor nodes connect to it.
-  const bossFloor = FLOORS;
+  const bossFloor = floors;
   const boss = {
     id: 'boss',
     floor: bossFloor,
@@ -73,25 +75,31 @@ export function generateMap(rng) {
     next: [],
   };
   nodes.push(boss);
-  const topRegular = nodes.filter(n => n.floor === FLOORS - 1);
+  const topRegular = nodes.filter(n => n.floor === floors - 1);
   for (const n of topRegular) n.next.push(boss.id);
 
   return {
-    floors: FLOORS + 1,
+    floors: floors + 1,
     width: WIDTH,
     nodes,
     bossId: boss.id,
+    mode,
   };
 }
 
-// Rewrites types in place so that:
-//   - No floor has more than 2 of any non-monster type.
-//   - Floors 2-13 have at least 1 monster (except floor 14).
-//   - Floor 14 stays all-rest (its weights only contain rest).
-function enforceFloorVariety(types, weights, floor, rng) {
+function enforceFloorVariety(types, weights, floor, rng, config) {
+  // MC1: no elites at all — reroll any that slip through.
+  if (!config.allowElites) {
+    for (let i = 0; i < types.length; i++) {
+      if (types[i] === 'elite') types[i] = 'monster';
+    }
+    // Also strip elite from weights so the weighted pick can't produce one.
+    weights = { ...weights };
+    delete weights.elite;
+  }
+
   const allowMonster = (weights.monster ?? 0) > 0;
 
-  // 1. Break up non-monster clusters of 3+.
   const counts = {};
   for (const t of types) counts[t] = (counts[t] || 0) + 1;
   for (let i = 0; i < types.length; i++) {
@@ -112,8 +120,7 @@ function enforceFloorVariety(types, weights, floor, rng) {
     }
   }
 
-  // 2. Force at least 1 monster on floors 2-13.
-  if (allowMonster && floor >= 2 && floor <= 13) {
+  if (allowMonster && floor >= 2 && floor <= config.regularFloors - 2) {
     if (!types.includes('monster')) {
       const c2 = {};
       for (const t of types) c2[t] = (c2[t] || 0) + 1;
@@ -131,18 +138,11 @@ function enforceFloorVariety(types, weights, floor, rng) {
   }
 }
 
-// Walks the DAG in floor order and caps the maximum consecutive
-// non-combat nodes along ANY path at MAX_STREAK. Any node that would
-// push a path past that cap gets converted to a monster.
-//
-// Floor 14 is a reset: it's always rest (guaranteed pre-boss heal),
-// so it neither counts toward the streak nor gets converted.
-function enforcePathVariety(nodes, floors) {
+function enforcePathVariety(nodes, floors, config) {
   const COMBAT = new Set(['monster', 'elite', 'boss']);
-  const RESET_FLOOR = 14;
+  const RESET_FLOOR = floors - 1;  // the "all rest" floor before the boss
   const MAX_STREAK = 2;
 
-  // Sort nodes by floor so predecessors are always processed first.
   const byFloor = {};
   for (const n of nodes) {
     byFloor[n.floor] = byFloor[n.floor] || [];
@@ -163,7 +163,6 @@ function enforcePathVariety(nodes, floors) {
         continue;
       }
 
-      // Max streak ending at any predecessor.
       let best = 0;
       for (const other of nodes) {
         if (other.floor >= f) continue;
