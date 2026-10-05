@@ -11,7 +11,11 @@ import { rollShop } from '../data/shop.js';
 import { bannerForCombat } from '../data/banners.js';
 import { rollEnchant, getEnchant } from '../data/enchants.js';
 import { BOSSES } from '../data/bosses/index.js';
-import { CLASSES, getClass, playableClasses, isCardAllowedForClass } from '../data/classes.js';
+import {
+  CLASSES, getClass, playableClasses, isCardAllowedForClass,
+} from '../data/classes.js';
+import { getModeConfig, RUN_MODES } from '../data/maps.js';
+import { loadMeta, updateMeta } from '../data/meta.js';
 import { clearSave, checkIntegrity } from './save.js';
 
 const BOSS_LORE = {};
@@ -63,6 +67,8 @@ export const state = {
   lastEncounterId: null,
   deathPage: 0,
   localSlot: null,
+  plotArmorScene: null,
+  absorptionScene: null,
 };
 
 export function activePlayer() {
@@ -148,13 +154,23 @@ function emptyOverlays() {
 
 export function actScaling(act) {
   const table = {
-    1: { hp: 1.0,  damage: 1.0  },
-    2: { hp: 1.3,  damage: 1.15 },
-    3: { hp: 1.55, damage: 1.3  },
-    4: { hp: 1.75, damage: 1.4  },
-    5: { hp: 1.9,  damage: 1.5  },
+    1:  { hp: 1.0,  damage: 1.0  },
+    2:  { hp: 1.2,  damage: 1.08 },
+    3:  { hp: 1.35, damage: 1.16 },
+    4:  { hp: 1.5,  damage: 1.24 },
+    5:  { hp: 1.65, damage: 1.3  },
+    6:  { hp: 1.78, damage: 1.36 },
+    7:  { hp: 1.9,  damage: 1.42 },
+    8:  { hp: 2.0,  damage: 1.48 },
+    9:  { hp: 2.1,  damage: 1.54 },
+    10: { hp: 2.2,  damage: 1.6  },
+    11: { hp: 2.3,  damage: 1.66 },
+    12: { hp: 2.4,  damage: 1.72 },
+    13: { hp: 2.5,  damage: 1.78 },
+    14: { hp: 2.6,  damage: 1.84 },
+    15: { hp: 2.7,  damage: 1.9  },
   };
-  return table[act] ?? table[1];
+  return table[act] ?? table[15];
 }
 
 export function forEachRelic(trigger, fn, player = activePlayer()) {
@@ -284,15 +300,39 @@ export function getGrantLog() {
   return grantLog.slice();
 }
 
+// ---- Script fragments ----
+
+export function grantFragment(source = 'unknown') {
+  if (!state.run) return false;
+  state.run.fragmentsCollected = (state.run.fragmentsCollected || 0) + 1;
+  pushLog(`Script fragment recovered (${state.run.fragmentsCollected}).`);
+  return true;
+}
+
 // ---- Run lifecycle ----
 
 export function newRun(seed = Date.now()) {
+  const meta = loadMeta();
+  const mode = meta.mc1Complete ? 'mc2' : 'mc1';
+  const config = getModeConfig(mode);
+
   state.rng = makeRng(seed);
   state.run = {
-    seed, act: 1,
-    map: null, currentNodeId: null, floor: -1,
-    cleared: false, victory: false, bossesBeaten: [],
-    phase: null, _grantUsed: {},
+    seed,
+    mode,
+    act: 1,
+    actsTotal: config.actsTotal,
+    map: null,
+    currentNodeId: null,
+    floor: -1,
+    cleared: false,
+    victory: false,
+    bossesBeaten: [],
+    phase: null,
+    _grantUsed: {},
+    fragmentsCollected: 1,
+    researcherFight: false,
+    pendingActRestart: false,
   };
   state.players = [makePlayer(0, 70, 70)];
   state.metaFocusIndex = 0;
@@ -338,6 +378,10 @@ export function newRun(seed = Date.now()) {
   state.rest = null;
   state.reward = null;
   state.actReward = null;
+  state.plotArmorScene = null;
+  state.absorptionScene = null;
+
+  updateMeta({ totalRuns: (loadMeta().totalRuns || 0) + 1 });
 
   beginClassPick();
 }
@@ -421,7 +465,7 @@ export function confirmDeck(actorId) {
   state.pendingConfirm.done[actorId ?? 0] = true;
   if (state.players.every((_, i) => state.pendingConfirm.done[i])) {
     state.pendingConfirm = null;
-    state.run.map = generateMap(state.rng);
+    state.run.map = generateMap(state.rng, state.run.mode);
     state.run.currentNodeId = null;
     state.run.floor = -1;
     state.screen = 'map';
@@ -552,6 +596,12 @@ function pickEncounter(kind) {
     return pool[Math.floor(state.rng() * pool.length)];
   }
   const act = state.run.act;
+  const mode = state.run.mode;
+
+  if (mode === 'mc1') {
+    return 'act1-boss';
+  }
+
   let pool;
   if (act === 1) pool = ['act1-boss', 'act1-boss-2', 'act1-boss-3'];
   else if (act === 2) {
@@ -587,16 +637,27 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
   state.combatBanner = bannerForCombat(sourceKind, state.rng);
 
   const scale = actScaling(state.run.act);
+  const modeConfig = getModeConfig(state.run.mode);
   const multiplayerHpMult = state.players.length > 1 ? 1.6 : 1.0;
   const ids = ENCOUNTERS[encounterId];
   state.enemies = ids.map((id, i) => {
     const def = getEnemyDef(id);
     const cardDraw = shuffle(def.deck.map(makeEnemyCard), state.rng);
-    const scaledHp = Math.ceil(def.hp * scale.hp * multiplayerHpMult);
+    const scaledHp = Math.ceil(
+      def.hp * scale.hp * multiplayerHpMult * modeConfig.enemyHpMult
+    );
     const enemy = {
-      ...def, uid: `e${i}`, hp: scaledHp, maxHp: scaledHp,
-      damageScale: scale.damage, block: 0, statuses: {},
-      cardDraw, cardDiscard: [], intentCard: null, intentCards: [],
+      ...def,
+      uid: `e${i}`,
+      hp: scaledHp,
+      maxHp: scaledHp,
+      damageScale: scale.damage * modeConfig.enemyDmgMult,
+      block: 0,
+      statuses: {},
+      cardDraw,
+      cardDiscard: [],
+      intentCard: null,
+      intentCards: [],
       loreTriggered: {},
     };
     if (enemy.script) enemy.scriptIndex = 0;
@@ -644,6 +705,9 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
   state.combatActivePlayers = state.players.map((_, i) => i);
   state.endedTurn = state.players.map(() => false);
   setPhase(null);
+
+  state.run.researcherFight =
+    state.run.mode === 'mc1' && sourceKind === 'boss';
 
   checkIntegrity(state);
 
@@ -697,13 +761,21 @@ export function endCombat(win) {
 
   if (win) {
     const kind = state.combatKind || 'monster';
+
     if (kind === 'boss') {
       const lastEncounter = state.lastEncounterId;
       if (lastEncounter) state.run.bossesBeaten.push(lastEncounter);
       state.run.cleared = true;
+
+      // MC1: the researcher is the wall. After the win, absorption.
+      if (state.run.mode === 'mc1') {
+        return;
+      }
+
       if (lastEncounter === 'final-boss') state.run.victory = true;
       return;
     }
+
     const coins = state.players.map(() => {
       let c = rollCoins(state.rng, kind);
       forEachRelic('onGoldGain', (r) => {
@@ -727,6 +799,12 @@ export function endCombat(win) {
 }
 
 export function nextAct() {
+  // MC1 finishing its final act → absorption, not progression.
+  if (state.run.mode === 'mc1' && state.run.act >= state.run.actsTotal) {
+    beginAbsorption();
+    return;
+  }
+
   for (const p of state.players) {
     const healAmount = Math.floor(p.maxHp * 0.3);
     const before = p.hp;
@@ -735,7 +813,7 @@ export function nextAct() {
   }
   state.run.act += 1;
   state.run.cleared = false;
-  state.run.map = generateMap(state.rng);
+  state.run.map = generateMap(state.rng, state.run.mode);
   state.run.currentNodeId = null;
   state.run.floor = -1;
   state.actReward = {
@@ -751,6 +829,100 @@ export function nextAct() {
   setPhase('actReward');
   state.screen = 'actReward';
 }
+
+// ---- MC1 plot armor / act restart ----
+
+export function triggerPlotArmor() {
+  if (!state.run) return;
+  state.run.pendingActRestart = true;
+  state.plotArmorScene = {
+    act: state.run.act,
+    researcher: !!state.run.researcherFight,
+  };
+  state.over = true;
+  state.result = 'plot-armor';
+  state.turn = 'over';
+  state.combatActivePlayers = [];
+}
+
+export function restartAct() {
+  if (!state.run) return;
+  state.run.pendingActRestart = false;
+  state.plotArmorScene = null;
+
+  state.run.map = generateMap(state.rng, state.run.mode);
+  state.run.currentNodeId = null;
+  state.run.floor = -1;
+
+  for (const p of state.players) {
+    p.hp = p.maxHp;
+    p.block = 0;
+    p.statuses = {};
+    p.endedTurn = false;
+  }
+
+  state.enemies = [];
+  state.turn = 'player';
+  state.over = false;
+  state.result = null;
+  state.combatActivePlayers = [];
+  state.endedTurn = [];
+  state.selectedEnemyId = null;
+  state.pendingCardUid = null;
+  state.lastHits = [];
+  state.log = [];
+  state.combatBanner = null;
+  state.combatKind = 'monster';
+  state.lastEncounterId = null;
+  state.overlays = emptyOverlays();
+  state.bossLore = null;
+
+  setPhase(null);
+  state.screen = 'map';
+
+  pushLog(`The fragments pull you back. Act ${state.run.act} begins again.`);
+}
+
+// ---- Absorption scene (MC1 ending) ----
+
+export function beginAbsorption() {
+  const fragments = state.run.fragmentsCollected || 15;
+  state.absorptionScene = {
+    page: 0,
+    fragmentsSent: 1,
+    fragmentsScattered: Math.max(0, fragments - 1),
+  };
+  state.screen = 'absorption';
+  state.over = false;
+  state.result = null;
+}
+
+export function advanceAbsorption() {
+  if (!state.absorptionScene) return;
+  state.absorptionScene.page += 1;
+}
+
+export function completeAbsorption() {
+  const scene = state.absorptionScene;
+  if (!scene) return;
+
+  const meta = loadMeta();
+  meta.mc1Complete = true;
+  meta.endingsSeen = [...new Set([...(meta.endingsSeen || []), 'prologue'])];
+  meta.lastAbsorption = {
+    fragmentsSent: scene.fragmentsSent,
+    at: Date.now(),
+  };
+  updateMeta(meta);
+
+  state.absorptionScene = null;
+  state.plotArmorScene = null;
+  state.run = null;
+  state.players = [];
+  state.screen = 'mainMenu';
+}
+
+// ---- Act reward ----
 
 export function takeActRewardCard(defId, actorId) {
   if (!state.actReward) return;
@@ -802,6 +974,10 @@ export function claimActReward(actorId) {
 
 export function finishRun() {
   clearSave();
+  if (state.run?.mode === 'mc1') {
+    beginAbsorption();
+    return;
+  }
   state.screen = 'victory';
 }
 
@@ -817,6 +993,8 @@ export function returnToMainMenu() {
   state.enemies = [];
   state.bossLore = null;
   state.deathPage = 0;
+  state.plotArmorScene = null;
+  state.absorptionScene = null;
 }
 
 export function rollIntent(enemy) {
@@ -1014,6 +1192,10 @@ function applyMetaEffect(eff, recipientIndex) {
       pushLog(`${p.name} lost ${removedName}.`);
       break;
     }
+
+    case 'fragment':
+      grantFragment(`event:${recipientIndex}`);
+      break;
 
     default:
       console.warn('[event] Unknown effect kind:', eff.kind);
