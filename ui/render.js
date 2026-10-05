@@ -28,6 +28,7 @@ import { ENEMY_CARDS } from '../data/enemy-cards.js';
 import { NODE_TYPES } from '../data/maps.js';
 import { getNode, reachableFrom, startingNodes } from '../systems/map.js';
 import { getEnchant } from '../data/enchants.js';
+import { playableClasses } from '../data/classes.js';
 
 const LONG_PRESS_MS = 450;
 const DRAG_THRESHOLD = 14;
@@ -56,6 +57,7 @@ function localHandPlayer() {
 // ------------------------------------------------------------
 // Dispatch wrappers
 // ------------------------------------------------------------
+const pickClass           = (id)  => dispatch({ type: 'PICK_CLASS', classId: id });
 const chooseRelic         = (id)  => dispatch({ type: 'CHOOSE_RELIC', relicId: id });
 const confirmDeck         = ()    => dispatch({ type: 'CONFIRM_DECK' });
 const newRun              = (seed) => dispatch({ type: 'NEW_RUN', seed });
@@ -96,6 +98,7 @@ export function render() {
 
   switch (state.screen) {
     case 'mainMenu':    renderMainMenu(app);    break;
+    case 'classPick':   renderClassPick(app);   break;
     case 'relicPick':   renderRelicPick(app);   break;
     case 'deckView':    renderDeckView(app);    break;
     case 'map':         renderMap(app);         break;
@@ -452,6 +455,78 @@ function relicCard(r, onClick) {
 }
 
 // ============================================================
+// Class pick
+// ============================================================
+
+function renderClassPick(app) {
+  const wrap = document.createElement('div');
+  wrap.className = 'screen screen-center';
+
+  const idx = localViewIndex();
+  const pcp = state.pendingClassPick;
+  const done = pcp?.done?.[idx];
+
+  const h = document.createElement('h1');
+  h.textContent = done ? 'Waiting for the other player…' : 'Choose Your Path';
+  wrap.appendChild(h);
+
+  if (done) {
+    const wait = document.createElement('p');
+    wait.className = 'muted';
+    wait.textContent = 'You already chose. Sit tight.';
+    wrap.appendChild(wait);
+  } else {
+    const sub = document.createElement('p');
+    sub.className = 'muted';
+    sub.textContent = 'Each path trades something for something else.';
+    wrap.appendChild(sub);
+
+    const row = document.createElement('div');
+    row.className = 'class-row';
+    for (const cls of playableClasses()) {
+      row.appendChild(classCard(cls, () => pickClass(cls.id)));
+    }
+    wrap.appendChild(row);
+  }
+
+  app.appendChild(wrap);
+}
+
+function classCard(cls, onClick) {
+  const el = document.createElement('button');
+  el.className = 'class-card';
+  const stats = classStatsLines(cls);
+  el.innerHTML = `
+    <div class="class-name">${cls.name}</div>
+    <div class="class-blurb">${cls.blurb}</div>
+    <div class="class-hp">Starting HP: ${cls.startHp}</div>
+    <div class="class-stats">
+      ${stats.map(s => `<div class="class-stat">${s}</div>`).join('')}
+    </div>
+  `;
+  el.addEventListener('click', onClick);
+  return el;
+}
+
+function classStatsLines(cls) {
+  const m = cls.modifiers;
+  const lines = [];
+  if (m.physicalDamage !== 1) lines.push(`Physical damage ×${m.physicalDamage}`);
+  if (m.magicDamage !== 1) lines.push(`Magic damage ×${m.magicDamage}`);
+  if (m.physicalBlock === m.magicBlock && m.physicalBlock !== 1) {
+    lines.push(`Block ×${m.physicalBlock}`);
+  } else {
+    if (m.physicalBlock !== 1) lines.push(`Block ×${m.physicalBlock}`);
+    if (m.magicBlock !== 1) lines.push(`Magic block ×${m.magicBlock}`);
+  }
+  if (m.healPower !== 1) lines.push(`Healing ×${m.healPower}`);
+  if (m.statusPotency !== 1) lines.push(`Status effects ×${m.statusPotency}`);
+  if (m.damageTaken !== 1) lines.push(`Damage taken ×${m.damageTaken}`);
+  if (cls.bannedTypes?.includes('spell')) lines.push(`Cannot use Spells`);
+  return lines;
+}
+
+// ============================================================
 // Relic pick / deck view
 // ============================================================
 
@@ -497,6 +572,14 @@ function renderDeckView(app) {
   const idx = localViewIndex();
   const p = state.players[idx];
   const relic = RELICS[p.relic];
+  if (!relic) {
+    const wait = document.createElement('p');
+    wait.className = 'muted';
+    wait.textContent = 'Loading…';
+    wrap.appendChild(wait);
+    app.appendChild(wrap);
+    return;
+  }
   const h = document.createElement('h1');
   h.textContent = `${p.name}'s Starting Deck`;
   wrap.appendChild(h);
