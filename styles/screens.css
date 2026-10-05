@@ -502,6 +502,88 @@
 }
 
 /* ============================================================
+   ABSORPTION SCENE
+   ============================================================ */
+
+.absorption-panel {
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  text-align: center;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  line-height: 1.75;
+  color: #c8cdd7;
+  padding: 40px 32px;
+  animation: absorptionIn .9s ease-out backwards;
+}
+
+@keyframes absorptionIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.absorption-line {
+  margin: 0;
+  animation: absorptionLineIn 1.4s ease-out backwards;
+}
+.absorption-line:nth-child(1) { animation-delay: .2s; }
+.absorption-line:nth-child(2) { animation-delay: .6s; }
+.absorption-line:nth-child(3) { animation-delay: 1.0s; }
+.absorption-line:nth-child(4) { animation-delay: 1.4s; }
+
+@keyframes absorptionLineIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.absorption-line.death-emphasis {
+  color: #ffd166;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  font-size: 15px;
+  text-shadow: 0 0 20px rgba(255,209,102,.7);
+  animation: deathPulse 2.4s ease-in-out infinite;
+}
+
+.absorption-line.death-last {
+  color: #c9a3ff;
+  font-style: italic;
+  margin-top: 12px;
+}
+
+.absorption-count {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.absorption-count-number {
+  font-size: 64px;
+  font-weight: 800;
+  color: #ffd166;
+  text-shadow: 0 0 40px rgba(255,209,102,.7);
+  font-family: system-ui, sans-serif;
+  line-height: 1;
+}
+
+.absorption-count-label {
+  font-size: 13px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #8b93a1;
+}
+
+.absorption-btn {
+  margin-top: 16px;
+  align-self: center;
+}
+
+/* ============================================================
    MAIN MENU
    ============================================================ */
 
@@ -937,6 +1019,42 @@
     0 0 28px rgba(255,209,102,.9);
 }
 
+/* Fragment nodes — special pulse to draw the eye */
+
+.map-node-fragment {
+  background: radial-gradient(circle at 35% 30%, #8fd4ff, #2a5a8f);
+  border-color: #6fb3ff;
+  color: #ffffff;
+  text-shadow: 0 0 8px rgba(111,179,255,.95);
+  animation: fragmentPulse 2.4s ease-in-out infinite;
+}
+
+.map-node-fragment.map-node-reachable {
+  animation: fragmentPulse 1.4s ease-in-out infinite, mapPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes fragmentPulse {
+  0%, 100% {
+    box-shadow:
+      0 3px 8px rgba(0,0,0,.65),
+      0 0 0 3px rgba(111,179,255,.35),
+      0 0 18px rgba(111,179,255,.6);
+  }
+  50% {
+    box-shadow:
+      0 3px 8px rgba(0,0,0,.65),
+      0 0 0 5px rgba(111,179,255,.55),
+      0 0 34px rgba(111,179,255,1);
+  }
+}
+
+.map-node-fragment.map-node-taken {
+  opacity: .35;
+  filter: grayscale(.8);
+  animation: none;
+  background: linear-gradient(180deg, #3a4250, #1e2229);
+}
+
 @keyframes mapPulse {
   0%, 100% {
     box-shadow:
@@ -950,6 +1068,21 @@
       0 0 0 5px rgba(143,107,255,.55),
       0 0 26px rgba(143,107,255,.9);
   }
+}
+
+/* Fragment counter in the map header */
+
+.fragment-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6fb3ff;
+  font-weight: 700;
+}
+
+.fragment-counter .fragment-symbol {
+  font-size: 18px;
+  text-shadow: 0 0 10px rgba(111,179,255,.85);
 }
 
 /* ============================================================
@@ -1067,6 +1200,86 @@
 .gold-coin.coin-3 { background-image: url('../assets/coin3.png'); }
 .gold-coin.coin-4 { background-image: url('../assets/coin4.png'); }
 .gold-coin.coin-5 { background-image: url('../assets/coin5.png'); }
+
+/* ============================================================
+   CLASS PICK
+   ============================================================ */
+
+.class-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.class-card {
+  background: linear-gradient(180deg, #232833, #1a1e26);
+  border: 2px solid #3a4250;
+  border-radius: 14px;
+  padding: 22px 20px;
+  width: 260px;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+  box-shadow: 0 6px 18px rgba(0,0,0,.45);
+}
+
+.class-card:hover {
+  border-color: #8f6bff;
+  transform: translateY(-6px);
+  box-shadow: 0 14px 30px rgba(143,107,255,.35);
+}
+
+.class-name {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  color: #ffd166;
+  text-shadow: 0 0 16px rgba(255,209,102,.45);
+}
+
+.class-blurb {
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #c8cdd7;
+  min-height: 60px;
+}
+
+.class-hp {
+  font-size: 13px;
+  color: #e05c5c;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.class-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #3a4250;
+}
+
+.class-stat {
+  font-size: 12px;
+  color: #b8bdc7;
+  letter-spacing: .02em;
+}
+
+.class-stat::before {
+  content: '▸ ';
+  color: #8f6bff;
+}
 
 /* ============================================================
    MULTIPLAYER
