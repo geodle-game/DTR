@@ -3,17 +3,16 @@
 // ============================================================
 
 import {
-  state, newRun, chooseRelic, confirmDeck, startNode, backToMap,
+  state, newRun, pickClass, chooseRelic, confirmDeck, startNode, backToMap,
   claimReward, takeRewardCard, skipRewardCard,
   pickEventChoice, buyShopCard, buyShopHeal, buyShopRemove, shopDone,
   restHeal, restEnchantStart, applyEnchant, skipEnchant,
   returnToMainMenu, nextAct, claimActReward,
   takeActRewardCard, skipActRewardCard, takeActRewardRelic,
   finishRun, pickTreasureRelic, skipTreasure,
-  activePlayer,
-  markPlayerEndedTurn, allPlayersEndedTurn,
-  setMetaFocus, setDeckViewFocus,
-  startCoopRun,
+  activePlayer, setMetaFocus, setDeckViewFocus,
+  startCoopRun, restartAct,
+  advanceAbsorption, completeAbsorption,
 } from './state.js';
 import {
   playCard, beginPlayerEndTurn, beginEnemyTurn, resolveEnemyTurn,
@@ -25,7 +24,6 @@ import { snapshotState, restoreSnapshot } from './snapshot.js';
 import { render } from '../ui/render.js';
 import { animateHits } from '../ui/animations.js';
 
-// ---- Local slot ----
 function localSlot() {
   return state.localSlot;
 }
@@ -36,8 +34,6 @@ function isMyAction(action) {
   if (action.actorId == null) return true;
   return action.actorId === slot;
 }
-
-// ---- Public dispatch ----
 
 export function dispatch(action) {
   const mode = getMode();
@@ -54,7 +50,6 @@ export function dispatch(action) {
       console.warn('[dispatch] guest REJECTED its own action:', tagged);
       return;
     }
-    console.log('[dispatch] guest → sendAction', tagged);
     sendAction(tagged);
     return;
   }
@@ -68,26 +63,10 @@ export function dispatch(action) {
   render();
 }
 
-// ---- Network callbacks ----
-
 onAction(action => {
-  console.log('[onAction] host received from guest:', action);
-
   const slot = localSlot();
   if (slot != null && action.actorId != null && action.actorId === slot) {
-    console.warn('[onAction] host rejected echo of own action');
     return;
-  }
-
-  if (action.type === 'PLAY_CARD') {
-    const idx = action.actorId ?? 0;
-    const p = state.players[idx];
-    const handUids = p ? p.hand.map(c => c.uid) : [];
-    const found = p ? p.hand.find(c => c.uid === action.cardUid) : null;
-    console.log('[onAction][PLAY_CARD] actorIdx=', idx,
-      'cardUid=', action.cardUid,
-      'found=', !!found,
-      'hand=', handUids);
   }
 
   state.lastHits = [];
@@ -102,18 +81,11 @@ onAction(action => {
 });
 
 onSnapshot(snap => {
-  console.log('[onSnapshot] guest received snapshot',
-    'turn=', snap.turn,
-    'p1Energy=', snap.players?.[1]?.energy,
-    'enemies[0].hp=', snap.enemies?.[0]?.hp,
-    'lastHits=', snap.lastHits?.length);
   const hits = (snap.lastHits || []).slice();
   restoreSnapshot(snap);
   render();
   if (hits.length) setTimeout(() => animateHits(hits), 30);
 });
-
-// ---- Action handlers ----
 
 function applyAction(action, fromNetwork = false) {
   const mode = getMode();
@@ -128,60 +100,35 @@ function applyAction(action, fromNetwork = false) {
 
   switch (action.type) {
     // ---- Run lifecycle ----
-    case 'NEW_RUN':           newRun(action.seed); break;
-    case 'START_COOP_RUN':    startCoopRun(action.seed); break;
-    case 'CHOOSE_RELIC':      chooseRelic(action.relicId, action.actorId); break;
-    case 'CONFIRM_DECK':      confirmDeck(action.actorId); break;
-    case 'RETURN_TO_MAIN_MENU': returnToMainMenu(); break;
+    case 'NEW_RUN':              newRun(action.seed); break;
+    case 'START_COOP_RUN':       startCoopRun(action.seed); break;
+    case 'PICK_CLASS':           pickClass(action.classId, action.actorId); break;
+    case 'CHOOSE_RELIC':         chooseRelic(action.relicId, action.actorId); break;
+    case 'CONFIRM_DECK':         confirmDeck(action.actorId); break;
+    case 'RETURN_TO_MAIN_MENU':  returnToMainMenu(); break;
 
     // ---- Map ----
-    case 'START_NODE':        startNode(action.nodeId); break;
-    case 'BACK_TO_MAP':       backToMap(); break;
+    case 'START_NODE':           startNode(action.nodeId); break;
+    case 'BACK_TO_MAP':          backToMap(); break;
 
     // ---- Focus ----
-    case 'SET_META_FOCUS':    setMetaFocus(action.index); break;
-    case 'SET_DECKVIEW_FOCUS': setDeckViewFocus(action.index); break;
+    case 'SET_META_FOCUS':       setMetaFocus(action.index); break;
+    case 'SET_DECKVIEW_FOCUS':   setDeckViewFocus(action.index); break;
 
     // ---- Combat ----
     case 'PLAY_CARD': {
       const actorIdx = action.actorId ?? 0;
       const player = state.players[actorIdx];
-      if (!player) {
-        console.warn('[PLAY_CARD] FAIL: no player at index', actorIdx);
-        return false;
-      }
+      if (!player) return false;
       const card = player.hand.find(c => c.uid === action.cardUid);
-      if (!card) {
-        console.warn('[PLAY_CARD] FAIL: card not in hand',
-          'looking for uid', action.cardUid,
-          'in P' + actorIdx + ' hand of', player.hand.map(c => c.uid));
-        return false;
-      }
-      const result = playCard(card, player, action.targetUid ?? null);
-      if (!result) {
-        console.warn('[PLAY_CARD] FAIL: playCard returned false',
-          'def=', card.defId,
-          'energy=', player.energy,
-          'ended=', player.endedTurn,
-          'turn=', state.turn,
-          'over=', state.over,
-          'handHasCard=', !!player.hand.find(c => c.uid === card.uid));
-      } else {
-        console.log('[PLAY_CARD] OK played', card.defId,
-          'for P' + actorIdx, 'energy now', player.energy);
-      }
-      return result;
+      if (!card) return false;
+      return playCard(card, player, action.targetUid ?? null);
     }
 
     case 'END_TURN': {
-      if (state.turn !== 'player' || state.over) {
-        console.warn('[END_TURN] rejected, turn/over =', state.turn, state.over);
-        return false;
-      }
+      if (state.turn !== 'player' || state.over) return false;
       const actorIdx = action.actorId ?? 0;
-      console.log('[END_TURN] P' + actorIdx + ' ending');
       const { allReady } = beginPlayerEndTurn(actorIdx);
-      console.log('[END_TURN] allReady=', allReady);
       if (state.over) return true;
       if (allReady) {
         beginEnemyTurn();
@@ -202,37 +149,44 @@ function applyAction(action, fromNetwork = false) {
       state.pendingCardUid = null;
       return true;
 
+    // ---- Plot armor ----
+    case 'RESTART_ACT':          restartAct(); break;
+
+    // ---- Absorption (MC1 ending) ----
+    case 'ADVANCE_ABSORPTION':   advanceAbsorption(); break;
+    case 'COMPLETE_ABSORPTION':  completeAbsorption(); break;
+
     // ---- Rewards ----
-    case 'CLAIM_REWARD':       claimReward(action.actorId); break;
-    case 'TAKE_REWARD_CARD':   takeRewardCard(action.defId, action.actorId); break;
-    case 'SKIP_REWARD_CARD':   skipRewardCard(action.actorId); break;
-    case 'PICK_EVENT_CHOICE':  pickEventChoice(action.index, action.actorId); break;
+    case 'CLAIM_REWARD':         claimReward(action.actorId); break;
+    case 'TAKE_REWARD_CARD':     takeRewardCard(action.defId, action.actorId); break;
+    case 'SKIP_REWARD_CARD':     skipRewardCard(action.actorId); break;
+    case 'PICK_EVENT_CHOICE':    pickEventChoice(action.index, action.actorId); break;
 
     // ---- Shop ----
-    case 'BUY_SHOP_CARD':      buyShopCard(action.index, action.actorId); break;
-    case 'BUY_SHOP_HEAL':      buyShopHeal(action.actorId); break;
-    case 'BUY_SHOP_REMOVE':    buyShopRemove(action.index, action.actorId); break;
-    case 'SHOP_DONE':          shopDone(action.actorId); break;
+    case 'BUY_SHOP_CARD':        buyShopCard(action.index, action.actorId); break;
+    case 'BUY_SHOP_HEAL':        buyShopHeal(action.actorId); break;
+    case 'BUY_SHOP_REMOVE':      buyShopRemove(action.index, action.actorId); break;
+    case 'SHOP_DONE':            shopDone(action.actorId); break;
 
     // ---- Rest ----
-    case 'REST_HEAL':          restHeal(action.actorId); break;
-    case 'REST_ENCHANT_START': restEnchantStart(action.actorId); break;
-    case 'APPLY_ENCHANT':      applyEnchant(action.index); break;
-    case 'SKIP_ENCHANT':       skipEnchant(); break;
+    case 'REST_HEAL':            restHeal(action.actorId); break;
+    case 'REST_ENCHANT_START':   restEnchantStart(action.actorId); break;
+    case 'APPLY_ENCHANT':        applyEnchant(action.index); break;
+    case 'SKIP_ENCHANT':         skipEnchant(); break;
 
     // ---- Act transition ----
-    case 'NEXT_ACT':           nextAct(); break;
-    case 'CLAIM_ACT_REWARD':   claimActReward(action.actorId); break;
-    case 'TAKE_ACT_REWARD_CARD':   takeActRewardCard(action.defId, action.actorId); break;
-    case 'SKIP_ACT_REWARD_CARD':   skipActRewardCard(action.actorId); break;
-    case 'TAKE_ACT_REWARD_RELIC':  takeActRewardRelic(action.relicId, action.actorId); break;
+    case 'NEXT_ACT':             nextAct(); break;
+    case 'CLAIM_ACT_REWARD':     claimActReward(action.actorId); break;
+    case 'TAKE_ACT_REWARD_CARD': takeActRewardCard(action.defId, action.actorId); break;
+    case 'SKIP_ACT_REWARD_CARD': skipActRewardCard(action.actorId); break;
+    case 'TAKE_ACT_REWARD_RELIC': takeActRewardRelic(action.relicId, action.actorId); break;
 
     // ---- Treasure ----
-    case 'PICK_TREASURE_RELIC': pickTreasureRelic(action.relicId, action.actorId); break;
-    case 'SKIP_TREASURE':       skipTreasure(action.actorId); break;
+    case 'PICK_TREASURE_RELIC':  pickTreasureRelic(action.relicId, action.actorId); break;
+    case 'SKIP_TREASURE':        skipTreasure(action.actorId); break;
 
     // ---- End ----
-    case 'FINISH_RUN':          finishRun(); break;
+    case 'FINISH_RUN':           finishRun(); break;
 
     default:
       console.warn('Unknown action:', action.type);
