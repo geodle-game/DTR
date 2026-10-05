@@ -29,6 +29,10 @@ export function getBossLore(enemyId) {
   return BOSS_LORE[enemyId] || null;
 }
 
+// Recall: unlocked at 5 fragments, costs this much gold per use.
+export const RECALL_FRAGMENT_THRESHOLD = 5;
+export const RECALL_GOLD_COST = 100;
+
 export const state = {
   screen: 'mainMenu',
   rng: null,
@@ -69,6 +73,7 @@ export const state = {
   localSlot: null,
   plotArmorScene: null,
   absorptionScene: null,
+  recallScreen: null,
 };
 
 export function activePlayer() {
@@ -306,7 +311,134 @@ export function grantFragment(source = 'unknown') {
   if (!state.run) return false;
   state.run.fragmentsCollected = (state.run.fragmentsCollected || 0) + 1;
   pushLog(`Script fragment recovered (${state.run.fragmentsCollected}).`);
+
+  if (
+    state.run.fragmentsCollected >= RECALL_FRAGMENT_THRESHOLD &&
+    !state.run.recallUnlocked
+  ) {
+    state.run.recallUnlocked = true;
+    pushLog('Recall unlocked — 100 gold to travel to any explored node.');
+  }
   return true;
+}
+
+// ---- Recall (map teleport) ----
+
+export function canRecall() {
+  if (!state.run) return false;
+  if (!state.run.recallUnlocked) return false;
+  if (!state.run.exploredMaps) return false;
+  const p = state.players[0];
+  if (!p || p.gold < RECALL_GOLD_COST) return false;
+  return true;
+}
+
+export function recallableNodes() {
+  if (!state.run?.exploredMaps) return [];
+  const out = [];
+  for (const [actStr, entry] of Object.entries(state.run.exploredMaps)) {
+    const act = Number(actStr);
+    for (const nodeId of entry.visitedNodeIds) {
+      const node = entry.map.nodes.find(n => n.id === nodeId);
+      if (!node) continue;
+      out.push({ act, nodeId, node, map: entry.map });
+    }
+  }
+  return out;
+}
+
+export function openRecallScreen() {
+  if (!canRecall()) return false;
+  state.recallScreen = { actFilter: null };
+  state.screen = 'recall';
+  return true;
+}
+
+export function closeRecallScreen() {
+  state.recallScreen = null;
+  if (state.screen === 'recall') state.screen = 'map';
+}
+
+export function recallTo(targetAct, targetNodeId, actorId) {
+  if (!state.run) return false;
+  if (!state.run.recallUnlocked) return false;
+
+  const payer = state.players[actorId ?? 0] || state.players[0];
+  if (!payer || payer.gold < RECALL_GOLD_COST) return false;
+
+  const entry = state.run.exploredMaps?.[targetAct];
+  if (!entry) return false;
+  if (!entry.visitedNodeIds.includes(targetNodeId)) return false;
+
+  const targetNode = entry.map.nodes.find(n => n.id === targetNodeId);
+  if (!targetNode) return false;
+
+  // Archive the current act's map before we leave it.
+  archiveCurrentMap();
+
+  // Charge gold.
+  payer.gold -= RECALL_GOLD_COST;
+
+  // Swap to the recalled act.
+  state.run.act = targetAct;
+  state.run.map = entry.map;
+  state.run.currentNodeId = targetNodeId;
+  state.run.floor = targetNode.floor;
+
+  state.recallScreen = null;
+  state.screen = 'map';
+  setPhase(null);
+
+  pushLog(
+    `Recall: ${payer.name} spent ${RECALL_GOLD_COST} gold to return to Act ${targetAct}.`
+  );
+  return true;
+}
+
+// Archive the current act's map into exploredMaps. Called before any
+// transition that replaces state.run.map.
+function archiveCurrentMap() {
+  if (!state.run?.map) return;
+  const act = state.run.act;
+  if (!state.run.exploredMaps) state.run.exploredMaps = {};
+  if (!state.run.exploredMaps[act]) {
+    state.run.exploredMaps[act] = {
+      map: state.run.map,
+      visitedNodeIds: [],
+      completedNodeIds: [],
+    };
+  }
+}
+
+function markVisited(nodeId) {
+  if (!state.run?.map) return;
+  const act = state.run.act;
+  if (!state.run.exploredMaps) state.run.exploredMaps = {};
+  if (!state.run.exploredMaps[act]) {
+    state.run.exploredMaps[act] = {
+      map: state.run.map,
+      visitedNodeIds: [],
+      completedNodeIds: [],
+    };
+  }
+  const entry = state.run.exploredMaps[act];
+  if (!entry.visitedNodeIds.includes(nodeId)) {
+    entry.visitedNodeIds.push(nodeId);
+  }
+  const node = state.run.map.nodes.find(n => n.id === nodeId);
+  if (node) node.visited = true;
+}
+
+function markCompleted(nodeId) {
+  if (!state.run?.map) return;
+  const act = state.run.act;
+  const entry = state.run.exploredMaps?.[act];
+  if (!entry) return;
+  if (!entry.completedNodeIds.includes(nodeId)) {
+    entry.completedNodeIds.push(nodeId);
+  }
+  const node = state.run.map.nodes.find(n => n.id === nodeId);
+  if (node) node.completed = true;
 }
 
 // ---- Run lifecycle ----
@@ -320,7 +452,8 @@ export function newRun(seed = Date.now()) {
   state.run = {
     seed,
     mode,
-    act: 1,
+    act: 1,                 // current act = act of the map you're on
+    realAct: 1,             // highest act reached = enemy scaling source
     actsTotal: config.actsTotal,
     map: null,
     currentNodeId: null,
@@ -331,6 +464,8 @@ export function newRun(seed = Date.now()) {
     phase: null,
     _grantUsed: {},
     fragmentsCollected: 1,
+    recallUnlocked: false,
+    exploredMaps: {},
     researcherFight: false,
     pendingActRestart: false,
   };
@@ -380,6 +515,7 @@ export function newRun(seed = Date.now()) {
   state.actReward = null;
   state.plotArmorScene = null;
   state.absorptionScene = null;
+  state.recallScreen = null;
 
   updateMeta({ totalRuns: (loadMeta().totalRuns || 0) + 1 });
 
@@ -468,6 +604,14 @@ export function confirmDeck(actorId) {
     state.run.map = generateMap(state.rng, state.run.mode);
     state.run.currentNodeId = null;
     state.run.floor = -1;
+
+    // Seed exploredMaps for the fresh act.
+    state.run.exploredMaps[state.run.act] = {
+      map: state.run.map,
+      visitedNodeIds: [],
+      completedNodeIds: [],
+    };
+
     state.screen = 'map';
   }
 }
@@ -501,15 +645,29 @@ export function startNode(nodeId) {
 
   state.run.currentNodeId = nodeId;
   state.run.floor = node.floor;
+  markVisited(nodeId);
+
+  // Completed nodes are pass-throughs on recall — no retrigger.
+  if (node.completed) {
+    pushLog(`(Already explored — ${node.type})`);
+    state.screen = 'map';
+    return;
+  }
 
   if (node.type === 'monster') {
     newCombat(pickEncounter('monster'), 'monster');
   } else if (node.type === 'elite') {
     newCombat(pickEncounter('elite'), 'elite');
   } else if (node.type === 'boss') {
+    if (node.beaten) {
+      // Pass-through on recall — boss already defeated.
+      pushLog('(The boss of this act is already dead.)');
+      state.screen = 'map';
+      return;
+    }
     newCombat(pickEncounter('boss'), 'boss');
   } else if (node.type === 'event') {
-    state.event = { data: randomEvent(state.rng), done: {} };
+    state.event = { data: randomEvent(state.rng), done: {}, nodeId };
     setPhase('event');
     state.screen = 'event';
   } else if (node.type === 'shop') {
@@ -521,11 +679,12 @@ export function startNode(nodeId) {
         removeUsed: false,
         done: false,
       })),
+      nodeId,
     };
     setPhase('shop');
     state.screen = 'shop';
   } else if (node.type === 'rest') {
-    state.rest = { done: {} };
+    state.rest = { done: {}, nodeId };
     setPhase(null);
     state.screen = 'rest';
   } else if (node.type === 'treasure') {
@@ -534,9 +693,20 @@ export function startNode(nodeId) {
       const gold = 30 + Math.floor(state.rng() * 20);
       return { relicChoices, gold, taken: false };
     });
-    state.treasure = { perPlayer };
+    state.treasure = { perPlayer, nodeId };
     setPhase(null);
     state.screen = 'treasure';
+  } else if (node.type === 'fragment') {
+    if (node.collected) {
+      pushLog('(This fragment has already been recovered.)');
+      state.screen = 'map';
+      return;
+    }
+    node.collected = true;
+    grantFragment(`node:${nodeId}`);
+    markCompleted(nodeId);
+    setPhase(null);
+    state.screen = 'map';
   } else {
     setPhase(null);
     state.screen = 'map';
@@ -577,6 +747,7 @@ function advanceTreasure() {
   const t = state.treasure;
   if (!t) return;
   if (t.perPlayer.every(s => s.taken)) {
+    if (t.nodeId) markCompleted(t.nodeId);
     state.treasure = null;
     backToMap();
   }
@@ -595,7 +766,7 @@ function pickEncounter(kind) {
     const pool = ['act1-elite-1', 'act1-elite-2', 'act1-elite-3', 'act1-elite-4'];
     return pool[Math.floor(state.rng() * pool.length)];
   }
-  const act = state.run.act;
+  const act = state.run.realAct;
   const mode = state.run.mode;
 
   if (mode === 'mc1') {
@@ -636,7 +807,10 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
   state.lastEncounterId = encounterId;
   state.combatBanner = bannerForCombat(sourceKind, state.rng);
 
-  const scale = actScaling(state.run.act);
+  // Enemy scaling uses realAct — the deepest act reached — so recalling
+  // to act 3 from act 7 still spawns act-7 enemies.
+  const scaleAct = state.run.realAct ?? state.run.act;
+  const scale = actScaling(scaleAct);
   const modeConfig = getModeConfig(state.run.mode);
   const multiplayerHpMult = state.players.length > 1 ? 1.6 : 1.0;
   const ids = ENCOUNTERS[encounterId];
@@ -762,15 +936,21 @@ export function endCombat(win) {
   if (win) {
     const kind = state.combatKind || 'monster';
 
+    // Mark the node we just cleared as completed.
+    if (state.run.currentNodeId) markCompleted(state.run.currentNodeId);
+
     if (kind === 'boss') {
       const lastEncounter = state.lastEncounterId;
       if (lastEncounter) state.run.bossesBeaten.push(lastEncounter);
       state.run.cleared = true;
 
-      // MC1: the researcher is the wall. After the win, absorption.
-      if (state.run.mode === 'mc1') {
-        return;
+      // Mark the boss node on the current map as beaten.
+      if (state.run.map) {
+        const bossNode = state.run.map.nodes.find(n => n.id === state.run.currentNodeId);
+        if (bossNode) bossNode.beaten = true;
       }
+
+      if (state.run.mode === 'mc1') return;
 
       if (lastEncounter === 'final-boss') state.run.victory = true;
       return;
@@ -799,7 +979,7 @@ export function endCombat(win) {
 }
 
 export function nextAct() {
-  // MC1 finishing its final act → absorption, not progression.
+  // MC1 final act → absorption.
   if (state.run.mode === 'mc1' && state.run.act >= state.run.actsTotal) {
     beginAbsorption();
     return;
@@ -811,11 +991,29 @@ export function nextAct() {
     p.hp = Math.min(p.maxHp, p.hp + healAmount);
     pushLog(`${p.name} healed ${p.hp - before} HP.`);
   }
+
+  archiveCurrentMap();
+
   state.run.act += 1;
+  if (state.run.act > state.run.realAct) state.run.realAct = state.run.act;
   state.run.cleared = false;
-  state.run.map = generateMap(state.rng, state.run.mode);
+
+  // Restore the map if we've been to this act before; otherwise generate.
+  const existing = state.run.exploredMaps?.[state.run.act];
+  if (existing && existing.map) {
+    state.run.map = existing.map;
+  } else {
+    state.run.map = generateMap(state.rng, state.run.mode);
+    state.run.exploredMaps[state.run.act] = {
+      map: state.run.map,
+      visitedNodeIds: [],
+      completedNodeIds: [],
+    };
+  }
+
   state.run.currentNodeId = null;
   state.run.floor = -1;
+
   state.actReward = {
     perPlayer: state.players.map((p) => ({
       coins: 50 + Math.floor(state.rng() * 30),
@@ -830,7 +1028,7 @@ export function nextAct() {
   state.screen = 'actReward';
 }
 
-// ---- MC1 plot armor / act restart ----
+// ---- MC1 plot armor ----
 
 export function triggerPlotArmor() {
   if (!state.run) return;
@@ -850,9 +1048,24 @@ export function restartAct() {
   state.run.pendingActRestart = false;
   state.plotArmorScene = null;
 
-  state.run.map = generateMap(state.rng, state.run.mode);
+  const restored = state.run.exploredMaps?.[state.run.act]?.map;
+  state.run.map = restored || generateMap(state.rng, state.run.mode);
   state.run.currentNodeId = null;
   state.run.floor = -1;
+
+  // Clear visited/completed marks so the act can be replayed.
+  if (state.run.map) {
+    for (const n of state.run.map.nodes) {
+      n.visited = false;
+      n.completed = false;
+      if (n.type === 'fragment') n.collected = false;
+      n.beaten = false;
+    }
+  }
+  if (state.run.exploredMaps?.[state.run.act]) {
+    state.run.exploredMaps[state.run.act].visitedNodeIds = [];
+    state.run.exploredMaps[state.run.act].completedNodeIds = [];
+  }
 
   for (const p of state.players) {
     p.hp = p.maxHp;
@@ -883,7 +1096,7 @@ export function restartAct() {
   pushLog(`The fragments pull you back. Act ${state.run.act} begins again.`);
 }
 
-// ---- Absorption scene (MC1 ending) ----
+// ---- Absorption ----
 
 export function beginAbsorption() {
   const fragments = state.run.fragmentsCollected || 15;
@@ -995,6 +1208,7 @@ export function returnToMainMenu() {
   state.deathPage = 0;
   state.plotArmorScene = null;
   state.absorptionScene = null;
+  state.recallScreen = null;
 }
 
 export function rollIntent(enemy) {
@@ -1024,10 +1238,7 @@ export function startPlayerTurnFor(playerIndex, isFirstTurn = false) {
 
   const p = state.players[playerIndex];
   if (!p) return;
-  if (p.hp <= 0) {
-    p.endedTurn = true;
-    return;
-  }
+  if (p.hp <= 0) { p.endedTurn = true; return; }
   p.endedTurn = false;
   p.cardsPlayedThisTurn = 0;
   for (const c of p.hand) delete c.disabledThisTurn;
@@ -1107,7 +1318,9 @@ export function pickEventChoice(index, actorId) {
   for (const eff of choice.effects) applyMetaEffect(eff, focus);
   pushLog(`Event (${p.name}): ${ev.name} → ${choice.label}`);
   state.event.done[focus] = true;
+
   if (state.players.every((_, i) => state.event.done[i])) {
+    if (state.event.nodeId) markCompleted(state.event.nodeId);
     setPhase(null);
     backToMap();
   }
@@ -1250,6 +1463,7 @@ export function shopDone(actorId) {
   if (!inv || inv.done) return;
   inv.done = true;
   if (state.shop.perPlayer.every(x => x.done)) {
+    if (state.shop.nodeId) markCompleted(state.shop.nodeId);
     state.shop = null;
     setPhase(null);
     backToMap();
@@ -1272,6 +1486,7 @@ export function restHeal(actorId) {
 function finishRest(focus) {
   if (!state.rest) return;
   if (state.players.every((_, i) => state.rest.done[i])) {
+    if (state.rest.nodeId) markCompleted(state.rest.nodeId);
     state.rest = null;
     backToMap();
   } else {
