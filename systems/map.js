@@ -28,6 +28,10 @@ export function generateMap(rng, mode = 'mc2') {
         type: types[i],
         x: 0, y: 0,
         next: [],
+        visited: false,
+        completed: false,
+        collected: false,
+        beaten: false,
       });
     }
   }
@@ -65,6 +69,11 @@ export function generateMap(rng, mode = 'mc2') {
 
   enforcePathVariety(nodes, floors, config);
 
+  // MC2 plants 1 Script fragment per act. 14 acts → 14 fragments.
+  if (config.spawnFragments) {
+    plantFragment(nodes, rng, floors);
+  }
+
   const bossFloor = floors;
   const boss = {
     id: 'boss',
@@ -73,6 +82,10 @@ export function generateMap(rng, mode = 'mc2') {
     type: 'boss',
     x: 0, y: 0,
     next: [],
+    visited: false,
+    completed: false,
+    collected: false,
+    beaten: false,
   };
   nodes.push(boss);
   const topRegular = nodes.filter(n => n.floor === floors - 1);
@@ -87,13 +100,42 @@ export function generateMap(rng, mode = 'mc2') {
   };
 }
 
+// ============================================================
+// FRAGMENT PLACEMENT
+// ------------------------------------------------------------
+// Plants exactly ONE fragment node per act, on a non-combat,
+// non-rest, non-first-floor node. Called only for MC2.
+//
+// Across 15 acts, MC2 must recover 14 fragments. Act 15 is the
+// boss act and contributes none (its non-rest slots are pre-boss).
+// Acts 1-14 each plant exactly one.
+// ============================================================
+function plantFragment(nodes, rng, floors) {
+  const REST_FLOOR = floors - 1;
+
+  const eligible = nodes.filter(n => {
+    if (n.floor === 0) return false;
+    if (n.floor === REST_FLOOR) return false;
+    if (n.type === 'boss') return false;
+    if (n.type === 'monster') return false;
+    if (n.type === 'elite') return false;
+    return true;
+  });
+
+  if (!eligible.length) return;
+
+  // Prefer non-rest nodes so we don't steal the only heal before the boss.
+  const pool = eligible.filter(n => n.type !== 'rest');
+  const candidates = pool.length ? pool : eligible;
+  const target = candidates[Math.floor(rng() * candidates.length)];
+  if (target) target.type = 'fragment';
+}
+
 function enforceFloorVariety(types, weights, floor, rng, config) {
-  // MC1: no elites at all — reroll any that slip through.
   if (!config.allowElites) {
     for (let i = 0; i < types.length; i++) {
       if (types[i] === 'elite') types[i] = 'monster';
     }
-    // Also strip elite from weights so the weighted pick can't produce one.
     weights = { ...weights };
     delete weights.elite;
   }
@@ -140,7 +182,7 @@ function enforceFloorVariety(types, weights, floor, rng, config) {
 
 function enforcePathVariety(nodes, floors, config) {
   const COMBAT = new Set(['monster', 'elite', 'boss']);
-  const RESET_FLOOR = floors - 1;  // the "all rest" floor before the boss
+  const RESET_FLOOR = floors - 1;
   const MAX_STREAK = 2;
 
   const byFloor = {};
@@ -153,15 +195,8 @@ function enforcePathVariety(nodes, floors, config) {
 
   for (let f = 0; f < floors; f++) {
     for (const node of byFloor[f] || []) {
-      if (COMBAT.has(node.type)) {
-        streak[node.id] = 0;
-        continue;
-      }
-
-      if (f === RESET_FLOOR) {
-        streak[node.id] = 0;
-        continue;
-      }
+      if (COMBAT.has(node.type)) { streak[node.id] = 0; continue; }
+      if (f === RESET_FLOOR)      { streak[node.id] = 0; continue; }
 
       let best = 0;
       for (const other of nodes) {
