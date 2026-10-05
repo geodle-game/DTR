@@ -1,16 +1,17 @@
 // ============================================================
 // THE FALLEN DRAWN — Act 3 boss
 //
-// A previous century's hero, consumed by the Core and turned
-// back against the world. Uses corrupted versions of the same
-// cards you do — echoing what a Drawn becomes if they fail.
+// A previous century's explorer, consumed by the machine and
+// turned back against the world. Uses corrupted versions of the
+// same cards you do — echoing what an explorer becomes if they
+// fail.
 //
 // Passive: takes 50% less damage from Spells.
 // ============================================================
 
 export const ENEMY = {
   id: 'fallen-drawn',
-  name: 'The Fallen Drawn',
+  name: 'The Fallen Explorer',
   hp: 220,
   isBoss: true,
   phaseThresholds: { phase2: 0.5, phase3: 0.2 },
@@ -74,37 +75,38 @@ export const CARDS = {
 export const LORE = {
   start: [
     'The corridor opens onto a figure sitting alone in the dark.',
-    'Once a hero. Once a Drawn.',
-    'Their deck lies scattered on the floor around them — every card the same as yours, but wrong. Burnt at the edges. Long since given up.',
-    'They lift their head.',
-    '"You came," they say. "I did not."',
-    '"Do not stop where I stopped."',
-    'They stand. Their cards rise with them.',
+    'They have been here a very long time. Longer than you.',
+    'Once they were an explorer, like you. Once they carried the same fragments you carry now.',
+    'They lift their head. Something in their eyes is still human. Most of it is not.',
+    '"I had a name," they say. "I do not remember it. Do you remember yours?"',
+    '"It does not matter. What matters is that you do not stop where I stopped."',
+    'They stand. The Script on their arms glows.',
   ],
   phase2: [
-    'Their light flickers. For a moment — just a moment — they look human again.',
-    '"I had a family," they say. "I had a village. I had a name."',
-    '"The Core took all of it. And then it took me."',
-    '"I am sorry."',
+    'Their light flickers. For a moment — just a moment — they look like the person they were before the machine found them.',
+    '"I made it to the bottom," they say. "I saw the researcher. I saw the chamber."',
+    '"He asked me to stop. I did not."',
+    '"The machine does not kill you. It keeps you. It uses you to find the next one."',
+    '"That is what I am for now. I am the one who stands in the way."',
   ],
   phase3: [
     'They are almost gone.',
-    '"Faster," they whisper. "End it faster than I could."',
-    '"Do not let it finish what it started."',
+    '"Do not let it finish," they whisper. "Whatever it promises, do not listen."',
+    '"When you reach the chamber — when it offers you the fragments back — say no."',
+    '"I did not. That is the only reason I am still here."',
   ],
   onDeath: [
     'They fall slowly. Almost gratefully.',
-    '"Finish it," they whisper.',
-    '"Finish what I could not."',
-    'You take their cards. You do not look back.',
+    '"Take them," they say, meaning the fragments. "Take all of them."',
+    '"And when you get to the bottom — finish it. Finish what I could not."',
+    'The Script on their arms goes dark.',
+    'You walk past them. You do not look back. There is no time.',
   ],
   onPlayerDeath: [
     'The Fallen Drawn watches you fall.',
     'For a moment, something like grief crosses their face.',
-    '"I am sorry," they say again.',
-    '"I will remember you. The Core remembers everyone. That is the only mercy it has left."',
-    'But your hand closes around the amulet at your chest.',
-    'It is warm. It has always been warm.',
-    'It pulls you back.',
+    '"I am sorry," they say. "I was sorry the last time too."',
+    '""You will forget this."',
+    '"You have done this before. You will do it again."',
   ],
 };
