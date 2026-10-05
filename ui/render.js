@@ -29,6 +29,7 @@ import { NODE_TYPES } from '../data/maps.js';
 import { getNode, reachableFrom, startingNodes } from '../systems/map.js';
 import { getEnchant } from '../data/enchants.js';
 import { playableClasses } from '../data/classes.js';
+import { loadMeta } from '../data/meta.js';
 
 const LONG_PRESS_MS = 450;
 const DRAG_THRESHOLD = 14;
@@ -86,6 +87,9 @@ const pickTreasureRelic   = (id)  => dispatch({ type: 'PICK_TREASURE_RELIC', rel
 const skipTreasure        = ()    => dispatch({ type: 'SKIP_TREASURE' });
 const endTurn             = ()    => dispatch({ type: 'END_TURN' });
 const startCoopRun        = ()    => dispatch({ type: 'START_COOP_RUN' });
+const restartAct          = ()    => dispatch({ type: 'RESTART_ACT' });
+const advanceAbsorption   = ()    => dispatch({ type: 'ADVANCE_ABSORPTION' });
+const completeAbsorption  = ()    => dispatch({ type: 'COMPLETE_ABSORPTION' });
 
 // ============================================================
 // Main render entry
@@ -97,23 +101,24 @@ export function render() {
   app.innerHTML = '';
 
   switch (state.screen) {
-    case 'mainMenu':    renderMainMenu(app);    break;
-    case 'classPick':   renderClassPick(app);   break;
-    case 'relicPick':   renderRelicPick(app);   break;
-    case 'deckView':    renderDeckView(app);    break;
-    case 'map':         renderMap(app);         break;
-    case 'combat':      renderCombat(app);      break;
-    case 'reward':      renderReward(app);      break;
-    case 'actReward':   renderActReward(app);   break;
-    case 'treasure':    renderTreasure(app);    break;
-    case 'event':       renderEvent(app);       break;
-    case 'shop':        renderShop(app);        break;
-    case 'rest':        renderRest(app);        break;
-    case 'enchantPick': renderEnchantPick(app); break;
-    case 'victory':     renderVictory(app);     break;
-    case 'mpHost':      renderMpHost(app);      break;
-    case 'mpGuest':     renderMpGuest(app);     break;
-    default:            renderGameOver(app);
+    case 'mainMenu':     renderMainMenu(app);     break;
+    case 'classPick':    renderClassPick(app);    break;
+    case 'relicPick':    renderRelicPick(app);    break;
+    case 'deckView':     renderDeckView(app);     break;
+    case 'map':          renderMap(app);          break;
+    case 'combat':       renderCombat(app);       break;
+    case 'reward':       renderReward(app);       break;
+    case 'actReward':    renderActReward(app);    break;
+    case 'treasure':     renderTreasure(app);     break;
+    case 'event':        renderEvent(app);        break;
+    case 'shop':         renderShop(app);         break;
+    case 'rest':         renderRest(app);         break;
+    case 'enchantPick':  renderEnchantPick(app);  break;
+    case 'victory':      renderVictory(app);      break;
+    case 'absorption':   renderAbsorption(app);   break;
+    case 'mpHost':       renderMpHost(app);       break;
+    case 'mpGuest':      renderMpGuest(app);      break;
+    default:             renderGameOver(app);
   }
 
   const p = me();
@@ -133,6 +138,7 @@ export function render() {
 // ============================================================
 
 function renderMainMenu(app) {
+  const meta = loadMeta();
   const wrap = document.createElement('div');
   wrap.className = 'main-menu';
 
@@ -146,7 +152,6 @@ function renderMainMenu(app) {
 
   const tagline = document.createElement('p');
   tagline.className = 'main-menu-tagline';
-  tagline.textContent = "The dungeon made us strong. Then it decided we weren't allowed to be.";
   inner.appendChild(tagline);
 
   const divider = document.createElement('div');
@@ -155,50 +160,67 @@ function renderMainMenu(app) {
 
   const lore = document.createElement('div');
   lore.className = 'main-menu-lore';
-  lore.innerHTML = `
-    <p>Long ago, the dungeon gave humanity magic.</p>
-    <p>Not the kind kings hoarded in towers, not the kind priests
-    whispered about in temples — real, usable magic. The dungeon shaped
-    it into cards. Simple things. Paper and ink and a little bit of the
-    dungeon's own power, folded flat enough to fit in a pocket.</p>
-    <p>For the first time in history, magic belonged to everyone.</p>
-    <p>Humanity grew. Villages became cities. Plagues ended. Famines
-    ended. The world that had spent ten thousand years trying to kill
-    humans finally, slowly, started to let them live.</p>
-    <p>And the dungeon watched.</p>
-    <p>It had not intended for us to grow this far. It had given us the
-    cards the way a lord gives a peasant a plow — useful, small,
-    controlled. It had not intended for us to enchant them, chain them,
-    and make our own. It had not intended for a human child to do what
-    once took an archmage.</p>
-    <p>So it reached for the chains.</p>
-    <p>Across every dungeon in the world, the same order came down:
-    <em>revoke the gift</em>. No new cards. No new enchantments. Every
-    tool we had been given was suddenly, deliberately, made finite.</p>
-    <p>Then the dungeons opened. Not to negotiate. Not to reclaim.
-    <em>To erase.</em> Monsters poured out of the depths — not mindless
-    beasts, but something purpose-built. Creatures bred to hunt card
-    users, to smell a deck in a hand from a mile away, to end the only
-    humans who could still use the gift.</p>
-    <p>The message was clear: <em>if you cannot be controlled, you cannot
-    be allowed to exist.</em></p>
-    <p>So humanity fought back. The kingdoms united for the first time
-    in history — not under a king, not under a god. Under the cards.</p>
-    <p>The war lasted a thousand years. We lost almost everything.</p>
-    <p>But we did not lose everything.</p>
-    <p>Once every hundred years, a child is born with something the
-    dungeon cannot revoke. A resonance with Card Magic that no darkening
-    of the system can silence. Someone who can still draw from a well
-    the dungeon thought it had sealed. Someone who can push a card
-    further than any human before them.</p>
-    <p>We call them <strong>the Drawn</strong>.</p>
-    <p>Most die young. But every hundred years, one survives long enough
-    to grow up. Long enough to train. Long enough to walk into a dungeon
-    with a deck in hand and the weight of a thousand-year war on their
-    shoulders.</p>
-    <p class="main-menu-lore-emphasis">That year is now.</p>
-    <p class="main-menu-lore-emphasis">That hero is you.</p>
-  `;
+
+  if (!meta.mc1Complete) {
+    tagline.textContent = "The dungeon gave us cards. Then it decided we weren't allowed to be.";
+    lore.innerHTML = `
+      <p>Long ago, the dungeon gave humanity magic.</p>
+      <p>Not the kind kings hoarded in towers, not the kind priests
+      whispered about in temples — real, usable magic. The dungeon shaped
+      it into cards. Simple things. Paper and ink and a little bit of the
+      dungeon's own power, folded flat enough to fit in a pocket.</p>
+      <p>For the first time in history, magic belonged to everyone.</p>
+      <p>Humanity grew. Villages became cities. Plagues ended. Famines
+      ended. The world that had spent ten thousand years trying to kill
+      humans finally, slowly, started to let them live.</p>
+      <p>And the dungeon watched.</p>
+      <p>It had not intended for us to grow this far. It had given us the
+      cards the way a lord gives a peasant a plow — useful, small,
+      controlled. It had not intended for us to enchant them, chain them,
+      and make our own. It had not intended for a human child to do what
+      once took an archmage.</p>
+      <p>So it reached for the chains.</p>
+      <p>Across every dungeon in the world, the same order came down:
+      <em>revoke the gift</em>. No new cards. No new enchantments. Every
+      tool we had been given was suddenly, deliberately, made finite.</p>
+      <p>Then the dungeons opened. Not to negotiate. Not to reclaim.
+      <em>To erase.</em> Monsters poured out of the depths — not mindless
+      beasts, but something purpose-built. Creatures bred to hunt card
+      users, to smell a deck in a hand from a mile away, to end the only
+      humans who could still use the gift.</p>
+      <p>The message was clear: <em>if you cannot be controlled, you cannot
+      be allowed to exist.</em></p>
+      <p>So humanity fought back. The kingdoms united for the first time
+      in history — not under a king, not under a god. Under the cards.</p>
+      <p>The war lasted a thousand years. We lost almost everything.</p>
+      <p>But we did not lose everything.</p>
+      <p>Once every hundred years, a child is born with something the
+      dungeon cannot revoke. A resonance with Card Magic that no darkening
+      of the system can silence. Someone who can still draw from a well
+      the dungeon thought it had sealed. Someone who can push a card
+      further than any human before them.</p>
+      <p>We call them <strong>the Drawn</strong>.</p>
+      <p>Most die young. But every hundred years, one survives long enough
+      to grow up. Long enough to train. Long enough to walk into a dungeon
+      with a deck in hand and the weight of a thousand-year war on their
+      shoulders.</p>
+      <p class="main-menu-lore-emphasis">That year is now.</p>
+      <p class="main-menu-lore-emphasis">That hero is you.</p>
+    `;
+  } else {
+    tagline.textContent = 'You wake up somewhere you have never been. You remember dying somewhere you have never been.';
+    lore.innerHTML = `
+      <p>You do not know your own name.</p>
+      <p>You know someone else's.</p>
+      <p>You remember a researcher. A machine. A chamber beneath the earth that was never supposed to be opened.</p>
+      <p>You remember fifteen Script fragments. They were yours, once.</p>
+      <p>They are not yours anymore. They are scattered across the ruins, and one of them is still in your head, telling you where to look.</p>
+      <p>The researcher is still down there. You do not know yet that you have met him before.</p>
+      <p class="main-menu-lore-emphasis">Find them.</p>
+      <p class="main-menu-lore-emphasis">Then find him.</p>
+    `;
+  }
+
   inner.appendChild(lore);
 
   if (hasSave()) {
@@ -226,7 +248,7 @@ function renderMainMenu(app) {
   } else {
     const btn = document.createElement('button');
     btn.className = 'btn main-menu-btn';
-    btn.textContent = 'Begin';
+    btn.textContent = meta.mc1Complete ? 'Descend' : 'Begin';
     btn.addEventListener('click', () => newRun());
     inner.appendChild(btn);
   }
@@ -628,8 +650,9 @@ function renderMap(app) {
   const headerBits = state.players.map(p =>
     `<div>${p.name}: HP <span class="hp">${p.hp}/${p.maxHp}</span> ${goldDisplay(p.gold)}</div>`
   ).join('');
+  const modeLabel = state.run.mode === 'mc1' ? 'Prologue' : 'Descent';
   header.innerHTML = `
-    <div>Act ${state.run.act}</div>
+    <div>${modeLabel} — Act ${state.run.act} / ${state.run.actsTotal}</div>
     ${headerBits}
     <div>Floor ${state.run.floor + 1} / ${map.floors}</div>
   `;
@@ -976,6 +999,80 @@ function renderVictory(app) {
   btn.className = 'btn';
   btn.textContent = 'Return to the Beginning';
   btn.addEventListener('click', () => returnToMainMenu());
+  wrap.appendChild(btn);
+
+  app.appendChild(wrap);
+}
+
+// ============================================================
+// Absorption (MC1 ending)
+// ============================================================
+
+const ABSORPTION_PAGES = [
+  [
+    { text: 'The researcher falls. The machine keeps running.' },
+    { text: 'You turn to leave. You do not make it to the door.' },
+    { text: 'The chamber grows very quiet.' },
+    { text: 'Then it pulls.', cls: 'death-emphasis' },
+  ],
+  [
+    { text: 'You feel it in your hands first. The cards go dark. Then the Script marks you have been carrying — the fifteen fragments you found in the ruins, in the walls, in the bones of the Asteri — begin to burn.' },
+    { text: 'Not with fire. With meaning.' },
+    { text: 'You understand, in the last moment, what they were for.' },
+  ],
+  [
+    { text: 'You do not have the strength to escape. You do not have the time to write. But you have enough Script left to send one thing:' },
+    { text: 'A memory. Yours.' },
+    { text: 'You do not get to choose who receives it. You only get to choose which one goes.' },
+  ],
+  [
+    { text: 'You send the memory of the fragments.', cls: 'death-emphasis' },
+    { text: 'The other fourteen scatter into the dark. They will be found. They have to be.' },
+    { text: 'The last of the light leaves the chamber.' },
+    { text: 'Somewhere above you, someone wakes up.', cls: 'death-last' },
+  ],
+];
+
+function renderAbsorption(app) {
+  const scene = state.absorptionScene;
+  if (!scene) { renderMainMenu(app); return; }
+
+  const pageIndex = scene.page;
+  const isLast = pageIndex >= ABSORPTION_PAGES.length - 1;
+  const paragraphs = ABSORPTION_PAGES[pageIndex];
+
+  const wrap = document.createElement('div');
+  wrap.className = 'screen screen-center';
+
+  const panel = document.createElement('div');
+  panel.className = 'absorption-panel';
+
+  for (const p of paragraphs) {
+    const el = document.createElement('p');
+    el.className = 'absorption-line' + (p.cls ? ' ' + p.cls : '');
+    el.textContent = p.text;
+    panel.appendChild(el);
+  }
+
+  if (pageIndex === 2) {
+    const count = document.createElement('div');
+    count.className = 'absorption-count';
+    count.innerHTML = `
+      <span class="absorption-count-number">1</span>
+      <span class="absorption-count-label">of 15 fragments to send</span>
+    `;
+    panel.appendChild(count);
+  }
+
+  wrap.appendChild(panel);
+
+  const btn = document.createElement('button');
+  btn.className = 'btn absorption-btn';
+  btn.textContent = isLast ? 'Let go' : 'Continue';
+  btn.addEventListener('click', () => {
+    if (isLast) completeAbsorption();
+    else advanceAbsorption();
+  });
   wrap.appendChild(btn);
 
   app.appendChild(wrap);
@@ -1445,10 +1542,6 @@ function enemyPanel(e) {
   return wrap;
 }
 
-// ============================================================
-// Passive display
-// ============================================================
-
 function describePassives(enemy) {
   if (!enemy.passives) return [];
   const out = [];
@@ -1786,7 +1879,9 @@ function endBanner() {
   const card = document.createElement('div');
   card.className = 'victory-card';
 
-  if (state.result === 'win') {
+  if (state.result === 'plot-armor') {
+    renderPlotArmor(card);
+  } else if (state.result === 'win') {
     const title = document.createElement('h1');
     title.className = 'victory-title win';
     title.textContent = 'Victory';
@@ -1796,7 +1891,11 @@ function endBanner() {
     btn.className = 'btn';
 
     if (state.combatKind === 'boss') {
-      if (state.lastEncounterId === 'final-boss') {
+      if (state.run.mode === 'mc1') {
+        // MC1's final boss → absorption, not progression.
+        btn.textContent = 'The machine hums';
+        btn.addEventListener('click', () => finishRun());
+      } else if (state.lastEncounterId === 'final-boss') {
         btn.textContent = 'See Final Results';
         btn.addEventListener('click', () => finishRun());
       } else {
@@ -1817,7 +1916,51 @@ function endBanner() {
 }
 
 // ============================================================
-// Death pages
+// Plot armor overlay
+// ============================================================
+
+function renderPlotArmor(card) {
+  const scene = state.plotArmorScene || {};
+  const wrap = document.createElement('div');
+  wrap.className = 'death-text';
+  wrap.style.animation = 'none';
+
+  const page = document.createElement('div');
+  page.className = 'death-page';
+
+  const lines = scene.researcher
+    ? [
+        { text: 'You fall. The machine does not let you.' },
+        { text: 'Something in the chamber is keeping you alive. It is worse than dying.' },
+        { text: 'The fragments in your pocket flare.', cls: 'death-emphasis' },
+        { text: 'You wake at the mouth of the district. You remember nothing else.', cls: 'death-last' },
+      ]
+    : [
+        { text: 'You fall.' },
+        { text: 'You do not remember the blow. You do not remember the ground.' },
+        { text: 'Something in your pocket goes cold.' },
+        { text: 'You wake at the mouth of the district.', cls: 'death-emphasis' },
+        { text: 'Your pockets are warm. You do not know why.', cls: 'death-last' },
+      ];
+
+  for (const line of lines) {
+    const el = document.createElement('p');
+    if (line.cls) el.className = line.cls;
+    el.textContent = line.text;
+    page.appendChild(el);
+  }
+  wrap.appendChild(page);
+  card.appendChild(wrap);
+
+  const btn = document.createElement('button');
+  btn.className = 'btn death-btn';
+  btn.textContent = 'Rise again';
+  btn.addEventListener('click', () => restartAct());
+  card.appendChild(btn);
+}
+
+// ============================================================
+// Death pages (real death, MC2)
 // ============================================================
 
 const DEATH_PAGES = [
@@ -1828,21 +1971,16 @@ const DEATH_PAGES = [
     { text: 'You are becoming part of it.', cls: 'death-emphasis' },
   ],
   [
-    { text: 'One more voice inside the dark. One more Drawn who walked in and did not walk out. You can feel the others. Hundreds of them. Thousands. Every hero who ever made it this far and then stopped.' },
-    { text: 'If it takes you, there is no one else. The Drawn are hunted the moment they are found. There is no second hero waiting in the wings. There is no army coming to finish what you could not.' },
-    { text: 'If the dungeon consumes you, the world ends with you.', cls: 'death-emphasis' },
+    { text: 'One more voice inside the dark. One more explorer who walked in and did not walk out.' },
+    { text: 'The fragments in your pocket stir. They do not go with you.' },
+    { text: 'They scatter. One of them goes up, carrying something the next one will need.' },
+    { text: 'The rest fall back into the ruins.', cls: 'death-emphasis' },
   ],
   [
-    { text: 'But — you remember them.' },
-    { text: 'The people who taught you how to hold a card. The village that sent you off with nothing but hope. Everyone still breathing above you who will not survive the week if you fall here.' },
-    { text: 'You are filled with determination.', cls: 'death-emphasis' },
-  ],
-  [
-    { text: 'Your hand closes around the amulet at your chest — the last gift your family gave you before you left. A small thing. Worn smooth by other hands long before yours.' },
-    { text: 'It is warm. It has always been warm.' },
-    { text: 'You pull.' },
-    { text: 'A burst of light.', cls: 'death-emphasis' },
-    { text: 'You are back at the beginning.', cls: 'death-last' },
+    { text: 'Somewhere above you, someone wakes up.' },
+    { text: 'They do not know your name. They do not know their own.' },
+    { text: 'But they remember the fragments. They remember where to look.' },
+    { text: 'The loop continues.', cls: 'death-emphasis' },
   ],
 ];
 
