@@ -5,64 +5,61 @@
 
 export const WIDTH = 7;
 
-// MC2: the long campaign. 15 acts, 15 regular floors each.
-export const FLOORS_MC2 = 15;
+export const FLOORS_MC2 = 15;   // regular floors per MC2 act
+export const FLOORS_MC1 = 4;    // regular floors per MC1 act (prologue)
 
-// MC1: the short prologue. 5 acts, 4 regular floors each (+1 boss = 5 total).
-export const FLOORS_MC1 = 4;
-
-// Legacy export so nothing that imports FLOORS breaks.
 export const FLOORS = FLOORS_MC2;
 export const BOSS_FLOOR = FLOORS_MC2;
 
 export const NODE_TYPES = {
-  monster:   { id: 'monster',   label: 'Monster',   color: '#ff6b6b', symbol: '⚔' },
-  elite:     { id: 'elite',     label: 'Elite',     color: '#ff8f6b', symbol: '★' },
-  event:     { id: 'event',     label: 'Event',     color: '#c9a3ff', symbol: '?' },
-  shop:      { id: 'shop',      label: 'Shop',      color: '#ffd166', symbol: '$' },
-  rest:      { id: 'rest',      label: 'Rest',      color: '#6bff9e', symbol: '☕' },
-  treasure:  { id: 'treasure',  label: 'Treasure',  color: '#ffe699', symbol: '◆' },
-  boss:      { id: 'boss',      label: 'Boss',      color: '#e05c5c', symbol: '☠' },
+  monster:   { id: 'monster',   label: 'Monster',         color: '#ff6b6b', symbol: '⚔' },
+  elite:     { id: 'elite',     label: 'Elite',           color: '#ff8f6b', symbol: '★' },
+  event:     { id: 'event',     label: 'Event',           color: '#c9a3ff', symbol: '?' },
+  shop:      { id: 'shop',      label: 'Shop',            color: '#ffd166', symbol: '$' },
+  rest:      { id: 'rest',      label: 'Rest',            color: '#6bff9e', symbol: '☕' },
+  treasure:  { id: 'treasure',  label: 'Treasure',        color: '#ffe699', symbol: '◆' },
+  fragment:  { id: 'fragment',  label: 'Script Fragment', color: '#6fb3ff', symbol: '◈' },
+  boss:      { id: 'boss',      label: 'Boss',            color: '#e05c5c', symbol: '☠' },
 };
 
 // ============================================================
-// MC2 LAYOUT — 15 regular floors. Unchanged from before.
+// MC2 LAYOUT — 15 regular floors + boss.
 // ============================================================
 export function act1Layout() {
   return {
     floorWeights: [
-      { monster: 1 },                                              // 0
-      { monster: 1 },                                              // 1
-      { monster: 0.6,  event: 0.3,  shop: 0.1 },                   // 2
-      { monster: 0.5,  event: 0.25, elite: 0.15, rest: 0.1 },      // 3
-      { monster: 0.45, event: 0.25, treasure: 0.15, rest: 0.15 },  // 4
-      { monster: 0.45, event: 0.25, elite: 0.15, rest: 0.15 },     // 5
-      { monster: 0.4,  event: 0.25, shop: 0.15, rest: 0.2 },       // 6
-      { monster: 0.4,  event: 0.25, elite: 0.15, treasure: 0.1, rest: 0.1 }, // 7
-      { monster: 0.4,  event: 0.2,  shop: 0.15, elite: 0.1, rest: 0.15 },    // 8
-      { monster: 0.4,  event: 0.2,  elite: 0.2, rest: 0.2 },       // 9
-      { monster: 0.35, event: 0.2,  elite: 0.15, rest: 0.2, shop: 0.1 }, // 10
-      { monster: 0.35, event: 0.2,  elite: 0.15, rest: 0.2, shop: 0.1 }, // 11
-      { monster: 0.3,  event: 0.2,  elite: 0.15, rest: 0.25, treasure: 0.1 }, // 12
-      { monster: 0.25, event: 0.15, elite: 0.15, rest: 0.35, shop: 0.1 },      // 13
-      { rest: 1 },                                                 // 14
-      { boss: 1 },                                                 // 15
+      { monster: 1 },
+      { monster: 1 },
+      { monster: 0.6,  event: 0.3,  shop: 0.1 },
+      { monster: 0.5,  event: 0.25, elite: 0.15, rest: 0.1 },
+      { monster: 0.45, event: 0.25, treasure: 0.15, rest: 0.15 },
+      { monster: 0.45, event: 0.25, elite: 0.15, rest: 0.15 },
+      { monster: 0.4,  event: 0.25, shop: 0.15, rest: 0.2 },
+      { monster: 0.4,  event: 0.25, elite: 0.15, treasure: 0.1, rest: 0.1 },
+      { monster: 0.4,  event: 0.2,  shop: 0.15, elite: 0.1, rest: 0.15 },
+      { monster: 0.4,  event: 0.2,  elite: 0.2, rest: 0.2 },
+      { monster: 0.35, event: 0.2,  elite: 0.15, rest: 0.2, shop: 0.1 },
+      { monster: 0.35, event: 0.2,  elite: 0.15, rest: 0.2, shop: 0.1 },
+      { monster: 0.3,  event: 0.2,  elite: 0.15, rest: 0.25, treasure: 0.1 },
+      { monster: 0.25, event: 0.15, elite: 0.15, rest: 0.35, shop: 0.1 },
+      { rest: 1 },
+      { boss: 1 },
     ],
   };
 }
 
 // ============================================================
-// MC1 LAYOUT — 4 regular floors + boss. No elites. Tighter ramp.
+// MC1 LAYOUT — 4 regular floors + boss. No elites.
 // ============================================================
 export function prologueLayout() {
   return {
     floorWeights: [
-      { monster: 1 },                                            // 0
-      { monster: 0.75, event: 0.25 },                            // 1
-      { monster: 0.6,  event: 0.2,  rest: 0.2 },                 // 2
-      { monster: 0.65, shop: 0.15, rest: 0.2 },                  // 3
-      { rest: 1 },                                               // 4 (pre-boss)
-      { boss: 1 },                                               // 5
+      { monster: 1 },
+      { monster: 0.75, event: 0.25 },
+      { monster: 0.6,  event: 0.2,  rest: 0.2 },
+      { monster: 0.65, shop: 0.15, rest: 0.2 },
+      { rest: 1 },
+      { boss: 1 },
     ],
   };
 }
@@ -82,6 +79,8 @@ export const RUN_MODES = {
     nodeCountMin: 2,
     nodeCountMax: 3,
     plotArmor: true,
+    // MC1 has all 15 fragments from the start; no fragment nodes spawn.
+    spawnFragments: false,
   },
   mc2: {
     id: 'mc2',
@@ -94,6 +93,8 @@ export const RUN_MODES = {
     nodeCountMin: 2,
     nodeCountMax: 5,
     plotArmor: false,
+    // MC2 starts with 1 fragment and has to find the other 14 across 14 acts.
+    spawnFragments: true,
   },
 };
 
