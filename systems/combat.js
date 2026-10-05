@@ -1,7 +1,7 @@
 import {
   state, pushLog, startPlayerTurnFor, livingEnemies, rollIntent, endCombat, cardDef,
   forEachRelic, showBossLore, activePlayer, activeBossPassives,
-  advanceScript, resetBossScript,
+  advanceScript, resetBossScript, triggerPlotArmor,
   markPlayerEndedTurn, allPlayersEndedTurn,
 } from './state.js';
 import { draw, recycleHand, shuffle, makeCard } from './deck.js';
@@ -14,6 +14,7 @@ import { RELICS } from '../data/relics.js';
 import { ENEMY_CARDS } from '../data/enemy-cards.js';
 import { getEnchant } from '../data/enchants.js';
 import { getClassMods } from '../data/classes.js';
+import { getModeConfig } from '../data/maps.js';
 
 const combat = {
   attacksThisTurn: {},
@@ -830,7 +831,6 @@ export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}
   dmg *= outgoingMultiplier(attacker);
   dmg *= incomingMultiplier(target);
 
-  // ---- Class modifiers ----
   if (state.players.includes(attacker) && attacker.classId) {
     const mods = getClassMods(attacker.classId);
     dmg *= isSpell ? mods.magicDamage : mods.physicalDamage;
@@ -898,10 +898,19 @@ function checkEnemiesDead() {
 }
 
 function checkPlayerDead() {
-  if (state.players.every(p => p.hp <= 0)) {
-    pushLog('Defeat.');
-    endCombat(false);
+  if (!state.players.every(p => p.hp <= 0)) return;
+
+  const modeConfig = getModeConfig(state.run?.mode ?? 'mc2');
+
+  // MC1 plot armor: fragments refuse to let their carrier die. Restart the act.
+  if (modeConfig.plotArmor) {
+    pushLog('The fragments in your pocket go cold. Something pulls you back.');
+    triggerPlotArmor();
+    return;
   }
+
+  pushLog('Defeat.');
+  endCombat(false);
 }
 
 // ---- Per-player end of turn ----
@@ -924,6 +933,11 @@ export function beginPlayerEndTurn(playerIndex) {
   tickStatuses(p);
 
   if (state.players.every(x => x.hp <= 0)) {
+    const modeConfig = getModeConfig(state.run?.mode ?? 'mc2');
+    if (modeConfig.plotArmor) {
+      triggerPlotArmor();
+      return { allReady: false };
+    }
     pushLog('Defeat.');
     endCombat(false);
     return { allReady: false };
@@ -969,6 +983,11 @@ export function resolveEnemyTurn() {
   state.currentAnimation = null;
 
   if (state.players.every(p => p.hp <= 0)) {
+    const modeConfig = getModeConfig(state.run?.mode ?? 'mc2');
+    if (modeConfig.plotArmor) {
+      triggerPlotArmor();
+      return;
+    }
     pushLog('Defeat.');
     endCombat(false);
     return;
@@ -990,6 +1009,11 @@ export function resolveEnemyTurn() {
   }
 
   if (state.players.every(p => p.hp <= 0)) {
+    const modeConfig = getModeConfig(state.run?.mode ?? 'mc2');
+    if (modeConfig.plotArmor) {
+      triggerPlotArmor();
+      return;
+    }
     pushLog('Defeat.');
     endCombat(false);
     return;
