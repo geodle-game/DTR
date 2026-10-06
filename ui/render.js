@@ -32,7 +32,7 @@ import { ENEMY_CARDS } from '../data/enemy-cards.js';
 import { NODE_TYPES } from '../data/maps.js';
 import { getNode, reachableFrom, startingNodes } from '../systems/map.js';
 import { getEnchant } from '../data/enchants.js';
-import { playableClasses } from '../data/classes.js';
+import { getClass, playableClasses } from '../data/classes.js';
 import { loadMeta } from '../data/meta.js';
 import { TUTORIALS } from '../data/tutorials.js';
 import { FRAGMENT_LORE } from '../data/fragmentLore.js';
@@ -59,6 +59,28 @@ function localHandPlayer() {
   const slot = mySlot();
   if (slot == null) return state.players[0] || null;
   return state.players[slot] || null;
+}
+
+// ------------------------------------------------------------
+// Portrait helper
+// ------------------------------------------------------------
+// Returns an <img> for a class portrait, or null if the class
+// has no portrait declared. On load error the image hides itself
+// so we never leave a broken-image icon behind.
+//
+// `small: true` → circular thumbnail used in player panels.
+function classPortraitImg(cls, { small = false } = {}) {
+  if (!cls?.portrait) return null;
+  const img = document.createElement('img');
+  img.className = 'class-portrait' + (small ? ' class-portrait-small' : '');
+  img.src = cls.portrait;
+  img.alt = `${cls.name} portrait`;
+  img.loading = 'lazy';
+  img.draggable = false;
+  img.addEventListener('error', () => {
+    if (img.parentNode) img.parentNode.removeChild(img);
+  }, { once: true });
+  return img;
 }
 
 // ------------------------------------------------------------
@@ -666,6 +688,7 @@ function classCard(cls, onClick) {
   el.className = 'class-card';
   const stats = classStatsLines(cls);
   el.innerHTML = `
+    <div class="class-portrait-wrap"></div>
     <div class="class-name">${cls.name}</div>
     <div class="class-blurb">${cls.blurb}</div>
     <div class="class-hp">Starting HP: ${cls.startHp}</div>
@@ -673,6 +696,15 @@ function classCard(cls, onClick) {
       ${stats.map(s => `<div class="class-stat">${s}</div>`).join('')}
     </div>
   `;
+
+  const portraitWrap = el.querySelector('.class-portrait-wrap');
+  const portrait = classPortraitImg(cls);
+  if (portrait) {
+    portraitWrap.appendChild(portrait);
+  } else {
+    portraitWrap.remove();
+  }
+
   el.addEventListener('click', onClick);
   return el;
 }
@@ -752,6 +784,17 @@ function renderDeckView(app) {
   const h = document.createElement('h1');
   h.textContent = `${p.name}'s Starting Deck`;
   wrap.appendChild(h);
+
+  // Class portrait above the starting deck.
+  const cls = p.classId ? getClass(p.classId) : null;
+  const portrait = cls ? classPortraitImg(cls) : null;
+  if (portrait) {
+    const portraitWrap = document.createElement('div');
+    portraitWrap.className = 'deckview-portrait-wrap';
+    portraitWrap.appendChild(portrait);
+    wrap.appendChild(portraitWrap);
+  }
+
   const sub = document.createElement('p');
   sub.className = 'muted';
   sub.innerHTML = `<strong style="color:#c9a3ff">${relic.name}</strong> — ${relic.text}`;
@@ -1792,7 +1835,10 @@ function playerPanel(p) {
     : '';
 
   el.innerHTML = `
-    <div class="panel-name">${p.name}</div>
+    <div class="panel-name-row">
+      <span class="panel-portrait-slot"></span>
+      <span class="panel-name">${p.name}</span>
+    </div>
     <div class="hp">HP ${p.hp} / ${p.maxHp}</div>
     <div class="block${p.block > 0 ? '' : ' block-empty'}">
       <span class="block-icon"></span>${p.block}
@@ -1803,6 +1849,16 @@ function playerPanel(p) {
     ${downTag}
     ${endedTag}
   `;
+
+  const cls = p.classId ? getClass(p.classId) : null;
+  const portrait = cls ? classPortraitImg(cls, { small: true }) : null;
+  const slot = el.querySelector('.panel-portrait-slot');
+  if (portrait) {
+    slot.appendChild(portrait);
+  } else {
+    slot.remove();
+  }
+
   return el;
 }
 
