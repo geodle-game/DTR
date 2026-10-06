@@ -6,6 +6,7 @@ import {
   activePlayer,
   setMetaFocus, setDeckViewFocus,
   dismissTutorial,
+  dismissFragmentLore,
   RECALL_GOLD_COST,
   RECALL_FRAGMENT_THRESHOLD,
 } from '../systems/state.js';
@@ -34,6 +35,7 @@ import { getEnchant } from '../data/enchants.js';
 import { playableClasses } from '../data/classes.js';
 import { loadMeta } from '../data/meta.js';
 import { TUTORIALS } from '../data/tutorials.js';
+import { FRAGMENT_LORE } from '../data/fragmentLore.js';
 
 const LONG_PRESS_MS = 450;
 const DRAG_THRESHOLD = 14;
@@ -138,13 +140,14 @@ export function render() {
   if (state.overlays?.exhaust) renderCardPileOverlay(app, 'Exhausted', p?.exhaustPile || []);
 
   if (state.bossLore) renderBossLore(app);
+  if (state.fragmentLore) renderFragmentLore(app);
   if (state.tutorial) renderTutorial(app);
 
   autoSave(state);
 }
 
 // ============================================================
-// Tutorial modal
+// Tutorial modal (z-index above fragment lore)
 // ============================================================
 
 function renderTutorial(app) {
@@ -177,6 +180,52 @@ function renderTutorial(app) {
   btn.textContent = 'Got it';
   btn.addEventListener('click', () => {
     dismissTutorial();
+    render();
+  });
+  panel.appendChild(btn);
+
+  overlay.appendChild(panel);
+  app.appendChild(overlay);
+}
+
+// ============================================================
+// Fragment lore modal (z-index below tutorial)
+// ============================================================
+
+function renderFragmentLore(app) {
+  const entry = FRAGMENT_LORE[state.fragmentLore.number];
+  if (!entry) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'fragment-lore-overlay';
+
+  const panel = document.createElement('div');
+  panel.className = 'fragment-lore-panel';
+
+  const kicker = document.createElement('div');
+  kicker.className = 'fragment-lore-kicker';
+  kicker.textContent = entry.kicker;
+  panel.appendChild(kicker);
+
+  const title = document.createElement('h2');
+  title.className = 'fragment-lore-title';
+  title.textContent = entry.title;
+  panel.appendChild(title);
+
+  const body = document.createElement('div');
+  body.className = 'fragment-lore-body';
+  for (const line of entry.body) {
+    const p = document.createElement('p');
+    p.textContent = line;
+    body.appendChild(p);
+  }
+  panel.appendChild(body);
+
+  const btn = document.createElement('button');
+  btn.className = 'btn fragment-lore-btn';
+  btn.textContent = 'Remember';
+  btn.addEventListener('click', () => {
+    dismissFragmentLore();
     render();
   });
   panel.appendChild(btn);
@@ -320,6 +369,16 @@ function renderChapterTitle(app) {
     ? 'You are not the explorer who reached the bottom. You are the one who has to go further.'
     : 'You found the fragments. Now you have to use them.';
   inner.appendChild(line);
+
+  const btn = document.createElement('button');
+  btn.className = 'btn';
+  btn.style.marginTop = '24px';
+  btn.textContent = meta.mc1Complete ? 'Begin' : 'Begin';
+  btn.addEventListener('click', () => {
+    state.screen = 'mainMenu';
+    render();
+  });
+  inner.appendChild(btn);
 
   wrap.appendChild(inner);
   app.appendChild(wrap);
@@ -1637,7 +1696,6 @@ function renderCombat(app) {
 
   c.appendChild(topButtons());
 
-  // Floating fragment counter — combat-only, top-left.
   if (state.run?.mode === 'mc2') {
     const badge = document.createElement('div');
     badge.className = 'combat-fragment-counter';
