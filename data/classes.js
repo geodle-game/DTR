@@ -9,6 +9,7 @@
 //   - bannedTypes      card types the class cannot use (filtered from pools)
 //   - cardPoolBias     relative weight per card type in rewards/shop rolls
 //   - locked           true = hidden from the picker (not yet implemented)
+//   - portrait         relative path to the class portrait asset
 //
 // Modifier fields are all 1.0 by default. Anything not listed in a class
 // falls back to 1.0.
@@ -22,6 +23,7 @@ export const CLASSES = {
     name: 'The Vanguard',
     blurb:
       'You never needed the dungeon\'s gift. Steel remembers what magic forgets.',
+    portrait: 'assets/characters/vanguard.png',
     startHp: 70,
     modifiers: {
       physicalDamage: 1.3,
@@ -46,6 +48,7 @@ export const CLASSES = {
     name: 'The Magnus',
     blurb:
       'You learned to speak the dungeon\'s own language. It costs you everything.',
+    portrait: 'assets/characters/magnus.png',
     startHp: 50,
     modifiers: {
       physicalDamage: 0.5,
@@ -71,6 +74,7 @@ export const CLASSES = {
     name: 'The Priest',
     blurb:
       'You mend what the war breaks. The dungeon does not appreciate mercy.',
+    portrait: 'assets/characters/priest.png',
     startHp: 70,
     modifiers: {
       physicalDamage: 0.5,
@@ -93,6 +97,8 @@ export const CLASSES = {
   },
 
   // ---- Deferred until companions exist ----
+  // No portrait yet — the class is a concept, not an implementation.
+  // When it's built, add: portrait: 'assets/characters/beastcaller.png'
   beastcaller: {
     id: 'beastcaller',
     name: 'The Beastcaller',
