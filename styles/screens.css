@@ -1086,6 +1086,109 @@
 }
 
 /* ============================================================
+   RECALL SCREEN
+   ============================================================ */
+
+.recall-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 720px;
+  margin-top: 8px;
+}
+
+.recall-act-card {
+  background: linear-gradient(180deg, #232833, #1a1e26);
+  border: 1px solid #3a4250;
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.35);
+}
+
+.recall-act-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: #c9a3ff;
+  letter-spacing: .02em;
+}
+
+.recall-act-header strong {
+  color: #ffd166;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
+.recall-act-current-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #6bff9e;
+  background: rgba(107,255,158,.08);
+  border: 1px solid rgba(107,255,158,.35);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.recall-node-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.recall-node-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #3a4250, #1e2229);
+  border: 2px solid #4a5262;
+  color: #e8eaee;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-family: inherit;
+  transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+  box-shadow: 0 2px 6px rgba(0,0,0,.6);
+}
+
+.recall-node-btn:hover {
+  transform: scale(1.18);
+  border-color: #8f6bff;
+  box-shadow:
+    0 2px 6px rgba(0,0,0,.6),
+    0 0 0 3px rgba(143,107,255,.35),
+    0 0 14px rgba(143,107,255,.7);
+}
+
+.recall-node-completed {
+  opacity: .55;
+}
+
+.recall-node-fragment {
+  border-color: #6fb3ff;
+  background: radial-gradient(circle at 35% 30%, #8fd4ff, #2a5a8f);
+  color: #ffffff;
+  text-shadow: 0 0 6px rgba(111,179,255,.9);
+}
+
+.recall-node-current {
+  border-color: #ffd166;
+  box-shadow:
+    0 2px 6px rgba(0,0,0,.6),
+    0 0 0 3px rgba(255,209,102,.5),
+    0 0 16px rgba(255,209,102,.8);
+  animation: mapPulse 1.6s ease-in-out infinite;
+}
+
+/* ============================================================
    REWARD / EVENT / SHOP / REST
    ============================================================ */
 
