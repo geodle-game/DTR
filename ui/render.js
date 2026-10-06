@@ -5,6 +5,7 @@ import {
   closeOverlays, dismissBossLore, activeBossPassives,
   activePlayer,
   setMetaFocus, setDeckViewFocus,
+  RECALL_GOLD_COST,
 } from '../systems/state.js';
 import { dispatch } from '../systems/dispatch.js';
 import { getMode, isGuest, mySlot } from '../systems/net.js';
@@ -90,6 +91,9 @@ const startCoopRun        = ()    => dispatch({ type: 'START_COOP_RUN' });
 const restartAct          = ()    => dispatch({ type: 'RESTART_ACT' });
 const advanceAbsorption   = ()    => dispatch({ type: 'ADVANCE_ABSORPTION' });
 const completeAbsorption  = ()    => dispatch({ type: 'COMPLETE_ABSORPTION' });
+const openRecall          = ()    => dispatch({ type: 'OPEN_RECALL' });
+const closeRecall         = ()    => dispatch({ type: 'CLOSE_RECALL' });
+const recallTo            = (act, nodeId) => dispatch({ type: 'RECALL_TO', act, nodeId });
 
 // ============================================================
 // Main render entry
@@ -116,6 +120,7 @@ export function render() {
     case 'enchantPick':  renderEnchantPick(app);  break;
     case 'victory':      renderVictory(app);      break;
     case 'absorption':   renderAbsorption(app);   break;
+    case 'recall':       renderRecall(app);       break;
     case 'mpHost':       renderMpHost(app);       break;
     case 'mpGuest':      renderMpGuest(app);      break;
     default:             renderGameOver(app);
@@ -362,6 +367,24 @@ function topButtons() {
     relicBtn.textContent = `Relics ${p.relics.length}`;
     relicBtn.addEventListener('click', () => { toggleRelicOverlay(); render(); });
     wrap.appendChild(relicBtn);
+  }
+
+  // Recall button — only on the map, and only after unlocking at 5 fragments.
+  if (state.screen === 'map' && state.run?.recallUnlocked) {
+    const canAfford = p.gold >= RECALL_GOLD_COST;
+    const recallBtn = document.createElement('button');
+    recallBtn.className = 'icon-btn';
+    recallBtn.textContent = `Recall (${RECALL_GOLD_COST}g)`;
+    if (canAfford) {
+      recallBtn.title = 'Return to any explored node.';
+      recallBtn.addEventListener('click', () => { openRecall(); });
+    } else {
+      recallBtn.title = `You need ${RECALL_GOLD_COST} gold to recall.`;
+      recallBtn.disabled = true;
+      recallBtn.style.opacity = '0.5';
+      recallBtn.style.cursor = 'not-allowed';
+    }
+    wrap.appendChild(recallBtn);
   }
 
   return wrap;
@@ -651,9 +674,13 @@ function renderMap(app) {
     `<div>${p.name}: HP <span class="hp">${p.hp}/${p.maxHp}</span> ${goldDisplay(p.gold)}</div>`
   ).join('');
   const modeLabel = state.run.mode === 'mc1' ? 'Prologue' : 'Descent';
+  const fragmentLine = state.run.mode === 'mc2'
+    ? `<div class="fragment-counter"><span class="fragment-symbol">◈</span> ${state.run.fragmentsCollected} / 15</div>`
+    : '';
   header.innerHTML = `
     <div>${modeLabel} — Act ${state.run.act} / ${state.run.actsTotal}</div>
     ${headerBits}
+    ${fragmentLine}
     <div>Floor ${state.run.floor + 1} / ${map.floors}</div>
   `;
   wrap.appendChild(header);
@@ -734,6 +761,10 @@ function renderMap(app) {
     el.textContent = info.symbol;
 
     if (state.run.currentNodeId === n.id) el.classList.add('map-node-current');
+    if (n.type === 'fragment') {
+      el.classList.add('map-node-fragment');
+      if (n.collected) el.classList.add('map-node-taken');
+    }
     if (reachSet.has(n.id)) {
       el.classList.add('map-node-reachable');
       el.addEventListener('click', () => startNode(n.id));
@@ -1076,6 +1107,134 @@ function renderAbsorption(app) {
   wrap.appendChild(btn);
 
   app.appendChild(wrap);
+}
+
+// ============================================================
+// Recall (map teleport)
+// ============================================================
+
+function renderRecall(app) {
+  const wrap = document.createElement('div');
+  wrap.className = 'screen screen-center';
+
+  const h = document.createElement('h1');
+  h.textContent = 'Recall';
+  wrap.appendChild(h);
+
+  const sub = document.createElement('p');
+  sub.className = 'muted';
+  sub.textContent = `Spend ${RECALL_GOLD_COST} gold to travel to any node you have already explored.`;
+  wrap.appendChild(sub);
+
+  const currentP = me();
+  if (currentP) {
+    const goldLine = document.createElement('p');
+    goldLine.innerHTML = `${currentP.name}: ` + goldDisplay(currentP.gold);
+    wrap.appendChild(goldLine);
+  }
+
+  const explored = state.run?.exploredMaps || {};
+  const acts = Object.keys(explored).map(Number).sort((a, b) => a - b);
+
+  if (!acts.length) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = 'You have not explored any acts yet.';
+    wrap.appendChild(empty);
+  } else {
+    const grid = document.createElement('div');
+    grid.className = 'recall-grid';
+    for (const act of acts) {
+      grid.appendChild(recallActCard(act, explored[act]));
+    }
+    wrap.appendChild(grid);
+  }
+
+  const back = document.createElement('button');
+  back.className = 'btn';
+  back.textContent = 'Back to Map';
+  back.addEventListener('click', () => closeRecall());
+  wrap.appendChild(back);
+
+  app.appendChild(wrap);
+}
+
+function recallActCard(act, entry) {
+  const card = document.createElement('div');
+  card.className = 'recall-act-card';
+
+  const isCurrentAct = state.run.act === act;
+
+  const header = document.createElement('div');
+  header.className = 'recall-act-header';
+  header.innerHTML = `
+    <strong>Act ${act}</strong>
+    <span class="muted"> · ${entry.visitedNodeIds.length} visited</span>
+    ${isCurrentAct ? '<span class="recall-act-current-badge">Current</span>' : ''}
+  `;
+  card.appendChild(header);
+
+  const nodeRow = document.createElement('div');
+  nodeRow.className = 'recall-node-row';
+
+  const visitedNodes = entry.visitedNodeIds
+    .map(id => entry.map.nodes.find(n => n.id === id))
+    .filter(Boolean)
+    .sort((a, b) => a.floor - b.floor);
+
+  if (!visitedNodes.length) {
+    const empty = document.createElement('span');
+    empty.className = 'muted';
+    empty.textContent = 'No nodes visited.';
+    nodeRow.appendChild(empty);
+  } else {
+    for (const node of visitedNodes) {
+      const info = NODE_TYPES[node.type] || { symbol: '?', label: '?' };
+      const btn = document.createElement('button');
+      btn.className = 'recall-node-btn';
+      btn.title = `${info.label} · floor ${node.floor + 1}`;
+      btn.textContent = info.symbol;
+
+      if (isCurrentAct && state.run.currentNodeId === node.id) {
+        btn.classList.add('recall-node-current');
+      }
+      if (node.completed) btn.classList.add('recall-node-completed');
+      if (node.type === 'fragment') btn.classList.add('recall-node-fragment');
+
+      btn.addEventListener('click', () => confirmRecall(act, node.id));
+      nodeRow.appendChild(btn);
+    }
+  }
+
+  card.appendChild(nodeRow);
+  return card;
+}
+
+function confirmRecall(act, nodeId) {
+  const p = me();
+  if (!p) return;
+  if (p.gold < RECALL_GOLD_COST) {
+    alert(`You need ${RECALL_GOLD_COST} gold to recall.`);
+    return;
+  }
+
+  const sameAct = state.run.act === act;
+  const sameNode = sameAct && state.run.currentNodeId === nodeId;
+  if (sameNode) {
+    alert('You are already here.');
+    return;
+  }
+
+  const realAct = state.run.realAct ?? state.run.act;
+  const scalingNote = act < realAct
+    ? ` Enemies here will scale to Act ${realAct}.`
+    : '';
+  const ok = confirm(
+    `Recall to Act ${act}? This costs ${RECALL_GOLD_COST} gold.${scalingNote}`
+  );
+  if (!ok) return;
+
+  recallTo(act, nodeId);
 }
 
 // ============================================================
@@ -1892,7 +2051,6 @@ function endBanner() {
 
     if (state.combatKind === 'boss') {
       if (state.run.mode === 'mc1') {
-        // MC1's final boss → absorption, not progression.
         btn.textContent = 'The machine hums';
         btn.addEventListener('click', () => finishRun());
       } else if (state.lastEncounterId === 'final-boss') {
