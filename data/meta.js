@@ -1,8 +1,9 @@
 // ============================================================
 // data/meta.js
 // Cross-run persistence. Tracks whether MC1's prologue has been
-// completed, how many runs the player has attempted, and which
-// endings they've seen.
+// completed, how many runs the player has attempted, which
+// endings they've seen, and which one-shot narrative beats have
+// fired.
 // ============================================================
 
 const STORAGE_KEY = 'drawnToRuin.meta';
@@ -10,10 +11,12 @@ const META_VERSION = 1;
 
 const DEFAULT_META = {
   version: META_VERSION,
-  mc1Complete: false,       // has the player finished MC1's prologue?
-  totalRuns: 0,             // increments on every new run
-  endingsSeen: [],          // ['prologue', 'absorbed', 'truth', 'secret']
-  lastAbsorption: null,     // { fragmentsSent, at }
+  mc1Complete: false,
+  totalRuns: 0,
+  endingsSeen: [],
+  lastAbsorption: null,
+  tutorialsSeen: [],
+  fragmentLoreSeen: [],
 };
 
 let cached = null;
@@ -25,6 +28,9 @@ export function loadMeta() {
     if (!raw) { cached = { ...DEFAULT_META }; return cached; }
     const data = JSON.parse(raw);
     cached = { ...DEFAULT_META, ...data };
+    if (!Array.isArray(cached.tutorialsSeen)) cached.tutorialsSeen = [];
+    if (!Array.isArray(cached.fragmentLoreSeen)) cached.fragmentLoreSeen = [];
+    if (!Array.isArray(cached.endingsSeen)) cached.endingsSeen = [];
     return cached;
   } catch {
     cached = { ...DEFAULT_META };
