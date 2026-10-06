@@ -5,7 +5,9 @@ import {
   closeOverlays, dismissBossLore, activeBossPassives,
   activePlayer,
   setMetaFocus, setDeckViewFocus,
+  dismissTutorial,
   RECALL_GOLD_COST,
+  RECALL_FRAGMENT_THRESHOLD,
 } from '../systems/state.js';
 import { dispatch } from '../systems/dispatch.js';
 import { getMode, isGuest, mySlot } from '../systems/net.js';
@@ -31,6 +33,7 @@ import { getNode, reachableFrom, startingNodes } from '../systems/map.js';
 import { getEnchant } from '../data/enchants.js';
 import { playableClasses } from '../data/classes.js';
 import { loadMeta } from '../data/meta.js';
+import { TUTORIALS } from '../data/tutorials.js';
 
 const LONG_PRESS_MS = 450;
 const DRAG_THRESHOLD = 14;
@@ -106,6 +109,7 @@ export function render() {
 
   switch (state.screen) {
     case 'mainMenu':     renderMainMenu(app);     break;
+    case 'chapterTitle': renderChapterTitle(app); break;
     case 'classPick':    renderClassPick(app);    break;
     case 'relicPick':    renderRelicPick(app);    break;
     case 'deckView':     renderDeckView(app);     break;
@@ -134,8 +138,51 @@ export function render() {
   if (state.overlays?.exhaust) renderCardPileOverlay(app, 'Exhausted', p?.exhaustPile || []);
 
   if (state.bossLore) renderBossLore(app);
+  if (state.tutorial) renderTutorial(app);
 
   autoSave(state);
+}
+
+// ============================================================
+// Tutorial modal
+// ============================================================
+
+function renderTutorial(app) {
+  const t = TUTORIALS[state.tutorial.id];
+  if (!t) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'tutorial-overlay';
+
+  const panel = document.createElement('div');
+  panel.className = 'tutorial-panel';
+
+  const title = document.createElement('h2');
+  title.className = 'tutorial-title';
+  title.textContent = t.title;
+  panel.appendChild(title);
+
+  const body = document.createElement('div');
+  body.className = 'tutorial-body';
+  for (const line of t.body) {
+    const p = document.createElement('p');
+    p.textContent = line;
+    if (line.startsWith('•')) p.className = 'tutorial-bullet';
+    body.appendChild(p);
+  }
+  panel.appendChild(body);
+
+  const btn = document.createElement('button');
+  btn.className = 'btn tutorial-btn';
+  btn.textContent = 'Got it';
+  btn.addEventListener('click', () => {
+    dismissTutorial();
+    render();
+  });
+  panel.appendChild(btn);
+
+  overlay.appendChild(panel);
+  app.appendChild(overlay);
 }
 
 // ============================================================
@@ -167,60 +214,25 @@ function renderMainMenu(app) {
   lore.className = 'main-menu-lore';
 
   if (!meta.mc1Complete) {
-    tagline.textContent = "The dungeon gave us cards. Then it decided we weren't allowed to be.";
+    tagline.textContent = 'You are the first to go down. You will not be the last.';
     lore.innerHTML = `
-      <p>Long ago, the dungeon gave humanity magic.</p>
-      <p>Not the kind kings hoarded in towers, not the kind priests
-      whispered about in temples — real, usable magic. The dungeon shaped
-      it into cards. Simple things. Paper and ink and a little bit of the
-      dungeon's own power, folded flat enough to fit in a pocket.</p>
-      <p>For the first time in history, magic belonged to everyone.</p>
-      <p>Humanity grew. Villages became cities. Plagues ended. Famines
-      ended. The world that had spent ten thousand years trying to kill
-      humans finally, slowly, started to let them live.</p>
-      <p>And the dungeon watched.</p>
-      <p>It had not intended for us to grow this far. It had given us the
-      cards the way a lord gives a peasant a plow — useful, small,
-      controlled. It had not intended for us to enchant them, chain them,
-      and make our own. It had not intended for a human child to do what
-      once took an archmage.</p>
-      <p>So it reached for the chains.</p>
-      <p>Across every dungeon in the world, the same order came down:
-      <em>revoke the gift</em>. No new cards. No new enchantments. Every
-      tool we had been given was suddenly, deliberately, made finite.</p>
-      <p>Then the dungeons opened. Not to negotiate. Not to reclaim.
-      <em>To erase.</em> Monsters poured out of the depths — not mindless
-      beasts, but something purpose-built. Creatures bred to hunt card
-      users, to smell a deck in a hand from a mile away, to end the only
-      humans who could still use the gift.</p>
-      <p>The message was clear: <em>if you cannot be controlled, you cannot
-      be allowed to exist.</em></p>
-      <p>So humanity fought back. The kingdoms united for the first time
-      in history — not under a king, not under a god. Under the cards.</p>
-      <p>The war lasted a thousand years. We lost almost everything.</p>
-      <p>But we did not lose everything.</p>
-      <p>Once every hundred years, a child is born with something the
-      dungeon cannot revoke. A resonance with Card Magic that no darkening
-      of the system can silence. Someone who can still draw from a well
-      the dungeon thought it had sealed. Someone who can push a card
-      further than any human before them.</p>
-      <p>We call them <strong>the Drawn</strong>.</p>
-      <p>Most die young. But every hundred years, one survives long enough
-      to grow up. Long enough to train. Long enough to walk into a dungeon
-      with a deck in hand and the weight of a thousand-year war on their
-      shoulders.</p>
-      <p class="main-menu-lore-emphasis">That year is now.</p>
-      <p class="main-menu-lore-emphasis">That hero is you.</p>
+      <p>There is a buried city under the mountain. The Asteri built it. Then one day, every person in it vanished.</p>
+      <p>Nobody knows why. Nobody knows where they went. Nobody knows what they left behind.</p>
+      <p>You are an explorer. You came for the ruins. You found something else.</p>
+      <p>A cache of <strong>Script fragments</strong> — fifteen pieces of a language older than the city itself. Together they make you something more than human. Together they might be enough to descend.</p>
+      <p>The deeper districts are not empty. Something else has been down here, waiting.</p>
+      <p>You are not here to study the ruins anymore. You are here to find the bottom of them.</p>
+      <p class="main-menu-lore-emphasis">Descend.</p>
     `;
   } else {
-    tagline.textContent = 'You wake up somewhere you have never been. You remember dying somewhere you have never been.';
+    tagline.textContent = 'You woke up with someone else\'s memory. Find the fragments. Find him.';
     lore.innerHTML = `
-      <p>You do not know your own name.</p>
-      <p>You know someone else's.</p>
-      <p>You remember a researcher. A machine. A chamber beneath the earth that was never supposed to be opened.</p>
-      <p>You remember fifteen Script fragments. They were yours, once.</p>
-      <p>They are not yours anymore. They are scattered across the ruins, and one of them is still in your head, telling you where to look.</p>
-      <p>The researcher is still down there. You do not know yet that you have met him before.</p>
+      <p>You are not the first explorer to descend into the buried city. You are the second.</p>
+      <p>The first one made it to the bottom. He found the researcher. He beat him. And then the machine kept him anyway.</p>
+      <p>Before it took him, he used the last of his power to send one thing forward: a single Script fragment, carrying one instruction — <em>find the rest</em>.</p>
+      <p>You woke up with it in your head. You do not know his name. You know his voice.</p>
+      <p>Fourteen fragments are scattered across the ruins. One act at a time, one fragment at a time, you can put his power back together. When you do, you can do what he could not: reach the researcher and save him.</p>
+      <p>If you fail, you will send a fragment forward too. And the next explorer will try again.</p>
       <p class="main-menu-lore-emphasis">Find them.</p>
       <p class="main-menu-lore-emphasis">Then find him.</p>
     `;
@@ -253,7 +265,7 @@ function renderMainMenu(app) {
   } else {
     const btn = document.createElement('button');
     btn.className = 'btn main-menu-btn';
-    btn.textContent = meta.mc1Complete ? 'Descend' : 'Begin';
+    btn.textContent = meta.mc1Complete ? 'Descend Again' : 'Begin';
     btn.addEventListener('click', () => newRun());
     inner.appendChild(btn);
   }
@@ -266,6 +278,48 @@ function renderMainMenu(app) {
     render();
   });
   inner.appendChild(mpBtn);
+
+  wrap.appendChild(inner);
+  app.appendChild(wrap);
+}
+
+// ============================================================
+// Chapter title card
+// ============================================================
+
+function renderChapterTitle(app) {
+  const meta = loadMeta();
+  const wrap = document.createElement('div');
+  wrap.className = 'chapter-title-screen';
+
+  const inner = document.createElement('div');
+  inner.className = 'chapter-title-inner';
+
+  const kicker = document.createElement('div');
+  kicker.className = 'chapter-kicker';
+  kicker.textContent = 'Chapter';
+  inner.appendChild(kicker);
+
+  const num = document.createElement('div');
+  num.className = 'chapter-number';
+  num.textContent = meta.mc1Complete ? 'Two' : 'One';
+  inner.appendChild(num);
+
+  const sub = document.createElement('div');
+  sub.className = 'chapter-sub';
+  sub.textContent = meta.mc1Complete ? 'The Inheritor' : 'The First Descent';
+  inner.appendChild(sub);
+
+  const divider = document.createElement('div');
+  divider.className = 'chapter-divider';
+  inner.appendChild(divider);
+
+  const line = document.createElement('p');
+  line.className = 'chapter-line';
+  line.textContent = meta.mc1Complete
+    ? 'You are not the explorer who reached the bottom. You are the one who has to go further.'
+    : 'You found the fragments. Now you have to use them.';
+  inner.appendChild(line);
 
   wrap.appendChild(inner);
   app.appendChild(wrap);
@@ -346,6 +400,18 @@ function goldDisplay(gold) {
   return `<span class="gold-display"><span class="gold-coin ${cls}"></span><span class="gold">${gold}</span></span>`;
 }
 
+function fragmentCounter() {
+  if (!state.run || state.run.mode !== 'mc2') return '';
+  const count = state.run.fragmentsCollected || 1;
+  return `
+    <div class="fragment-counter" title="Script fragments recovered">
+      <span class="fragment-symbol">◈</span>
+      <span class="fragment-count">${count}</span>
+      <span class="fragment-total">/ 15</span>
+    </div>
+  `;
+}
+
 function topButtons() {
   const wrap = document.createElement('div');
   wrap.className = 'top-buttons';
@@ -369,7 +435,6 @@ function topButtons() {
     wrap.appendChild(relicBtn);
   }
 
-  // Recall button — only on the map, and only after unlocking at 5 fragments.
   if (state.screen === 'map' && state.run?.recallUnlocked) {
     const canAfford = p.gold >= RECALL_GOLD_COST;
     const recallBtn = document.createElement('button');
@@ -674,13 +739,10 @@ function renderMap(app) {
     `<div>${p.name}: HP <span class="hp">${p.hp}/${p.maxHp}</span> ${goldDisplay(p.gold)}</div>`
   ).join('');
   const modeLabel = state.run.mode === 'mc1' ? 'Prologue' : 'Descent';
-  const fragmentLine = state.run.mode === 'mc2'
-    ? `<div class="fragment-counter"><span class="fragment-symbol">◈</span> ${state.run.fragmentsCollected} / 15</div>`
-    : '';
   header.innerHTML = `
     <div>${modeLabel} — Act ${state.run.act} / ${state.run.actsTotal}</div>
     ${headerBits}
-    ${fragmentLine}
+    ${fragmentCounter()}
     <div>Floor ${state.run.floor + 1} / ${map.floors}</div>
   `;
   wrap.appendChild(header);
@@ -1041,26 +1103,45 @@ function renderVictory(app) {
 
 const ABSORPTION_PAGES = [
   [
-    { text: 'The researcher falls. The machine keeps running.' },
-    { text: 'You turn to leave. You do not make it to the door.' },
-    { text: 'The chamber grows very quiet.' },
-    { text: 'Then it pulls.', cls: 'death-emphasis' },
+    { text: 'The researcher falls.' },
+    { text: 'You have won. You do not feel like you have won.' },
+    { text: 'Behind his body, the machine is still running. It has never stopped running.' },
+    { text: 'You turn toward the stairs.' },
+    { text: 'You do not make it.', cls: 'death-emphasis' },
   ],
   [
-    { text: 'You feel it in your hands first. The cards go dark. Then the Script marks you have been carrying — the fifteen fragments you found in the ruins, in the walls, in the bones of the Asteri — begin to burn.' },
-    { text: 'Not with fire. With meaning.' },
-    { text: 'You understand, in the last moment, what they were for.' },
+    { text: 'Something in the chamber grabs you. Not with hands. Not with force.' },
+    { text: 'With meaning.' },
+    { text: 'You feel it inside the Script fragments you have been carrying since the surface — all fifteen of them, humming in your pockets, pulling toward the machine like water running downhill.' },
+    { text: 'You understand, in the last coherent second, what the fragments were for.' },
+    { text: 'They were never yours. They were the machine\'s. And the machine wants them back.', cls: 'death-emphasis' },
   ],
   [
-    { text: 'You do not have the strength to escape. You do not have the time to write. But you have enough Script left to send one thing:' },
-    { text: 'A memory. Yours.' },
-    { text: 'You do not get to choose who receives it. You only get to choose which one goes.' },
+    { text: 'You are being absorbed.' },
+    { text: 'Not killed. The machine does not kill. It keeps.' },
+    { text: 'You can feel the previous explorer still inside it — a voice under a voice, saying the same thing over and over: do not stop. do not stop. do not stop.' },
+    { text: 'You will be that voice soon.' },
+    { text: 'You will be the next one to stand in the way.' },
   ],
   [
-    { text: 'You send the memory of the fragments.', cls: 'death-emphasis' },
-    { text: 'The other fourteen scatter into the dark. They will be found. They have to be.' },
-    { text: 'The last of the light leaves the chamber.' },
-    { text: 'Somewhere above you, someone wakes up.', cls: 'death-last' },
+    { text: 'But you have one thing the machine does not expect.' },
+    { text: 'You are still holding the fragments. All fifteen. And you have exactly enough time to spend them.' },
+    { text: 'Not to escape. It is too late for that.' },
+    { text: 'To send something forward.', cls: 'death-emphasis' },
+  ],
+  [
+    { text: 'You cannot send your body. You cannot send your deck. You cannot send your memories, not all of them.' },
+    { text: 'But you can send one fragment. One memory. One instruction.' },
+    { text: 'The memory: find the fragments.' },
+    { text: 'The instruction: bring them back.' },
+    { text: 'You do not get to choose who receives it. You only get to choose that it goes.' },
+    { text: 'You send it.', cls: 'death-emphasis' },
+  ],
+  [
+    { text: 'The other fourteen fragments scatter. They fly out of you and into the walls, into the ruins, into the districts you passed through on the way down.' },
+    { text: 'They will wait there. They are patient. They have always been patient.' },
+    { text: 'The last of your light leaves the chamber.' },
+    { text: 'Somewhere above you, someone wakes up with a stranger\'s voice in their head.', cls: 'death-last' },
   ],
 ];
 
@@ -1085,7 +1166,7 @@ function renderAbsorption(app) {
     panel.appendChild(el);
   }
 
-  if (pageIndex === 2) {
+  if (pageIndex === 4) {
     const count = document.createElement('div');
     count.className = 'absorption-count';
     count.innerHTML = `
@@ -1555,6 +1636,18 @@ function renderCombat(app) {
   }
 
   c.appendChild(topButtons());
+
+  // Floating fragment counter — combat-only, top-left.
+  if (state.run?.mode === 'mc2') {
+    const badge = document.createElement('div');
+    badge.className = 'combat-fragment-counter';
+    badge.innerHTML = `
+      <span class="fragment-symbol">◈</span>
+      <span class="fragment-count">${state.run.fragmentsCollected || 1}</span>
+      <span class="fragment-total">/ 15</span>
+    `;
+    c.appendChild(badge);
+  }
 
   const top = document.createElement('div');
   top.className = 'top';
