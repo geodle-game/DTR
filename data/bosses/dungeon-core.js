@@ -1,9 +1,10 @@
 // ============================================================
-// THE RESEARCHER'S MACHINE
-// Final boss. Act 15.
+// THE RESEARCHER — Final boss. Act 15.
 //
-// The researcher and the machine, fused. He has been kept alive
-// by the machine for centuries and uses its Script to fight.
+// The researcher's body, piloted by the machine. Three Veil
+// members control it. The researcher's soul is still inside,
+// fighting for control, losing, fighting again. He can only
+// blunt their commands, not stop them.
 //
 // Design: the Machine manipulates YOUR deck instead of just your
 // HP. It can exhaust your hand, disable your cards, flood you
@@ -132,7 +133,7 @@ export const LORE = {
     'Below you, the walls are covered in Script from floor to ceiling. Not Asteri Script. Something older.',
     'A single figure stands at the center of the chamber, back to you, hands on a machine that has not stopped running.',
     '"So. Another one."',
-    '"I have been waiting longer than you can imagine. Longer than your family name has existed. Longer than the word \'hero\' has meant anything."',
+    'The voice is tired. It has said this before.',
     '"You carry the fragments I scattered. The ones I sent up. The ones I sent down. You are not the first to carry them, and you will not be the last."',
     'He turns. He has not aged. He has not slept. He has not died.',
     '"I was an explorer once. Like you. I made it this far."',
@@ -141,16 +142,18 @@ export const LORE = {
   ],
   phase2: [
     'The researcher\'s light stutters. Something behind him shifts — the machine, breathing through him.',
-    'He is no longer fully in control.',
-    '"You — you should not be able to do this. You are one human. One frail, fleeting, sentimental human."',
-    '"How many of you did I make? How many fragments did I scatter, thinking the next one would be smarter?"',
-    '"I was wrong. I will not be wrong twice."',
+    'For a moment — just a moment — his voice is his own.',
+    '"You should not be able to do this. You are one human. One frail, fleeting, sentimental human."',
+    '"How many of you have I watched walk into this chamber? How many have I killed?"',
+    '"Do not stop. Whatever they offer you — do not stop."',
+    'Then the three voices return. His face goes still. The machine speaks with three mouths now.',
   ],
   phase3: [
     'The chamber cracks. Something older than language opens behind his eyes.',
+    'The three voices are loudest now. They are the ones speaking.',
     '"You are not the first. You will not be the last."',
-    '"But I remember every one of you who has stood here. Every explorer who carried the fragments I scattered. Every one of them is still inside the machine."',
-    '"I am what is left of the researcher. And the researcher does not end."',
+    '"Every explorer who has ever reached this chamber is still inside the machine. Every one of them is still screaming."',
+    '"The researcher is only a body. The body is ours. And we do not end."',
     '"Come. Let us finish this."',
   ],
   onDeath: [
@@ -158,7 +161,7 @@ export const LORE = {
     'Not like a monster dying — like a shell cracking open. What was inside was never a monster.',
     'It was a man who had been kept alive by something that did not understand death.',
     'Light spills out of him. Not attack-light. Memory-light. A thousand years of it, pouring into the room, pouring into you.',
-    '"You win," he says. His voice is soft now. Almost kind.',
+    '"You win," he says. His voice is soft now. Almost kind. Almost his own.',
     '"You were always going to win. The fragments make you stronger than anything the machine could build. They always did."',
     '"That is the problem."',
     'He shows you.',
@@ -167,34 +170,28 @@ export const LORE = {
     'You see it now.',
     'The Script was never stable. It was never meant to be used this long. Every fragment recovered, every memory restored, every generation that taught the next — a hairline fracture in the law that holds the world together.',
     'But that is not the whole of it.',
-    'The kingdoms did not merely use the Script.',
-    'They cut pieces out of the Asteri city.',
-    'You feel it, through the light. The Asteri were one civilization. Not many. Not a well to draw from. One. A single people, folded into the shape of a city, holding the knowledge they had been trusted with.',
-    'And the kingdoms cut fragments from them. Pressed them flat into the cards they could not otherwise power. Called it refinement. Said the Asteri could spare it. Said the Asteri were infinite.',
-    'They were not infinite.',
-    'They were one thing. And every piece they took, they could not grow back.',
-    'I felt each one. I remember each one. There are thousands.',
-    'And when the fragments were no longer enough — when the kingdoms wanted more power than a dying city could give — they reached for the ones outside.',
-    'The beings who entrusted the Script to the Asteri, in the beginning. Older than the world. Patient beyond human measure.',
-    'Humans stole their power. Bound it. Forced it into shapes it was never meant to take.',
-    'And it worked.',
-    'That was the worst part. It worked.',
-    'Every stolen spark widened the crack. Every fragment of the Asteri torn free widened it further. The law that keeps the ones outside outside was failing. The Script was leaking out of the world like water from a cracked bowl.',
-    'The ones outside had entrusted their strength to the Asteri.',
-    'The Asteri had entrusted it to us.',
-    'We used it to make a crack in the bottom of the world.',
-    '"The Disappearance was not a disaster," the researcher says. "It was containment."',
-    '"I could not take the Script back. I could not put the gift away. So I built the machine instead. And the machine kept me here, waiting, for the next one."',
+    'The kingdoms did not do this.',
+    'You feel it, through the light. The Asteri were one people. One civilization. They found a gift buried beneath their city and they left it alone, because a church older than their history told them to. They were not the villains of this story.',
+    'The Veil was.',
+    'You see them now — the faction within the Asteri that dug for years, that found the seal, that built the machine. You see the researcher as he was: a young man, brilliant, told he was building a tool for study. You see the moment he realized what he had made.',
+    'You see the three scripts fed into the machine. Spawn. Absorb. Destroy.',
+    'You see the seal break.',
+    'You see the core explode.',
+    '"The Disappearance was not a disaster," the researcher says. "It was a theft."',
+    '"The Veil took my people. They took the ones they could use and they disposed of the rest. They framed me so the surface would never look for them. They have been looking for the fragments for a thousand years."',
     '"And now you are here."',
     'The last of his light gathers into a single point — small, warm, patient. The same light you have felt in the fragment at your chest your entire life.',
     'And you understand, suddenly, why the light is warm.',
-    'It is a piece of the Asteri city.',
-    'The piece the researcher took from himself, a very long time ago, to make the fragment. The piece he gave to the first explorer on the off-chance that one day someone would make it this far, and would need to understand what they were inheriting.',
+    'It is a piece of the core. A piece of the thing the gardener made, and sealed, and gave to the world as a gift. A piece of everything that has ever been called magic.',
+    'The first explorer found one, after the shattering. He found the rest through it — the shards want to be whole, and they lead whoever carries them to each other. He gathered what he could reach. He knew he was dying. He knew the next explorer would need to know what he knew.',
+    'So he put his memory into them. Every fragment. Every truth he had learned on his way down.',
+    'He sent one forward. It found you.',
+    'The rest are still down here. Waiting.',
     '"You will not live long enough to finish this as a human," the researcher says. "You already know what you have to do."',
     '"Destroy the fragments. Every last one."',
-    '"Every Script fragment in every kingdom. Every stolen spark in every legendary blade. Every last piece of what your ancestors took from the Asteri."',
+    '"Every Script fragment in every kingdom. Every stolen spark in every legendary blade. Every last piece of what the surface took from us."',
     '"Bring them home. Seal the crack."',
-    '"Before the ones outside look down. Before they see what humans did with the gift they gave us. Because if they see — they will not ask questions. They will not negotiate. They will end the world and start again, the way a gardener pulls up a bed that has gone to rot."',
+    '"Before the Veil finds them. Before the Veil finds you."',
     '"Take my place. Guard the door. Wait."',
     '"And when the next explorer comes — because there will always be a next explorer — do for them what I could not do for you."',
     '"End it."',
@@ -238,6 +235,6 @@ export const LORE = {
     'You can hear them.',
     'Every explorer. Every fragment-bearer. Every century. They are all still here, inside the machine, whispering the same thing:',
     '"Come join us, our fellow fallen comrade."',
-    'But your hand closes around the fragments at your chest',
+    'But your hand closes around the fragments at your chest.',
   ],
 };
