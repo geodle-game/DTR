@@ -177,7 +177,7 @@ export const ENEMIES = {
 
   // ============================================================
   // ACT 1 INLINE BOSSES
-  // Three candidates, one beaten per run.
+  // Three candidates, one beaten per MC2 Act 1 run.
   // ============================================================
   'waxling-king': {
     id: 'waxling-king', name: 'The Waxling King', hp: 110,
@@ -206,8 +206,6 @@ for (const bossModule of BOSSES) {
 export const ENCOUNTERS = {
   // ============================================================
   // NORMAL POOLS
-  // Encounter IDs kept from the previous structure so state.js
-  // pickEncounter() continues to work without changes.
   // ============================================================
   'act1-basic':     ['echo-spawn', 'gutterling'],
   'act1-cultist':   ['whisper'],
@@ -229,20 +227,6 @@ export const ENCOUNTERS = {
   'act1-elite-3':   ['root-tyrant'],
   'act1-elite-4':   ['veil-enforcer'],
   'act1-elite-5':   ['master-claimant'],
-
-  // ============================================================
-  // BOSSES
-  // ============================================================
-  'act1-boss':      ['waxling-king'],
-  'act1-boss-2':    ['the-remembering'],
-  'act1-boss-3':    ['stitched-sovereign'],
-
-  // These three point at the old boss module IDs for now.
-  // They get replaced when we do the boss rewrite in the next
-  // message. Until then they keep the game functional.
-  'act3-boss':      ['fallen-drawn'],
-  'act4-boss':      ['the-warden'],
-  'final-boss':     ['dungeon-core'],
 };
 
 export function getEnemyDef(id) {
