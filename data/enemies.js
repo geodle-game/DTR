@@ -1,103 +1,198 @@
 import { BOSSES } from './bosses/index.js';
 
 export const ENEMIES = {
-  // -------- Normal --------
-  'jaw-worm': {
-    id: 'jaw-worm', name: 'Jaw Worm', hp: 42,
-    deck: ['bite', 'harden', 'chomp', 'bite'],
+  // ============================================================
+  // THE SPAWNED
+  // Machine-made. Unfinished. Wrong.
+  // ============================================================
+  'echo-spawn': {
+    id: 'echo-spawn', name: 'Echo Spawn', hp: 18,
+    deck: ['tendril-lash', 'coalesce', 'tendril-lash'],
   },
-  louse: {
-    id: 'louse', name: 'Louse', hp: 14,
-    deck: ['bite', 'spit', 'bite'],
+  gutterling: {
+    id: 'gutterling', name: 'Gutterling', hp: 12,
+    deck: ['tendril-lash', 'fraying-touch'],
   },
-  cultist: {
-    id: 'cultist', name: 'Cultist', hp: 48,
-    deck: ['ritual', 'dark-strike', 'dark-strike', 'ritual'],
+  waxling: {
+    id: 'waxling', name: 'Waxling', hp: 24,
+    deck: ['engulf', 'coalesce', 'tendril-lash'],
   },
-  'fungi-beast': {
-    id: 'fungi-beast', name: 'Fungi Beast', hp: 22,
-    deck: ['bite', 'spore-burst', 'harden'],
+  handler: {
+    id: 'handler', name: 'Handler', hp: 44,
+    deck: ['coalesce', 'seethe', 'tendril-lash', 'coalesce'],
   },
-  slaver: {
-    id: 'slaver', name: 'Slaver', hp: 46,
-    deck: ['whip', 'entangle', 'whip', 'stab'],
+  suture: {
+    id: 'suture', name: 'Suture', hp: 50,
+    deck: ['split-grow', 'coalesce', 'tendril-lash'],
   },
-  'acid-slime-m': {
-    id: 'acid-slime-m', name: 'Acid Slime (M)', hp: 28,
-    deck: ['corrosive-spit', 'lick', 'tackle'],
+  vessel: {
+    id: 'vessel', name: 'Vessel', hp: 60,
+    deck: ['engulf', 'coalesce', 'unravel', 'seethe'],
   },
-  'spike-slime': {
-    id: 'spike-slime', name: 'Spike Slime', hp: 32,
-    deck: ['flame-tackle', 'lick', 'tackle'],
+  'half-formed': {
+    id: 'half-formed', name: 'Half-Formed', hp: 70,
+    deck: ['engulf', 'unravel', 'coalesce', 'seethe'],
   },
-  looter: {
-    id: 'looter', name: 'Looter', hp: 44,
-    deck: ['mug', 'mug', 'smoke-bomb'],
+  null: {
+    id: 'null', name: 'Null', hp: 65,
+    deck: ['tendril-lash', 'coalesce', 'tendril-lash'],
   },
-  'fat-gremlin': {
-    id: 'fat-gremlin', name: 'Fat Gremlin', hp: 13,
-    deck: ['smash'],
-  },
-  'mad-gremlin': {
-    id: 'mad-gremlin', name: 'Mad Gremlin', hp: 20,
-    deck: ['scratch', 'scratch'],
-  },
-  'shield-gremlin': {
-    id: 'shield-gremlin', name: 'Shield Gremlin', hp: 12,
-    deck: ['protect', 'shield-bash'],
-  },
-  'sneaky-gremlin': {
-    id: 'sneaky-gremlin', name: 'Sneaky Gremlin', hp: 10,
-    deck: ['puncture', 'puncture'],
-  },
-  chosen: {
-    id: 'chosen', name: 'Chosen', hp: 60,
-    deck: ['chosen-hex', 'chosen-strike', 'chosen-hex', 'chosen-strike'],
-  },
-  byrd: {
-    id: 'byrd', name: 'Byrd', hp: 26,
-    deck: ['peck', 'swoop', 'peck'],
-  },
-  centurion: {
-    id: 'centurion', name: 'Centurion', hp: 76,
-    deck: ['slash', 'fury', 'slash', 'shield-bash'],
+  looper: {
+    id: 'looper', name: 'Looper', hp: 55,
+    deck: ['echo-strike', 'tendril-lash', 'echo-strike'],
   },
 
-  // -------- Elites --------
-  'gremlin-nob': {
-    id: 'gremlin-nob', name: 'Gremlin Nob', hp: 82,
-    deck: ['nob-rush', 'nob-skull-bash', 'nob-rush', 'nob-bellow'],
+  // ============================================================
+  // THE ABSORBED
+  // Asteri remnants. Still screaming.
+  // ============================================================
+  whisper: {
+    id: 'whisper', name: 'Whisper', hp: 20,
+    deck: ['borrowed-script', 'memory-lance'],
   },
-  'lagavulin': {
-    id: 'lagavulin', name: 'Lagavulin', hp: 109,
-    deck: ['lagavulin-attack', 'lagavulin-siphon', 'lagavulin-attack', 'lagavulin-attack'],
+  faded: {
+    id: 'faded', name: 'Faded', hp: 14,
+    deck: ['memory-lance', 'unfinished-sentence'],
   },
-  'book-of-stabbing': {
-    id: 'book-of-stabbing', name: 'Book of Stabbing', hp: 160,
-    deck: ['multi-stab', 'single-stab', 'multi-stab', 'heavy-stab'],
+  keeper: {
+    id: 'keeper', name: 'Keeper', hp: 48,
+    deck: ['mourn', 'memory-lance', 'borrowed-script'],
+  },
+  scholar: {
+    id: 'scholar', name: 'Scholar', hp: 44,
+    deck: ['unfinished-sentence', 'memory-lance', 'borrowed-script'],
+  },
+  recaller: {
+    id: 'recaller', name: 'Recaller', hp: 72,
+    deck: ['memory-lance', 'borrowed-script', 'echo-of-what-was'],
+  },
+  witness: {
+    id: 'witness', name: 'Witness', hp: 68,
+    deck: ['mourn', 'memory-lance', 'grief'],
   },
 
-  // -------- Boss (inline, Act 1 pool) --------
-  'the-guardian': {
-    id: 'the-guardian', name: 'The Guardian', hp: 140,
-    isBoss: true,
-    deck: ['guardian-slam', 'guardian-mode', 'guardian-slam', 'guardian-vent'],
-    passives: {
-      ignoreBlockPercent: 0.5,
-    },
+  // ============================================================
+  // THE WILD
+  // Pre-Asteri. Predators. Do not care about you.
+  // ============================================================
+  burrower: {
+    id: 'burrower', name: 'Burrower', hp: 32,
+    deck: ['thrash', 'burrow', 'stone-break'],
   },
-  'hexaghost': {
-    id: 'hexaghost', name: 'Hexaghost', hp: 180,
-    isBoss: true,
-    deck: ['hexaghost-divider', 'hexaghost-sear', 'hexaghost-inflame', 'hexaghost-tackle'],
-    passives: {
-      resistPhysical: 0.5,
-    },
+  'stone-eater': {
+    id: 'stone-eater', name: 'Stone-Eater', hp: 38,
+    deck: ['stone-break', 'carapace', 'thrash'],
   },
-  'slime-boss': {
-    id: 'slime-boss', name: 'Slime Boss', hp: 140,
+  'cave-mimic': {
+    id: 'cave-mimic', name: 'Cave Mimic', hp: 55,
+    deck: ['gnash', 'stone-break', 'burrow', 'gnash'],
+  },
+  'rust-beetle': {
+    id: 'rust-beetle', name: 'Rust Beetle', hp: 40,
+    deck: ['gnash', 'carapace', 'thrash'],
+  },
+  'blind-maw': {
+    id: 'blind-maw', name: 'Blind Maw', hp: 80,
+    deck: ['swallow', 'gnash', 'thrash'],
+  },
+  throat: {
+    id: 'throat', name: 'Throat', hp: 85,
+    deck: ['engulf', 'swallow', 'gnash'],
+  },
+
+  // ============================================================
+  // THE VEIL'S PROJECTS
+  // Organized. Cruel. Well-funded.
+  // ============================================================
+  construct: {
+    id: 'construct', name: 'Construct', hp: 52,
+    deck: ['null-shield', 'calibrated-strike', 'binding-field'],
+  },
+  graft: {
+    id: 'graft', name: 'Graft', hp: 60,
+    deck: ['overcharge', 'calibrated-strike', 'null-shield'],
+  },
+  loyalist: {
+    id: 'loyalist', name: 'Loyalist', hp: 62,
+    deck: ['calibrated-strike', 'binding-field', 'null-shield'],
+  },
+  'broken-instrument': {
+    id: 'broken-instrument', name: 'Broken Instrument', hp: 58,
+    deck: ['overcharge', 'calibrated-strike', 'binding-field', 'null-shield'],
+  },
+
+  // ============================================================
+  // SURFACE INTRUDERS
+  // Desperate. Mundane. Dangerous anyway.
+  // ============================================================
+  deserter: {
+    id: 'deserter', name: 'Deserter', hp: 30,
+    deck: ['harry', 'feint', 'riposte'],
+  },
+  'rival-explorer': {
+    id: 'rival-explorer', name: 'Rival Explorer', hp: 42,
+    deck: ['harry', 'riposte', 'trick-shot'],
+  },
+  'bound-familiar': {
+    id: 'bound-familiar', name: 'Bound Familiar', hp: 34,
+    deck: ['thrash', 'gnash', 'burrow'],
+  },
+  'exile-knight': {
+    id: 'exile-knight', name: 'Exile-Knight', hp: 78,
+    deck: ['riposte', 'harry', 'battle-cry', 'riposte'],
+  },
+  archivist: {
+    id: 'archivist', name: 'Archivist', hp: 60,
+    deck: ['trick-shot', 'harry', 'provision', 'trick-shot'],
+  },
+
+  // ============================================================
+  // ELITES
+  // ============================================================
+  'stitched-horror': {
+    id: 'stitched-horror', name: 'Stitched Horror', hp: 110,
+    isElite: true,
+    deck: ['engulf', 'unravel', 'seethe', 'coalesce', 'engulf'],
+  },
+  'asteri-remnant': {
+    id: 'asteri-remnant', name: 'Asteri Remnant', hp: 105,
+    isElite: true,
+    deck: ['memory-lance', 'echo-of-what-was', 'mourn', 'grief'],
+  },
+  'root-tyrant': {
+    id: 'root-tyrant', name: 'Root Tyrant', hp: 130,
+    isElite: true,
+    deck: ['swallow', 'carapace', 'stone-break', 'gnash'],
+  },
+  'veil-enforcer': {
+    id: 'veil-enforcer', name: 'Veil Enforcer', hp: 120,
+    isElite: true,
+    deck: ['calibrated-strike', 'binding-field', 'overcharge', 'null-shield'],
+  },
+  'master-claimant': {
+    id: 'master-claimant', name: 'Master Claimant', hp: 115,
+    isElite: true,
+    deck: ['riposte', 'battle-cry', 'trick-shot', 'harry', 'riposte'],
+  },
+
+  // ============================================================
+  // ACT 1 INLINE BOSSES
+  // Three candidates, one beaten per run.
+  // ============================================================
+  'waxling-king': {
+    id: 'waxling-king', name: 'The Waxling King', hp: 110,
     isBoss: true,
-    deck: ['slime-goop', 'slime-prep', 'slime-slam', 'slime-goop'],
+    deck: ['waxflow', 'crown-self', 'melt', 'waxflow', 'crown-self'],
+  },
+  'the-remembering': {
+    id: 'the-remembering', name: 'The Remembering', hp: 120,
+    isBoss: true,
+    deck: ['shatter-memory', 'mourn-song', 'remember-me', 'shatter-memory', 'mourn-song'],
+  },
+  'stitched-sovereign': {
+    id: 'stitched-sovereign', name: 'The Stitched Sovereign', hp: 130,
+    isBoss: true,
+    deck: ['gather-flesh', 'stitch', 'crown-self', 'gather-flesh', 'seethe'],
   },
 };
 
@@ -109,37 +204,44 @@ for (const bossModule of BOSSES) {
 }
 
 export const ENCOUNTERS = {
-  // Normal — shared pool, scaled per act
-  'act1-basic':     ['jaw-worm', 'louse'],
-  'act1-cultist':   ['cultist'],
-  'act1-fungi':     ['fungi-beast', 'fungi-beast'],
-  'act1-slaver':    ['slaver', 'louse'],
-  'act1-slimes':    ['acid-slime-m', 'acid-slime-m', 'louse'],
-  'act1-spike':     ['spike-slime', 'louse'],
-  'act1-looter':    ['looter'],
-  'act1-gremlins':  ['fat-gremlin', 'mad-gremlin', 'shield-gremlin', 'sneaky-gremlin'],
-  'act1-chosen':    ['chosen', 'byrd'],
-  'act1-byrd':      ['byrd', 'byrd', 'byrd'],
-  'act1-centurion': ['centurion', 'louse'],
+  // ============================================================
+  // NORMAL POOLS
+  // Encounter IDs kept from the previous structure so state.js
+  // pickEncounter() continues to work without changes.
+  // ============================================================
+  'act1-basic':     ['echo-spawn', 'gutterling'],
+  'act1-cultist':   ['whisper'],
+  'act1-fungi':     ['burrower'],
+  'act1-slaver':    ['deserter', 'gutterling'],
+  'act1-slimes':    ['waxling', 'gutterling', 'gutterling'],
+  'act1-spike':     ['stone-eater'],
+  'act1-looter':    ['deserter'],
+  'act1-gremlins':  ['gutterling', 'gutterling', 'gutterling', 'gutterling'],
+  'act1-chosen':    ['whisper', 'faded'],
+  'act1-byrd':      ['faded', 'faded', 'faded'],
+  'act1-centurion': ['stone-eater', 'burrower'],
 
-  // Elites — shared pool, scaled per act
-  'act1-elite-1':   ['gremlin-nob'],
-  'act1-elite-2':   ['lagavulin'],
-  'act1-elite-3':   ['book-of-stabbing'],
-  'act1-elite-4':   ['slaver', 'slaver'],
+  // ============================================================
+  // ELITE POOLS
+  // ============================================================
+  'act1-elite-1':   ['stitched-horror'],
+  'act1-elite-2':   ['asteri-remnant'],
+  'act1-elite-3':   ['root-tyrant'],
+  'act1-elite-4':   ['veil-enforcer'],
+  'act1-elite-5':   ['master-claimant'],
 
-  // Act 1 bosses (three candidates, one beaten per run)
-  'act1-boss':      ['the-guardian'],
-  'act1-boss-2':    ['hexaghost'],
-  'act1-boss-3':    ['slime-boss'],
+  // ============================================================
+  // BOSSES
+  // ============================================================
+  'act1-boss':      ['waxling-king'],
+  'act1-boss-2':    ['the-remembering'],
+  'act1-boss-3':    ['stitched-sovereign'],
 
-  // Act 3 boss
+  // These three point at the old boss module IDs for now.
+  // They get replaced when we do the boss rewrite in the next
+  // message. Until then they keep the game functional.
   'act3-boss':      ['fallen-drawn'],
-
-  // Act 4 boss
   'act4-boss':      ['the-warden'],
-
-  // Act 5 boss
   'final-boss':     ['dungeon-core'],
 };
 
