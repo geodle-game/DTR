@@ -79,9 +79,9 @@ absolute doctrine: *do not touch the thing below.*
 
 The Asteri obeyed. For their entire civilization — centuries,
 possibly longer — they built around the source. They built *over*
-it. They used its leak without ever looking at it directly. They told
-themselves it was a matter of respect. It was actually a matter of
-trust.
+it. They used its leak without ever looking at it directly. They
+told themselves it was a matter of respect. It was actually a matter
+of trust.
 
 They could have wiped the outside world out at any time. A single
 Asteri mage could have destroyed every tribe without taking a hit.
@@ -136,9 +136,10 @@ Inside Asteri society there was a faction. Researchers, officials,
 people with access to the oldest parts of the city. They called
 themselves **the Veil**.
 
-The Veil noticed what the Asteri had noticed — that something existed
-beneath the city — and drew the opposite conclusion. The church said
-do not touch. The Asteri said we will not. The Veil said *we will*.
+The Veil noticed what the Asteri had noticed — that something
+existed beneath the city — and drew the opposite conclusion. The
+church said do not touch. The Asteri said we will not. The Veil said
+*we will*.
 
 They spent **years digging**. They excavated deeper than any Asteri
 had ever gone. They found the seal.
@@ -256,10 +257,10 @@ at the wrong scale.
 
 ## VIII. THE CAPTURE OF THE ASTERI
 
-The initial blast killed or absorbed everyone within ten meters. That
-was not the whole city. Most of the Asteri were still alive and free
-— and the Asteri government, which was not the Veil, was going to
-overrun the Veil once it understood what had happened.
+The initial blast killed or absorbed everyone within ten meters.
+That was not the whole city. Most of the Asteri were still alive and
+free — and the Asteri government, which was not the Veil, was going
+to overrun the Veil once it understood what had happened.
 
 The Veil did not wait for that.
 
@@ -274,9 +275,9 @@ Everyone left in a hurry against their own will.
 There are no bodies. There was no warning. There was no evacuation.
 
 The Veil fed the powerless citizens into research cells. They fed
-the powerful into the machine. They kept what was useful and disposed
-of what was not. They were never overrun. They never had to fight
-the government. They simply removed the government, along with
+the powerful into the machine. They kept what was useful and
+disposed of what was not. They were never overrun. They never had to
+fight the government. They simply removed the government, along with
 everyone else.
 
 ---
@@ -355,9 +356,9 @@ the direction and distance of every remaining fragment, in the same
 way they feel their own hand. It is a second heartbeat in the back
 of the skull, except the second heartbeat is not theirs.
 
-This is how the player navigates across fifteen acts. It is also
-how the first explorer found the fragments in the first place: he
-picked up one, and knew where the rest were.
+This is how the player navigates across fifteen acts. It is also how
+the first explorer found the fragments in the first place: he picked
+up one, and knew where the rest were.
 
 **And this is why the Veil has never found them.** The attraction
 only activates when someone holds a fragment. The Veil has spent a
@@ -365,23 +366,32 @@ thousand years searching and has never held one. They cannot sense
 what they have never touched. They have been looking for something
 that is only visible to those who already have it.
 
-The Veil knows the fragments exist. They do not know how the player
-keeps finding them. From the Veil's perspective, the fragments are
-simply impossible to locate, and the players who find them seem to
-find them by luck.
+### The bonding rule
 
-The truth is that the fragments find each other. They have been
-trying to reassemble for a thousand years. They are, in a small
-way, conscious of their own scatteredness — and the only thing they
-want is to be whole.
+A fragment bonds to whoever finds it. Once bonded, it cannot be
+taken.
+
+Any attempt to take a fragment from its carrier makes it crumble to
+dust on contact with the thief's hand. This is why the Veil has
+searched for a thousand years and never held one — every time they
+have found a fragment, it has crumbled before they could carry it
+away. Their entire conspiracy has been chasing dust.
+
+When a carrier dies, their bonded fragments unbond and scatter, and
+can be found again by whoever comes next. The fragments always find
+the next one. They always have.
+
+The single exception is the fragment the first explorer *sent
+forward*. It was given, not taken, and bonds to its recipient on
+arrival. This is the one fragment the player starts MC2 with.
 
 ### What the fragments unlock
 
 - **First fragment:** the pull. The player begins to sense the
   others.
 - **Fifth fragment:** Recall — the ability to move anywhere the
-  player has already been. A small piece of the core's own
-  spatial logic, inherited through the shards.
+  player has already been. A small piece of the core's own spatial
+  logic, inherited through the shards.
 - **Fifteenth fragment:** full memory. The player knows who the
   researcher is and how to save him.
 
@@ -440,9 +450,9 @@ Disappearance. They learned to use it in three ways:
 1. **Magic script crystals** — dropped by strong monsters. The
    primary source of usable Script for most adventurers.
 2. **Bloodlines** — people born with faint Script energy.
-   Descendants of the few Asteri who left their homeland long
-   before the Disappearance and founded their own settlements
-   outside. Rare. Prestigious. Often politically significant.
+   Descendants of the few Asteri who left their homeland long before
+   the Disappearance and founded their own settlements outside.
+   Rare. Prestigious. Often politically significant.
 3. **The dungeon itself** — see Section XII.
 
 Modern Card Magic is a pale imitation of what the Asteri could do.
@@ -468,8 +478,8 @@ escalates — military.
 
 They fund expeditions. They post bounties. They compete for
 explorers, scholars, and mages. That is why the player exists. The
-player is one of a large, funded, contested population of adventurers
-descending into the city for money, glory, or duty.
+player is one of a large, funded, contested population of
+adventurers descending into the city for money, glory, or duty.
 
 Some kingdoms treat the Asteri city as holy land, blessed by a god
 or gods, and forbid desecration. Others treat it as a technology
@@ -500,15 +510,15 @@ their time.
 Two paths to victory, pursued in parallel:
 
 1. **Find the fragments of the core.** They have searched for a
-   thousand years and never found them. They do not know where the
-   shards went. They do not know the shards attract each other,
-   because they have never held one. From their perspective, the
-   fragments are simply unfindable — and every explorer who
-   miraculously comes back with one is a mystery they have never
-   solved.
-2. **Reverse-engineer the machine.** They have failed for a
-   thousand years. They do not understand the ancient technology
-   behind it. They cannot rebuild it. They cannot maintain it.
+   thousand years and never found them. Every fragment they have
+   ever touched has crumbled. They do not know the bonding rule.
+   They do not know the shards attract each other. From their
+   perspective, the fragments are simply unfindable — and every
+   explorer who miraculously comes back with one is a mystery they
+   have never solved.
+2. **Reverse-engineer the machine.** They have failed for a thousand
+   years. They do not understand the ancient technology behind it.
+   They cannot rebuild it. They cannot maintain it.
 
 They dream of claiming not just the Asteri city but the whole world
 — inside the mountains and outside them.
@@ -559,19 +569,17 @@ yet canon.
 
 ## XVII. THE LOOP — MC1 AND MC2
 
-**MC1 — the first run.** The player is the first explorer. He is
-not chosen. He is not special. He is an ordinary person who went
-down for ordinary reasons, found one fragment, and — through the
-attraction — found the rest. All 15 fragments from the start.
-Monsters scaled 0.6× HP, 0.5× damage. No elites. 5 short acts.
-Plot armor: dying restarts the act. When the player beats the
-researcher, the machine absorbs them regardless of outcome, and
-the fragments scatter.
+**MC1 — the tutorial.** One act. One floor set. One boss: the
+researcher, in a weakened variant. The player is the first explorer.
+All 15 fragments from the start. Monsters scaled 0.6× HP, 0.5×
+damage. No elites. Plot armor: dying restarts the act. When the
+player beats the researcher, the machine absorbs them regardless of
+outcome, and the fragments scatter.
 
 Before dying, the first explorer imbues his memory into the
 shattered fragments. He does not choose a recipient. He cannot
-choose a recipient. He can only send the message forward and hope
-it lands.
+choose a recipient. He can only send the message forward and hope it
+lands.
 
 **MC2 — every run after.** The player is a random recipient. They
 are not chosen either. They are whoever happened to be closest to
@@ -639,3 +647,32 @@ The player collects the fragments. Neither knows the other is doing
 it — for a while.
 
 ---
+
+## XIX. OPEN QUESTIONS
+
+Marked for future sessions. Not yet canon.
+
+- The exact number of surface kingdoms and their names.
+- Specifics of the industrial revolution (steam? early electricity?
+  something else?).
+- Physical form of a "magic script crystal."
+- Political status of Asteri-bloodline descendants.
+- How the player becomes an explorer (funded? freelance? exiled?).
+- What the surface believes the researcher specifically is (demon?
+  tyrant? god? treasure?).
+- Identity of the current leader of the Veil.
+- How many Asteri left before the Disappearance to found outside
+  settlements.
+- Whether the church's archives are readable, and whether the player
+  can revive the memory of the gardener within the church.
+- Whether the gardener has spoken to anyone since the shattering.
+
+---
+
+## XX. WHAT THIS DOCUMENT SUPERSEDES
+
+- `README.md` — placeholder lore. Replaced with the surface-POV
+  version supplied alongside this document.
+- `data/fragmentLore.js` — rewritten to match.
+- `data/bosses/*.js` — full roster rebuild done. All boss lore in
+  those files is now canon-consistent.
