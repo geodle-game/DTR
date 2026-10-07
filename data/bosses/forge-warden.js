@@ -1,28 +1,28 @@
 // ============================================================
-// THE SENTINEL — Act 4 boss
+// THE FORGE WARDEN — Act 4 boss (Asteri construct)
 //
-// The Asteri's oldest defense. Built before the Collapse to guard
-// the deepest doors and never given the order to stand down. It
-// has been running the same command for centuries.
+// A defense automaton built before the Collapse to guard the
+// deepest forges of the Asteri. It was given one command: hold
+// this door. It has held the door for a thousand years.
 //
 // Passive: caps the player at 10 cards played per turn.
 // ============================================================
 
 export const ENEMY = {
-  id: 'the-warden',
-  name: 'The Sentinel',
-  hp: 260,
+  id: 'forge-warden',
+  name: 'The Forge Warden',
+  hp: 220,
   isBoss: true,
   phaseThresholds: { phase2: 0.6, phase3: 0.25 },
   deck: [
-    'warden-slam',
-    'warden-shackle',
-    'warden-wall',
-    'warden-rush',
-    'warden-purge',
-    'warden-slam',
-    'warden-rush',
-    'warden-wall',
+    'forge-slam',
+    'forge-shackle',
+    'wardwall',
+    'forge-rush',
+    'forge-purge',
+    'forge-slam',
+    'forge-rush',
+    'wardwall',
   ],
   passives: {
     cardPlayCap: 10,
@@ -30,14 +30,14 @@ export const ENEMY = {
 };
 
 export const CARDS = {
-  'warden-slam': {
-    id: 'warden-slam', name: 'Slam', cost: 1, owner: 'enemy',
+  'forge-slam': {
+    id: 'forge-slam', name: 'Slam', cost: 1, owner: 'enemy',
     type: 'attack', target: 'player', destination: 'discard',
     text: 'Deal 25 damage.',
     effects: [{ kind: 'damage', amount: 25 }],
   },
-  'warden-rush': {
-    id: 'warden-rush', name: 'Rush', cost: 1, owner: 'enemy',
+  'forge-rush': {
+    id: 'forge-rush', name: 'Rush', cost: 1, owner: 'enemy',
     type: 'attack', target: 'player', destination: 'discard',
     text: 'Deal 6 damage three times.',
     effects: [
@@ -46,14 +46,14 @@ export const CARDS = {
       { kind: 'damage', amount: 6 },
     ],
   },
-  'warden-wall': {
-    id: 'warden-wall', name: 'Wardwall', cost: 1, owner: 'enemy',
+  wardwall: {
+    id: 'wardwall', name: 'Wardwall', cost: 1, owner: 'enemy',
     type: 'skill', target: 'self', destination: 'discard',
     text: 'Gain 23 Block.',
     effects: [{ kind: 'block', amount: 23 }],
   },
-  'warden-shackle': {
-    id: 'warden-shackle', name: 'Shackle', cost: 1, owner: 'enemy',
+  'forge-shackle': {
+    id: 'forge-shackle', name: 'Shackle', cost: 1, owner: 'enemy',
     type: 'skill', target: 'player', destination: 'discard',
     text: 'Apply 3 Weak and 3 Vulnerable.',
     effects: [
@@ -61,8 +61,8 @@ export const CARDS = {
       { kind: 'applyStatus', status: 'vulnerable', amount: 3 },
     ],
   },
-  'warden-purge': {
-    id: 'warden-purge', name: 'Purge', cost: 1, owner: 'enemy',
+  'forge-purge': {
+    id: 'forge-purge', name: 'Purge', cost: 1, owner: 'enemy',
     type: 'skill', target: 'player', destination: 'discard',
     text: 'Exhaust 2 random cards in your hand.',
     effects: [{ kind: 'exhaustRandomHand', amount: 2 }],
@@ -79,7 +79,7 @@ export const LORE = {
   ],
   phase2: [
     'A wall of stone folds away. Another takes its place. The Script on its chest has never dimmed.',
-    'It has been running the same command for centuries. It has never been told it is over.',
+    'It has been running the same command for a thousand years. It has never been told it is over.',
     'It does not tire. It does not think. It simply is.',
   ],
   phase3: [
@@ -88,7 +88,7 @@ export const LORE = {
     'The final door is just past it.',
   ],
   onDeath: [
-    'The Sentinel cracks.',
+    'The Warden cracks.',
     'It falls without a sound — a wall that finally learned how.',
     'The Script on its chest fades for the first time in a thousand years.',
     'Behind it, the final door opens.',
@@ -96,7 +96,7 @@ export const LORE = {
     'It has been waiting a very long time. It can wait a few more seconds.',
   ],
   onPlayerDeath: [
-    'The Sentinel closes over you like a tomb.',
+    'The Warden closes over you like a tomb.',
     'You do not hear the machine. You do not hear anything.',
     'But your hand closes around the fragment at your chest.',
   ],
