@@ -6,7 +6,7 @@
 export const WIDTH = 7;
 
 export const FLOORS_MC2 = 15;   // regular floors per MC2 act
-export const FLOORS_MC1 = 4;    // regular floors per MC1 act (prologue)
+export const FLOORS_MC1 = 4;    // regular floors per MC1 act (tutorial)
 
 export const FLOORS = FLOORS_MC2;
 export const BOSS_FLOOR = FLOORS_MC2;
@@ -49,7 +49,8 @@ export function act1Layout() {
 }
 
 // ============================================================
-// MC1 LAYOUT — 4 regular floors + boss. No elites.
+// MC1 LAYOUT — 4 regular floors + boss. Tutorial act.
+// The boss is the researcher (weakened variant). No elites.
 // ============================================================
 export function prologueLayout() {
   return {
@@ -71,7 +72,10 @@ export const RUN_MODES = {
   mc1: {
     id: 'mc1',
     label: 'Prologue',
-    actsTotal: 5,
+    // MC1 is a single-act tutorial. After the researcher, the
+    // game transitions straight to the absorption scene, then
+    // MC2 unlocks.
+    actsTotal: 1,
     regularFloors: FLOORS_MC1,
     enemyHpMult: 0.6,
     enemyDmgMult: 0.5,
