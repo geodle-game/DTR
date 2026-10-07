@@ -48,7 +48,7 @@ The Asteri left their magic behind.
 Not the knowledge — that died with them. But the raw material.
 Script. It leaks out of their city in two forms: crystals dropped by
 the strong monsters that have bred in the ruins, and fragments of
-Asteri writing scattered through the districts.
+Asteri Script scattered through the districts.
 
 We have learned to use both. Slowly. Painfully. We are a thousand
 years behind them, and we know it.
@@ -67,6 +67,40 @@ casting field.
 
 We have been searching for a thousand years. We have not found it.
 But we will.
+
+---
+
+## The Fragments
+
+The Asteri Script fragments are the most valuable thing in the
+ruins.
+
+They are old. They are powerful. They are also, according to every
+adventurer who has ever held one, **strange**.
+
+Something happens when you carry a fragment. Other fragments call to
+you. Not figuratively — literally. You sense them, the way you sense
+your own hand. Direction. Distance. Presence. Adventurers describe it
+as a second heartbeat in the back of the skull, only it isn't yours.
+
+We do not know why. We do not know how. We have never been able to
+study it because fragments are almost never recovered intact — the
+monsters of the ruins seem drawn to them too, and most carriers die
+before they can be studied.
+
+What we do know is this: whoever holds a fragment can find the
+others. This is why expeditions sometimes come back with two or
+three fragments instead of one. It is why some adventurers have
+reported "knowing" where to dig before they ever dug. It is why the
+most successful explorers are the ones who found a fragment early
+and did not die before they could use it.
+
+Nobody has ever held a fragment and failed to sense the others. Not
+once.
+
+We do not know what happens if all fifteen are brought together. No
+one has ever done it. Most who try die in the ruins. The few who
+make it back with more than a couple fragments never go down again.
 
 ---
 
@@ -180,6 +214,35 @@ It is easier to blame the dungeon.
 
 ---
 
+## The Explorer
+
+There is nothing special about the person who goes down.
+
+No prophecy. No chosen bloodline. No ancient mark on their hand. The
+Asteri city does not care who you are. It kills kings and peasants
+with the same indifference, and it always has.
+
+The people who descend are ordinary. Bounty hunters. Debtors.
+Scholars with too much curiosity and not enough sense. Soldiers who
+ran out of wars. Third children of minor houses who need to make a
+name or disappear trying. Every kingdom has them. Every kingdom
+sends them down.
+
+Most die on the first few floors. A few make it deeper. A very small
+number reach the bottom.
+
+The one who is going down now went down for the usual reasons. They
+found something the usual way — by accident, by luck, by picking up
+what someone else had dropped. They have a deck in their hand and a
+bounty on their head and nothing else.
+
+That is the whole of it. That is the whole of what makes them worth
+following.
+
+They are not the last hope of the world. They are just the next one
+going down.
+
+---
 
 ## How to Play (Short Version)
 
@@ -195,5 +258,5 @@ It is easier to blame the dungeon.
 ---
 
 *Drawn to Ruin is a deckbuilding roguelike about a buried city, a
-thousand-year competition, and the last explorer who still has a
-reason to go down.*
+thousand-year competition, and one more explorer who is going down
+for the same reasons everyone else went down.*
