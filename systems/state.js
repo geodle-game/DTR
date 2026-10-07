@@ -10,7 +10,7 @@ import { randomEvent } from '../data/events.js';
 import { rollShop } from '../data/shop.js';
 import { bannerForCombat } from '../data/banners.js';
 import { rollEnchant, getEnchant } from '../data/enchants.js';
-import { BOSSES } from '../data/bosses/index.js';
+import { BOSSES, BOSS_POOLS } from '../data/bosses/index.js';
 import {
   CLASSES, getClass, playableClasses, isCardAllowedForClass,
 } from '../data/classes.js';
@@ -810,6 +810,16 @@ function advanceTreasure() {
   }
 }
 
+// ============================================================
+// ENCOUNTER PICKING
+// ------------------------------------------------------------
+// Monster and elite pools are shared across acts and scaled by
+// actScaling(). Bosses use BOSS_POOLS, keyed by act, from
+// data/bosses/index.js.
+//
+// MC1 returns 'researcher' directly — the tutorial has no boss
+// pool, only the final confrontation.
+// ============================================================
 function pickEncounter(kind) {
   if (kind === 'monster') {
     const pool = [
@@ -820,25 +830,24 @@ function pickEncounter(kind) {
     return pool[Math.floor(state.rng() * pool.length)];
   }
   if (kind === 'elite') {
-    const pool = ['act1-elite-1', 'act1-elite-2', 'act1-elite-3', 'act1-elite-4'];
+    const pool = [
+      'act1-elite-1', 'act1-elite-2', 'act1-elite-3',
+      'act1-elite-4', 'act1-elite-5',
+    ];
     return pool[Math.floor(state.rng() * pool.length)];
   }
+
   const act = state.run.realAct;
   const mode = state.run.mode;
 
+  // MC1 — the boss is the researcher. No pool, no roll.
   if (mode === 'mc1') {
-    return 'act1-boss';
+    return 'researcher';
   }
 
-  let pool;
-  if (act === 1) pool = ['act1-boss', 'act1-boss-2', 'act1-boss-3'];
-  else if (act === 2) {
-    pool = ['act1-boss', 'act1-boss-2', 'act1-boss-3']
-      .filter(b => !state.run.bossesBeaten.includes(b));
-    if (!pool.length) pool = ['act1-boss'];
-  } else if (act === 3) pool = ['act3-boss'];
-  else if (act === 4) pool = ['act4-boss'];
-  else pool = ['final-boss'];
+  // MC2 — pick from the act's boss pool. The pool contains enemy
+  // ids directly (not encounter ids). newCombat handles this.
+  const pool = BOSS_POOLS[act] || BOSS_POOLS[15];
   return pool[Math.floor(state.rng() * pool.length)];
 }
 
@@ -868,7 +877,12 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
   const scale = actScaling(scaleAct);
   const modeConfig = getModeConfig(state.run.mode);
   const multiplayerHpMult = state.players.length > 1 ? 1.6 : 1.0;
-  const ids = ENCOUNTERS[encounterId];
+
+  // Encounter ids resolve to an array of enemy ids. A boss pool
+  // returns a single enemy id directly, in which case we treat it
+  // as a one-enemy encounter.
+  const ids = ENCOUNTERS[encounterId] || [encounterId];
+
   state.enemies = ids.map((id, i) => {
     const def = getEnemyDef(id);
     const cardDraw = shuffle(def.deck.map(makeEnemyCard), state.rng);
@@ -1006,7 +1020,7 @@ export function endCombat(win) {
 
       if (state.run.mode === 'mc1') return;
 
-      if (lastEncounter === 'final-boss') state.run.victory = true;
+      if (lastEncounter === 'researcher') state.run.victory = true;
       return;
     }
 
@@ -1604,9 +1618,9 @@ export function skipEnchant() {
   }
 }
 
-export function debugFightDungeonCore() { newCombat('final-boss', 'boss'); }
-export function debugFightFallenDrawn() { newCombat('act3-boss', 'boss'); }
-export function debugFightWarden() { newCombat('act4-boss', 'boss'); }
+export function debugFightResearcher() { newCombat('researcher', 'boss'); }
+export function debugFightPredecessor() { newCombat('predecessor', 'boss'); }
+export function debugFightForgeWarden() { newCombat('forge-warden', 'boss'); }
 
 // ---- Combat turn bookkeeping ----
 
