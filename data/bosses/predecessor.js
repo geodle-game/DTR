@@ -1,10 +1,13 @@
 // ============================================================
 // THE PREDECESSOR — Act 3 boss (Absorbed)
 //
-// A previous century's explorer. Not the first explorer — that
-// one's memory is in the fragments. This is the most recent one
-// before the player. The machine took them and now sends them
-// back out to test each new arrival.
+// A previous century's explorer. The most recent one before the
+// player. The machine took them and now sends them back out to
+// test each new arrival.
+//
+// Note: they do not carry fragments. When they died, their
+// bonded fragments unbonded and scattered. What they have left
+// is memory and the machine's leash.
 // ============================================================
 
 export const ENEMY = {
@@ -71,7 +74,7 @@ export const LORE = {
   start: [
     'The corridor opens onto a figure sitting alone in the dark.',
     'They have been here a very long time. Longer than you.',
-    'Once they were an explorer, like you. Once they carried fragments, like yours. Once they reached this chamber and failed, and the machine kept them.',
+    'Once they were an explorer, like you. Once they carried fragments, like yours. Then they died, and the fragments left them, and the machine kept what was left.',
     'They lift their head. Something in their eyes is still human. Most of it is not.',
     '"I had a name," they say. "I do not remember it. Do you remember yours?"',
     '"It does not matter. What matters is that you do not stop where I stopped."',
@@ -88,12 +91,12 @@ export const LORE = {
     'They are almost gone.',
     '"Do not let it finish," they whisper. "Whatever it promises, do not listen."',
     '"When you reach the chamber — when it offers you the fragments back — say no."',
-    '"I did not. That is the only reason I am still here."',
+    '"The fragments are not his to give. They are not the machine\'s to give. They will find the next one. They always do."',
   ],
   onDeath: [
     'They fall slowly. Almost gratefully.',
-    '"Take them," they say, meaning the fragments. "Take all of them."',
-    '"And when you get to the bottom — finish it. Finish what I could not."',
+    '"Finish it," they say. "Finish what I could not."',
+    'They do not mention fragments. They do not need to. Both of you know they had none left to give.',
     'The Script on their arms goes dark.',
     'You walk past them. You do not look back. There is no time.',
   ],
@@ -101,7 +104,7 @@ export const LORE = {
     'The Predecessor watches you fall.',
     'For a moment, something like grief crosses their face.',
     '"I am sorry," they say. "I was sorry the last time too."',
-    '"You will forget this."',
-    '"You have done this before. You will do it again."',
+    'They watch your fragments unbond. They watch them scatter into the dark.',
+    '"They will find someone else," they say. "They always do."',
   ],
 };
