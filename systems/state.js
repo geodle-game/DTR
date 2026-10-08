@@ -1,5 +1,6 @@
 import { randomStartingDeck, CARDS } from '../data/cards.js';
 import { ENCOUNTERS, getEnemyDef } from '../data/enemies.js';
+import { ENEMY_CARDS } from '../data/enemy-cards.js';
 import {
   makeCard, shuffle, draw, makeRng, makeEnemyCard, drawEnemyCard,
 } from './deck.js';
@@ -32,6 +33,14 @@ import {
   clearScriptedBattle,
   SCRIPTED_BATTLE_ID,
 } from './tutorial.js';
+
+// Register tutorial-only enemy cards into the shared ENEMY_CARDS
+// object so intent rendering (ui/render.js) can find them. ES
+// modules are singletons, so mutating this object here is visible
+// everywhere ENEMY_CARDS is imported.
+for (const [id, def] of Object.entries(TUTORIAL_ENEMY_CARD)) {
+  ENEMY_CARDS[id] = def;
+}
 
 const BOSS_LORE = {};
 for (const bossModule of BOSSES) {
@@ -363,13 +372,11 @@ export function grantFragment(source = 'unknown') {
   const n = state.run.fragmentsCollected;
   pushLog(`Script fragment recovered (${n}).`);
 
-  // Each fragment restores a piece of the previous explorer's power.
   for (const p of state.players) {
     p.maxHp += 3;
     p.hp = Math.min(p.maxHp, p.hp + 3);
   }
 
-  // Milestone flavor + mechanical unlocks.
   if (n === 3) pushLog('Three fragments. The Script begins to stir in your hands.');
   if (n === 5 && !state.run.recallUnlocked) {
     state.run.recallUnlocked = true;
@@ -383,10 +390,8 @@ export function grantFragment(source = 'unknown') {
     state.run.fullMemory = true;
   }
 
-  // First-time narrative.
   if (n === 1) showTutorial('firstFragment');
 
-  // Fragment lore — progressive revelation, once per save.
   const meta = loadMeta();
   const seen = meta.fragmentLoreSeen || [];
   if (!seen.includes(n) && FRAGMENT_LORE[n]) {
@@ -714,8 +719,6 @@ export function toggleDiscardOverlay() { openOnly(state.overlays.discard ? null 
 export function toggleExhaustOverlay() { openOnly(state.overlays.exhaust ? null : 'exhaust'); }
 
 // ---- Tutorial trigger ----
-// The first monster of MC1 floor 0 becomes a scripted battle, but
-// only if the player has not already seen it. Co-op skips it.
 
 function shouldTriggerScriptedBattle(node) {
   if (!state.run) return false;
@@ -865,13 +868,6 @@ function advanceTreasure() {
 
 // ============================================================
 // ENCOUNTER PICKING
-// ------------------------------------------------------------
-// Monster and elite pools are shared across acts and scaled by
-// actScaling(). Bosses use BOSS_POOLS, keyed by act, from
-// data/bosses/index.js.
-//
-// MC1 returns 'researcher' directly — the tutorial has no boss
-// pool, only the final confrontation.
 // ============================================================
 function pickEncounter(kind) {
   if (kind === 'monster') {
@@ -893,13 +889,10 @@ function pickEncounter(kind) {
   const act = state.run.realAct;
   const mode = state.run.mode;
 
-  // MC1 — the boss is the researcher. No pool, no roll.
   if (mode === 'mc1') {
     return 'researcher';
   }
 
-  // MC2 — pick from the act's boss pool. The pool contains enemy
-  // ids directly (not encounter ids). newCombat handles this.
   const pool = BOSS_POOLS[act] || BOSS_POOLS[15];
   return pool[Math.floor(state.rng() * pool.length)];
 }
@@ -931,8 +924,6 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
   const modeConfig = getModeConfig(state.run.mode);
   const multiplayerHpMult = state.players.length > 1 ? 1.6 : 1.0;
 
-  // Tutorial: build a single-enemy array from the tutorial data,
-  // bypassing ENCOUNTERS and ENEMIES entirely.
   if (encounterId === TUTORIAL_ENCOUNTER_ID) {
     const def = TUTORIAL_ENEMY;
     const cardDraw = shuffle(def.deck.map(makeEnemyCard), state.rng);
@@ -951,9 +942,6 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
       loreTriggered: {},
     }];
   } else {
-    // Encounter ids resolve to an array of enemy ids. A boss pool
-    // returns a single enemy id directly, in which case we treat
-    // it as a one-enemy encounter.
     const ids = ENCOUNTERS[encounterId] || [encounterId];
 
     state.enemies = ids.map((id, i) => {
@@ -981,8 +969,7 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
     });
   }
 
-  // MC1 researcher weakening — the tutorial boss is 120 HP with a
-  // single-entry script and no phase shifts.
+  // MC1 researcher weakening.
   if (state.run.mode === 'mc1' && encounterId === 'researcher') {
     for (const e of state.enemies) {
       e.hp = 120;
@@ -1050,8 +1037,6 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
     startPlayerTurnFor(i, true);
   }
 
-  // Scripted battle: replace the drawn hand with the fixed hand
-  // and clear the piles. Must run after startPlayerTurnFor.
   if (encounterId === TUTORIAL_ENCOUNTER_ID) {
     beginScriptedBattle(state.players[0].classId);
     applyTutorialHand();
@@ -1060,8 +1045,6 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
   pushLog('Combat start.');
   state.screen = 'combat';
 
-  // Skip the generic firstCombat tutorial during the scripted
-  // battle — the overlay system handles it instead.
   if (encounterId !== TUTORIAL_ENCOUNTER_ID) {
     showTutorial('firstCombat');
   }
@@ -1081,8 +1064,6 @@ function applyTutorialHand() {
 export function endCombat(win) {
   if (state.over) return;
 
-  // Scripted battle cleanup — if the fight ended and the script is
-  // still active, close it and mark it seen.
   if (isScriptActive()) {
     endScriptedBattle();
     markScriptedBattleSeen();
@@ -1448,7 +1429,6 @@ export function startPlayerTurnFor(playerIndex, isFirstTurn = false) {
   p.energy = p.maxEnergy + (p.nextTurnEnergy || 0);
   p.nextTurnEnergy = 0;
 
-  // Scripted battle: skip drawing. The fixed hand stays.
   if (!isScriptActive()) {
     draw(state, p, 5);
   }
