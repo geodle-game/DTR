@@ -36,6 +36,7 @@ import { getClass, playableClasses } from '../data/classes.js';
 import { loadMeta } from '../data/meta.js';
 import { TUTORIALS } from '../data/tutorials.js';
 import { FRAGMENT_LORE } from '../data/fragmentLore.js';
+import { mountTutorialOverlay, ensureTutorialStyles } from './tutorialOverlay.js';
 
 const LONG_PRESS_MS = 450;
 const DRAG_THRESHOLD = 14;
@@ -64,11 +65,7 @@ function localHandPlayer() {
 // ------------------------------------------------------------
 // Portrait helper
 // ------------------------------------------------------------
-// Returns an <img> for a class portrait, or null if the class
-// has no portrait declared. On load error the image hides itself
-// so we never leave a broken-image icon behind.
-//
-// `small: true` → circular thumbnail used in player panels.
+
 function classPortraitImg(cls, { small = false } = {}) {
   if (!cls?.portrait) return null;
   const img = document.createElement('img');
@@ -131,6 +128,9 @@ export function render() {
   document.querySelectorAll('.card-preview-overlay').forEach(el => el.remove());
   app.innerHTML = '';
 
+  // Inject tutorial CSS once.
+  ensureTutorialStyles();
+
   switch (state.screen) {
     case 'mainMenu':     renderMainMenu(app);     break;
     case 'chapterTitle': renderChapterTitle(app); break;
@@ -164,6 +164,11 @@ export function render() {
   if (state.bossLore) renderBossLore(app);
   if (state.fragmentLore) renderFragmentLore(app);
   if (state.tutorial) renderTutorial(app);
+
+  // Tutorial scripted-battle overlay. Mounts after the combat
+  // screen and any modals, so the ring and prompt sit above
+  // everything except modals (which use higher z-index).
+  mountTutorialOverlay(app);
 
   autoSave(state);
 }
@@ -395,7 +400,7 @@ function renderChapterTitle(app) {
   const btn = document.createElement('button');
   btn.className = 'btn';
   btn.style.marginTop = '24px';
-  btn.textContent = meta.mc1Complete ? 'Begin' : 'Begin';
+  btn.textContent = 'Begin';
   btn.addEventListener('click', () => {
     state.screen = 'mainMenu';
     render();
@@ -2260,7 +2265,7 @@ function endBanner() {
       if (state.run.mode === 'mc1') {
         btn.textContent = 'The machine hums';
         btn.addEventListener('click', () => finishRun());
-      } else if (state.lastEncounterId === 'final-boss') {
+      } else if (state.lastEncounterId === 'researcher') {
         btn.textContent = 'See Final Results';
         btn.addEventListener('click', () => finishRun());
       } else {
