@@ -3,8 +3,7 @@
 //
 // The Veil's senior field agent. Older than the Veilwright,
 // more experienced, more patient. She has been doing this for
-// thirty years. She has killed thirty explorers. She has their
-// fragments sewn into the lining of her coat.
+// thirty years. She has killed thirty explorers.
 //
 // Passive: absorbs 10 HP from you whenever she kills one of
 // your cards via Exhaust.
@@ -65,7 +64,7 @@ export const LORE = {
     'She is sitting on a crate when you arrive. She has been waiting.',
     'She is older than the Veilwright. She is older than you. She has been doing this since before you were born.',
     'She does not stand up. She does not draw a weapon. She just looks at you with the patient expression of someone who has done this thirty times and expects to do it thirty more.',
-    '"You have a powerful object that is emmiting script emergy," she says. "I will pluck them off your dead body to research it."',
+    '"You have a powerful object that is emitting script energy," she says. "I will pluck them off your dead body to research it."',
     'She does not wait for an answer.',
   ],
   phase2: [
@@ -87,7 +86,8 @@ export const LORE = {
   ],
   onPlayerDeath: [
     'She kneels beside you and takes the fragments out of your hand, one at a time, the way a mother takes toys from a sleeping child.',
-    'She sighs as the fragments crumble into dust the moment it touches her hand. "It's fine."',
+    'She sighs as the fragments crumble into dust the moment they touch her hand.',
+    '"That is fine," she says. "I am used to it."',
     '"I will see you again," she says. "Not you. But someone like you. Someone who looks like you."',
     '"It is always someone who looks like you."',
     'Then she is gone.',
