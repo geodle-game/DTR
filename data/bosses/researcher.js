@@ -6,11 +6,6 @@
 // fighting for control, losing, fighting again. He can only
 // blunt their commands, not stop them.
 //
-// Design: the Machine manipulates YOUR deck instead of just your
-// HP. It can exhaust your hand, disable your cards, flood you
-// with Burns, or replace your hand entirely. Every move is the
-// Asteri Script weaponizing what it once gave freely.
-//
 // Scripted AI:
 //   - Plays TWO cards per turn, in a fixed order defined by `script`.
 //   - The script is a list of [firstCard, secondCard] pairs.
@@ -24,7 +19,7 @@
 // ============================================================
 
 export const ENEMY = {
-  id: 'dungeon-core',
+  id: 'researcher',
   name: 'The Researcher',
   hp: 300,
   isBoss: true,
