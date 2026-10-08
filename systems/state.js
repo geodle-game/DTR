@@ -630,7 +630,6 @@ export function pickClass(classId, actorId) {
   p.hp = cls.startHp;
   p.maxHp = cls.startHp;
 
-  // MC1 uses the tutorial deck. MC2 uses the class starter.
   const deck = state.run.mode === 'mc1'
     ? (getTutorialDeck(classId) || cls.starterDeck())
     : cls.starterDeck();
@@ -969,15 +968,19 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
     });
   }
 
-  // MC1 researcher weakening.
+  // MC1 researcher weakening — the tutorial boss is a scripted
+  // pushover. 25 HP, weak attacks, no block, no Strength, no
+  // phase shifts. The player is meant to win.
   if (state.run.mode === 'mc1' && encounterId === 'researcher') {
     for (const e of state.enemies) {
-      e.hp = 120;
-      e.maxHp = 120;
-      e.script = [['core-pulse', 'core-shatter']];
+      e.hp = 25;
+      e.maxHp = 25;
+      e.script = [['tutorial-pulse', 'tutorial-script']];
       e.scriptIndex = 0;
       e.phaseThresholds = null;
       e.drawsPerTurn = 2;
+      e.passives = null;
+      e.deck = ['tutorial-pulse', 'tutorial-script'];
     }
   }
 
