@@ -2,9 +2,13 @@
 // data/classes.js
 // Class definitions for Drawn to Ruin.
 //
+// NOTE: In MC1 (tutorial mode), classes do NOT use starterDeck().
+// They use getTutorialDeck(classId) from data/tutorialDecks.js
+// instead. See systems/state.js pickClass().
+//
 // Each class provides:
 //   - startHp          base HP for a fresh run
-//   - starterDeck()    array of card ids
+//   - starterDeck()    array of card ids (used in MC2)
 //   - modifiers        outgoing/incoming multipliers applied in combat
 //   - bannedTypes      card types the class cannot use (filtered from pools)
 //   - cardPoolBias     relative weight per card type in rewards/shop rolls
