@@ -132,9 +132,31 @@ function renderHighlight(root, step) {
   // Prompt box below the target.
   const box = document.createElement('div');
   box.className = 'tutorial-prompt';
-  box.textContent = step.text || '';
 
-  const boxWidth = 340;
+  const text = document.createElement('div');
+  text.className = 'tutorial-prompt-text';
+  text.textContent = step.text || '';
+  box.appendChild(text);
+
+  // If this highlight has advanceOn: 'continue', it needs a
+  // Continue button, otherwise it can never be dismissed. This
+  // happens for informational highlights like the intent step.
+  if (step.advanceOn === 'continue') {
+    const btn = document.createElement('button');
+    btn.className = 'btn tutorial-prompt-btn';
+    btn.textContent = 'Got it';
+    btn.style.marginTop = '10px';
+    btn.style.pointerEvents = 'auto';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      continueStep();
+      render();
+    });
+    box.appendChild(btn);
+    box.style.pointerEvents = 'auto';
+  }
+
+  const boxWidth = 360;
   const boxLeft = Math.min(
     Math.max(16, rect.left + rect.width / 2 - boxWidth / 2),
     window.innerWidth - boxWidth - 16,
@@ -225,6 +247,14 @@ export function ensureTutorialStyles() {
       z-index: 560;
       pointer-events: none;
       animation: tutorialPromptIn .3s ease-out;
+    }
+
+    .tutorial-prompt-text {
+      pointer-events: none;
+    }
+
+    .tutorial-prompt-btn {
+      pointer-events: auto;
     }
 
     .tutorial-prompt-float {
