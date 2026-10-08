@@ -15,6 +15,11 @@ import { ENEMY_CARDS } from '../data/enemy-cards.js';
 import { getEnchant } from '../data/enchants.js';
 import { getClassMods } from '../data/classes.js';
 import { getModeConfig } from '../data/maps.js';
+import {
+  gateCardPlay, gateEndTurn,
+  notifyCardPlayed, notifyTurnEnded, notifyEnemyKilled,
+  isScriptActive,
+} from './tutorial.js';
 
 const combat = {
   attacksThisTurn: {},
@@ -103,6 +108,14 @@ export function selectCardForPlay(card, player = activePlayer()) {
 export function playCard(card, player = activePlayer(), explicitTargetId = null) {
   if (!player) return false;
   if (!canPlay(card, player)) return false;
+
+  // Tutorial gate: block cards that the current step does not allow.
+  const gate = gateCardPlay(card);
+  if (gate.blocked) {
+    pushLog(`(Tutorial) ${gate.reason}`);
+    return false;
+  }
+
   const def = CARDS[card.defId];
   const enchant = card.enchant ? getEnchant(card.enchant) : null;
   const cost = costOf(card, player);
@@ -154,6 +167,12 @@ export function playCard(card, player = activePlayer(), explicitTargetId = null)
   moveCardToDestination(player, card, dest);
 
   pushLog(`You played ${def.name}.`);
+
+  // Tutorial: notify the script before we check for enemy death,
+  // so a card that finishes the tutorial enemy advances the step
+  // before endCombat fires.
+  notifyCardPlayed(card);
+
   checkEnemiesDead();
   checkPlayerDead();
   return true;
@@ -892,6 +911,9 @@ export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}
 
 function checkEnemiesDead() {
   if (livingEnemies().length === 0) {
+    // Tutorial: let the script know the enemy is dead before the
+    // end-of-combat sequence fires.
+    notifyEnemyKilled();
     pushLog('Victory.');
     endCombat(true);
   }
@@ -902,7 +924,7 @@ function checkPlayerDead() {
 
   const modeConfig = getModeConfig(state.run?.mode ?? 'mc2');
 
-  // MC1 plot armor: fragments refuse to let their carrier die. Restart the act.
+  // MC1 plot armor: fragments refuse to let their carrier die.
   if (modeConfig.plotArmor) {
     pushLog('The fragments in your pocket go cold. Something pulls you back.');
     triggerPlotArmor();
@@ -917,6 +939,15 @@ function checkPlayerDead() {
 
 export function beginPlayerEndTurn(playerIndex) {
   if (state.turn !== 'player' || state.over) return { allReady: false };
+
+  // Tutorial gate: block end turn if the current step does not
+  // allow it.
+  const gate = gateEndTurn();
+  if (gate.blocked) {
+    pushLog(`(Tutorial) ${gate.reason}`);
+    return { allReady: false };
+  }
+
   const p = state.players[playerIndex];
   if (!p) return { allReady: false };
   if (p.endedTurn) return { allReady: allPlayersEndedTurn() };
@@ -929,7 +960,10 @@ export function beginPlayerEndTurn(playerIndex) {
     }
   }
 
-  recycleHand(state, p);
+  // Scripted battle: keep the hand fixed between turns. No recycle.
+  if (!isScriptActive()) {
+    recycleHand(state, p);
+  }
   tickStatuses(p);
 
   if (state.players.every(x => x.hp <= 0)) {
@@ -944,6 +978,11 @@ export function beginPlayerEndTurn(playerIndex) {
   }
 
   const allReady = markPlayerEndedTurn(playerIndex);
+
+  // Tutorial: notify only when the whole party has ended, so the
+  // script advances once, not once per player.
+  if (allReady) notifyTurnEnded();
+
   return { allReady };
 }
 
