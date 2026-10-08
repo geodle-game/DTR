@@ -12,14 +12,14 @@ export const ENEMY_CARDS = {
     effects: [{ kind: 'damage', amount: 7 }],
     liveValues: liveDamage(7),
   },
-  'engulf': {
+  engulf: {
     id: 'engulf', name: 'Engulf', cost: 1, owner: 'enemy',
     type: 'attack', target: 'player', destination: 'discard',
     text: 'Deal 13 damage.{live}',
     effects: [{ kind: 'damage', amount: 13 }],
     liveValues: liveDamage(13),
   },
-  'unravel': {
+  unravel: {
     id: 'unravel', name: 'Unravel', cost: 1, owner: 'enemy',
     type: 'attack', target: 'player', destination: 'discard',
     text: 'Deal 9 damage.{live} Apply 1 Vulnerable.',
@@ -29,13 +29,13 @@ export const ENEMY_CARDS = {
     ],
     liveValues: liveDamage(9),
   },
-  'coalesce': {
+  coalesce: {
     id: 'coalesce', name: 'Coalesce', cost: 1, owner: 'enemy',
     type: 'skill', target: 'self', destination: 'discard',
     text: 'Gain 8 Block.',
     effects: [{ kind: 'block', amount: 8 }],
   },
-  'seethe': {
+  seethe: {
     id: 'seethe', name: 'Seethe', cost: 1, owner: 'enemy',
     type: 'skill', target: 'self', destination: 'discard',
     text: 'Gain 2 Strength.',
@@ -81,7 +81,7 @@ export const ENEMY_CARDS = {
     effects: [{ kind: 'damage', amount: 10 }],
     liveValues: liveDamage(10),
   },
-  'mourn': {
+  mourn: {
     id: 'mourn', name: 'Mourn', cost: 1, owner: 'enemy',
     type: 'skill', target: 'self', destination: 'discard',
     text: 'Gain 7 Block. Gain 1 Strength.',
@@ -102,7 +102,7 @@ export const ENEMY_CARDS = {
     text: 'Shuffle a Dazed into your draw pile.',
     effects: [{ kind: 'addCardToPlayerDraw', cardId: 'dazed' }],
   },
-  'grief': {
+  grief: {
     id: 'grief', name: 'Grief', cost: 1, owner: 'enemy',
     type: 'attack', target: 'player', destination: 'discard',
     text: 'Deal 15 damage.{live} Loses 5 HP.',
@@ -125,7 +125,7 @@ export const ENEMY_CARDS = {
   // ============================================================
   // THE WILD — pre-Asteri. Predators. Do not care about you.
   // ============================================================
-  'thrash': {
+  thrash: {
     id: 'thrash', name: 'Thrash', cost: 1, owner: 'enemy',
     type: 'attack', target: 'player', destination: 'discard',
     text: 'Deal 6 damage twice.{live}',
@@ -135,7 +135,7 @@ export const ENEMY_CARDS = {
     ],
     liveValues: liveDamage(6),
   },
-  'carapace': {
+  carapace: {
     id: 'carapace', name: 'Carapace', cost: 1, owner: 'enemy',
     type: 'skill', target: 'self', destination: 'discard',
     text: 'Gain 12 Block.',
@@ -148,7 +148,7 @@ export const ENEMY_CARDS = {
     effects: [{ kind: 'damage', amount: 14 }],
     liveValues: liveDamage(14),
   },
-  'swallow': {
+  swallow: {
     id: 'swallow', name: 'Swallow', cost: 1, owner: 'enemy',
     type: 'attack', target: 'player', destination: 'discard',
     text: 'Deal 18 damage.{live} Loses 6 HP.',
@@ -158,7 +158,7 @@ export const ENEMY_CARDS = {
     ],
     liveValues: liveDamage(18),
   },
-  'gnash': {
+  gnash: {
     id: 'gnash', name: 'Gnash', cost: 1, owner: 'enemy',
     type: 'attack', target: 'player', destination: 'discard',
     text: 'Deal 4 damage.{live} Apply 1 Weak.',
@@ -168,7 +168,7 @@ export const ENEMY_CARDS = {
     ],
     liveValues: liveDamage(4),
   },
-  'burrow': {
+  burrow: {
     id: 'burrow', name: 'Burrow', cost: 1, owner: 'enemy',
     type: 'skill', target: 'self', destination: 'discard',
     text: 'Gain 6 Block. Gain 1 Strength.',
@@ -188,7 +188,7 @@ export const ENEMY_CARDS = {
     effects: [{ kind: 'damage', amount: 8 }],
     liveValues: liveDamage(8),
   },
-  'purge': {
+  purge: {
     id: 'purge', name: 'Purge', cost: 1, owner: 'enemy',
     type: 'skill', target: 'player', destination: 'discard',
     text: 'Exhaust 2 random cards in your hand.',
@@ -200,7 +200,7 @@ export const ENEMY_CARDS = {
     text: 'Apply 2 Weak.',
     effects: [{ kind: 'applyStatus', status: 'weak', amount: 2 }],
   },
-  'overcharge': {
+  overcharge: {
     id: 'overcharge', name: 'Overcharge', cost: 1, owner: 'enemy',
     type: 'skill', target: 'self', destination: 'discard',
     text: 'Gain 4 Strength. Loses 6 HP.',
@@ -228,21 +228,21 @@ export const ENEMY_CARDS = {
   // ============================================================
   // SURFACE INTRUDERS — desperate. Mundane. Dangerous anyway.
   // ============================================================
-  'harry': {
+  harry: {
     id: 'harry', name: 'Harry', cost: 1, owner: 'enemy',
     type: 'attack', target: 'player', destination: 'discard',
     text: 'Deal 6 damage.{live}',
     effects: [{ kind: 'damage', amount: 6 }],
     liveValues: liveDamage(6),
   },
-  'riposte': {
+  riposte: {
     id: 'riposte', name: 'Riposte', cost: 1, owner: 'enemy',
     type: 'attack', target: 'player', destination: 'discard',
     text: 'Deal 8 damage.{live}',
     effects: [{ kind: 'damage', amount: 8 }],
     liveValues: liveDamage(8),
   },
-  'provision': {
+  provision: {
     id: 'provision', name: 'Provision', cost: 1, owner: 'enemy',
     type: 'skill', target: 'self', destination: 'discard',
     text: 'Heal 10 HP.',
@@ -264,7 +264,7 @@ export const ENEMY_CARDS = {
     text: 'Gain 2 Strength.',
     effects: [{ kind: 'applyStatus', status: 'strength', amount: 2 }],
   },
-  'feint': {
+  feint: {
     id: 'feint', name: 'Feint', cost: 1, owner: 'enemy',
     type: 'skill', target: 'self', destination: 'discard',
     text: 'Gain 4 Block. Gain 1 Strength.',
@@ -277,7 +277,7 @@ export const ENEMY_CARDS = {
   // ============================================================
   // ACT 1 BOSS CARDS — Waxling King, The Remembering, Stitched Sovereign
   // ============================================================
-  'waxflow': {
+  waxflow: {
     id: 'waxflow', name: 'Waxflow', cost: 1, owner: 'enemy',
     type: 'attack', target: 'player', destination: 'discard',
     text: 'Deal 12 damage.{live}',
@@ -293,7 +293,7 @@ export const ENEMY_CARDS = {
       { kind: 'applyStatus', status: 'strength', amount: 3 },
     ],
   },
-  'melt': {
+  melt: {
     id: 'melt', name: 'Melt', cost: 1, owner: 'enemy',
     type: 'attack', target: 'player', destination: 'discard',
     text: 'Deal 20 damage.{live}',
@@ -327,7 +327,7 @@ export const ENEMY_CARDS = {
       { kind: 'applyStatus', status: 'strength', amount: 2 },
     ],
   },
-  'stitch': {
+  stitch: {
     id: 'stitch', name: 'Stitch', cost: 1, owner: 'enemy',
     type: 'skill', target: 'self', destination: 'discard',
     text: 'Heal 15 HP.',
@@ -339,6 +339,22 @@ export const ENEMY_CARDS = {
     text: 'Deal 15 damage.{live}',
     effects: [{ kind: 'damage', amount: 15 }],
     liveValues: liveDamage(15),
+  },
+
+  // ============================================================
+  // MC1 TUTORIAL RESEARCHER — weak, scripted, meant to lose.
+  // ============================================================
+  'tutorial-pulse': {
+    id: 'tutorial-pulse', name: 'Weakening Pulse', cost: 1, owner: 'enemy',
+    type: 'attack', target: 'player', destination: 'discard',
+    text: 'Deal 6 damage.',
+    effects: [{ kind: 'damage', amount: 6 }],
+  },
+  'tutorial-script': {
+    id: 'tutorial-script', name: 'Failing Script', cost: 1, owner: 'enemy',
+    type: 'skill', target: 'self', destination: 'discard',
+    text: 'Gain 4 Block.',
+    effects: [{ kind: 'block', amount: 4 }],
   },
 };
 
