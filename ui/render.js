@@ -128,7 +128,6 @@ export function render() {
   document.querySelectorAll('.card-preview-overlay').forEach(el => el.remove());
   app.innerHTML = '';
 
-  // Inject tutorial CSS once.
   ensureTutorialStyles();
 
   switch (state.screen) {
@@ -165,9 +164,6 @@ export function render() {
   if (state.fragmentLore) renderFragmentLore(app);
   if (state.tutorial) renderTutorial(app);
 
-  // Tutorial scripted-battle overlay. Mounts after the combat
-  // screen and any modals, so the ring and prompt sit above
-  // everything except modals (which use higher z-index).
   mountTutorialOverlay(app);
 
   autoSave(state);
@@ -738,7 +734,7 @@ function classStatsLines(cls) {
 
 function renderRelicPick(app) {
   const wrap = document.createElement('div');
-  wrap.className = 'screen screen-center';
+  wrap.className = 'screen screen-center relic-pick-screen';
 
   const prp = state.pendingRelicPick;
   const idx = localViewIndex();
@@ -790,7 +786,6 @@ function renderDeckView(app) {
   h.textContent = `${p.name}'s Starting Deck`;
   wrap.appendChild(h);
 
-  // Class portrait above the starting deck.
   const cls = p.classId ? getClass(p.classId) : null;
   const portrait = cls ? classPortraitImg(cls) : null;
   if (portrait) {
@@ -1432,7 +1427,7 @@ function confirmRecall(act, nodeId) {
 function renderEvent(app) {
   const ev = state.event.data;
   const wrap = document.createElement('div');
-  wrap.className = 'screen screen-center';
+  wrap.className = 'screen screen-center event-screen';
 
   const idx = localViewIndex();
   const done = state.event.done[idx];
@@ -1624,7 +1619,7 @@ function renderShopRemoveMode(app, wrap, inv, focus) {
 
 function renderRest(app) {
   const wrap = document.createElement('div');
-  wrap.className = 'screen screen-center';
+  wrap.className = 'screen screen-center rest-screen';
 
   const focus = localViewIndex();
   const p = state.players[focus];
@@ -1680,7 +1675,7 @@ function renderEnchantPick(app) {
 
   const p = state.players[idx];
   const wrap = document.createElement('div');
-  wrap.className = 'screen screen-center';
+  wrap.className = 'screen screen-center enchant-screen';
 
   const h = document.createElement('h1');
   h.textContent = `Enchant a Card — ${p.name}`;
