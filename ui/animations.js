@@ -9,9 +9,8 @@
 //   hybrid (atk+block) → assets/effects/shield.webp  (animated WebP)
 //   spell              → assets/effects/impact.webp  (animated WebP)
 //
-// Hybrid cards are detected automatically: any card whose effects
-// contain BOTH a damage effect and a block effect gets the shield
-// WebP instead of a slash.
+// WebP durations below are measured from the actual files. If you
+// re-export them, re-measure and update EFFECT_DURATION.
 // ============================================================
 
 import { CARDS } from '../data/cards.js';
@@ -28,12 +27,16 @@ const EFFECT_SRC = {
   magic:  'assets/effects/impact.webp',
 };
 
+// Measured cycle lengths:
+//   slash.webp  → 8 frames, 710ms
+//   shield.webp → 11 frames, 220ms
+//   impact.webp → 11 frames, 440ms
 const EFFECT_DURATION = {
   slash:  588,
   heavy:  588,
-  pierce: 600,
-  hybrid: 700,
-  magic:  800,
+  pierce: 710,
+  hybrid: 220,
+  magic:  440,
 };
 
 const EFFECT_SIZE = {
@@ -44,13 +47,15 @@ const EFFECT_SIZE = {
   magic:  400,
 };
 
-// Which sprites are pre-animated WebP (auto-play, no reveal loop)
 const WEBP_KINDS = new Set(['pierce', 'hybrid', 'magic']);
 
-// Preload every WebP effect so the first hit does not stutter.
+// Preload + fully decode every WebP so the first play has no
+// decode delay. img.decode() forces the browser to expand all
+// frames into memory immediately.
 for (const kind of WEBP_KINDS) {
   const img = new Image();
   img.src = EFFECT_SRC[kind];
+  img.decode().catch(() => {});
 }
 
 // ------------------------------------------------------------
@@ -80,7 +85,6 @@ function effectKindForCard(defId, animationField) {
   );
   const hasBlock = effects.some(e => e.kind === 'block');
 
-  // Hybrid: attack + block on the same card.
   if (hasDamage && hasBlock) return 'hybrid';
 
   if (animationField === 'heavy')  return 'heavy';
@@ -118,16 +122,11 @@ const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
 const easeOutQuint = x => 1 - Math.pow(1 - x, 5);
 
 // ------------------------------------------------------------
-// Static PNG reveal (existing slash + heavy behaviour)
+// Static PNG reveal
 // ------------------------------------------------------------
 
 function spawnStaticSlash(src, cx, cy, opts = {}) {
-  const {
-    kind = 'slash',
-    dirX = 1,
-    duration = 588,
-    size = 340,
-  } = opts;
+  const { kind = 'slash', dirX = 1, duration = 588, size = 340 } = opts;
 
   const el = document.createElement('img');
   el.className = `slash-png kind-${kind}`;
@@ -158,7 +157,6 @@ function spawnStaticSlash(src, cx, cy, opts = {}) {
     if (t >= 1) { el.remove(); return; }
 
     let revealP, opacity;
-
     if (t < 0.55) {
       revealP = easeOutQuint(t / 0.55);
       opacity = 1;
@@ -171,29 +169,21 @@ function spawnStaticSlash(src, cx, cy, opts = {}) {
     }
 
     const e = revealP * 130;
-    const clip = `polygon(0% 0%, ${e}% 0%, ${e - 35}% 100%, 0% 100%)`;
-
-    el.style.clipPath = clip;
+    el.style.clipPath = `polygon(0% 0%, ${e}% 0%, ${e - 35}% 100%, 0% 100%)`;
     el.style.opacity = opacity.toFixed(3);
 
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-
   return el;
 }
 
 // ------------------------------------------------------------
-// Animated WebP spawner (auto-play, no reveal loop)
+// Animated WebP spawner
 // ------------------------------------------------------------
 
 function spawnWebp(src, cx, cy, opts = {}) {
-  const {
-    size = 340,
-    duration = 600,
-    flip = false,
-    className = '',
-  } = opts;
+  const { size = 340, duration = 600, flip = false, className = '' } = opts;
 
   const el = document.createElement('img');
   el.src = src;
@@ -216,7 +206,6 @@ function spawnWebp(src, cx, cy, opts = {}) {
 
   document.body.appendChild(el);
   setTimeout(() => el.remove(), duration);
-
   return el;
 }
 
@@ -237,12 +226,10 @@ export function spawnAttack(cx, cy, opts = {}) {
   return spawnStaticSlash(src, cx, cy, { kind, dirX: opts.dirX, duration, size });
 }
 
-// Legacy alias.
 export function spawnCrescent(cx, cy, opts = {}) {
   return spawnAttack(cx, cy, opts);
 }
 
-// Pure-block effect (unchanged from existing implementation).
 export function spawnBlockEffect(playerEl) {
   if (!playerEl) return;
   const r = playerEl.getBoundingClientRect();
@@ -273,7 +260,6 @@ let lastBookSpawn = 0;
 
 export function spawnSpellBook(casterEl, { duration = 320, dirX = 1 } = {}) {
   if (!casterEl) return;
-
   const now = performance.now();
   if (now - lastBookSpawn < 100) return;
   lastBookSpawn = now;
@@ -433,9 +419,7 @@ const WINDUP_PHYSICAL = 130;
 const WINDUP_SPELL    = 340;
 
 function kindForHit(hit) {
-  if (hit.cardDefId) {
-    return effectKindForCard(hit.cardDefId, hit.animation);
-  }
+  if (hit.cardDefId) return effectKindForCard(hit.cardDefId, hit.animation);
   if (hit.animation === 'heavy')  return 'heavy';
   if (hit.animation === 'magic')  return 'magic';
   if (hit.animation === 'pierce') return 'pierce';
