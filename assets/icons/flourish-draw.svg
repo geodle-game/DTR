@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#glow)" stroke-linecap="round" stroke-linejoin="round"><path d="M77 52 L171 36 L194 167 L101 184Z" fill="none" stroke="#8fc5ff" stroke-width="8" stroke-linejoin="round"/><path d="M56 77 L38 190 L130 208 L137 193" fill="none" stroke="#315e9a" stroke-width="8" stroke-linejoin="round"/><path d="M99 86 L158 76 M103 112 L163 102 M107 138 L168 128" stroke="#8fc5ff" stroke-width="6" stroke-linecap="round"/><path d="M77 52 L171 36" stroke="#fff0dc" stroke-width="3" opacity=".8"/></g>
+</svg>
