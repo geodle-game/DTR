@@ -4,27 +4,19 @@
 
 
 /* ============================================================
-   1. EFFECT CONTAINER SAFETY NETS
+   1. ANIMATED WEBP EFFECTS
    ============================================================ */
 
-.fx-impact {
-  position: fixed;
+.fx-webp {
   pointer-events: none;
-  overflow: visible;
   user-select: none;
   -webkit-user-select: none;
-  z-index: 8980;
-}
-
-.fx-impact line,
-.fx-impact circle {
-  shape-rendering: geometricPrecision;
   will-change: opacity;
 }
 
 
 /* ============================================================
-   2. PNG SLASH
+   2. PNG SLASH (static + clip-path reveal)
    ============================================================ */
 
 .slash-png {
@@ -46,15 +38,9 @@
     drop-shadow(0 0 26px rgba(140, 80, 255, 0.6));
 }
 
-.slash-png.kind-pierce {
-  filter:
-    saturate(0) brightness(1.7) contrast(1.1)
-    drop-shadow(0 0 8px rgba(230, 240, 255, 0.95));
-}
-
 
 /* ============================================================
-   2b. SPELL BOOK — appears above caster during a spell windup
+   3. SPELL BOOK — appears above caster during a spell windup
    ============================================================ */
 
 .spell-book-cast {
@@ -64,7 +50,7 @@
   margin-left: -65px;
   margin-top:  -65px;
   pointer-events: none;
-  z-index: 12000;                     /* above everything else */
+  z-index: 12000;
   transform-origin: center center;
   opacity: 0;
 
@@ -160,7 +146,7 @@
 
 
 /* ============================================================
-   2c. BLOCK PNG
+   4. BLOCK PNG (pure block cards)
    ============================================================ */
 
 .block-effect {
@@ -268,7 +254,7 @@
 
 
 /* ============================================================
-   3. PANEL REACTIONS
+   5. PANEL REACTIONS
    ============================================================ */
 
 .panel.attacking {
@@ -334,7 +320,7 @@
 
 
 /* ============================================================
-   4. SCREEN EFFECTS
+   6. SCREEN EFFECTS
    ============================================================ */
 
 #app.screen-shake {
@@ -375,7 +361,7 @@
 
 
 /* ============================================================
-   5. FLOATING COMBAT TEXT
+   7. FLOATING COMBAT TEXT
    ============================================================ */
 
 .float-text {
@@ -419,6 +405,14 @@
   color: #ffe699;
   text-shadow:
     0 0 22px rgba(255, 230, 150, 0.95),
+    0 2px 4px rgba(0, 0, 0, 0.95);
+}
+
+.float-text.damage.kind-hybrid {
+  color: #ffeab8;
+  text-shadow:
+    0 0 24px rgba(255, 220, 140, 1),
+    0 0 8px  rgba(255, 180, 60, 0.9),
     0 2px 4px rgba(0, 0, 0, 0.95);
 }
 
@@ -484,7 +478,7 @@
 
 
 /* ============================================================
-   6. DEPRECATED FALLBACKS
+   8. DEPRECATED FALLBACKS
    ============================================================ */
 
 .slash-effect,
