@@ -109,7 +109,6 @@ export function playCard(card, player = activePlayer(), explicitTargetId = null)
   if (!player) return false;
   if (!canPlay(card, player)) return false;
 
-  // Tutorial gate: block cards that the current step does not allow.
   const gate = gateCardPlay(card);
   if (gate.blocked) {
     pushLog(`(Tutorial) ${gate.reason}`);
@@ -168,9 +167,6 @@ export function playCard(card, player = activePlayer(), explicitTargetId = null)
 
   pushLog(`You played ${def.name}.`);
 
-  // Tutorial: notify the script before we check for enemy death,
-  // so a card that finishes the tutorial enemy advances the step
-  // before endCombat fires.
   notifyCardPlayed(card);
 
   checkEnemiesDead();
@@ -287,7 +283,7 @@ function applyEffect(eff, targets, card, source) {
       const isSpell = def?.type === 'spell';
       for (const t of targets) {
         const r = dealDamage(source, t, eff.amount + bonus, eff.strengthMultiplier,
-          { isSpell, cardType: def?.type });
+          { isSpell, cardType: def?.type, cardDefId: card.defId });
         pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}).`);
       }
       break;
@@ -301,7 +297,7 @@ function applyEffect(eff, targets, card, source) {
       if (!pool.length) break;
       const t = pool[Math.floor(state.rng() * pool.length)];
       const r = dealDamage(source, t, eff.amount + bonus, undefined,
-        { isSpell, cardType: def?.type });
+        { isSpell, cardType: def?.type, cardDefId: card.defId });
       pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}).`);
       break;
     }
@@ -320,6 +316,7 @@ function applyEffect(eff, targets, card, source) {
           targetUid: state.players.includes(t) ? `player${t.id}` : t.uid,
           dealt, blocked,
           animation: state.currentAnimation || 'slash',
+          cardDefId: card.defId,
           isSpell: false,
         });
 
@@ -339,7 +336,8 @@ function applyEffect(eff, targets, card, source) {
       const bonus = enchantDamageBonus(card);
       const amount = Math.floor(source.block * (eff.multiplier ?? 1)) + bonus;
       for (const t of targets) {
-        const r = dealDamage(source, t, amount);
+        const r = dealDamage(source, t, amount, undefined,
+          { cardDefId: card.defId });
         pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}).`);
       }
       break;
@@ -350,7 +348,8 @@ function applyEffect(eff, targets, card, source) {
       const strikeCount = source.deck.filter(c => c.defId.includes('strike')).length;
       const amount = eff.base + eff.perStrike * strikeCount + bonus;
       for (const t of targets) {
-        const r = dealDamage(source, t, amount);
+        const r = dealDamage(source, t, amount, undefined,
+          { cardDefId: card.defId });
         pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}). [${strikeCount} strikes]`);
       }
       break;
@@ -361,7 +360,8 @@ function applyEffect(eff, targets, card, source) {
       const rampBonus = combat.rampageBonus[card.uid] || 0;
       const amount = eff.base + rampBonus + bonus;
       for (const t of targets) {
-        const r = dealDamage(source, t, amount);
+        const r = dealDamage(source, t, amount, undefined,
+          { cardDefId: card.defId });
         pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}).`);
       }
       combat.rampageBonus[card.uid] = rampBonus + eff.per;
@@ -375,7 +375,8 @@ function applyEffect(eff, targets, card, source) {
         const pool = livingEnemies();
         if (!pool.length) break;
         const t = pool[Math.floor(state.rng() * pool.length)];
-        const r = dealDamage(source, t, eff.amount + bonus);
+        const r = dealDamage(source, t, eff.amount + bonus, undefined,
+          { cardDefId: card.defId });
         pushLog(`  Finisher: ${t.name} took ${r.dealt}.`);
       }
       if (times === 0) pushLog('  Finisher: no attacks before this.');
@@ -388,7 +389,8 @@ function applyEffect(eff, targets, card, source) {
       const dmg = eff.base + handCount + bonus;
       pushLog(`  Last Stand: ${handCount} cards in hand → ${dmg} damage.`);
       for (const t of targets) {
-        const r = dealDamage(source, t, dmg);
+        const r = dealDamage(source, t, dmg, undefined,
+          { cardDefId: card.defId });
         pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}).`);
       }
       break;
@@ -398,7 +400,8 @@ function applyEffect(eff, targets, card, source) {
       const bonus = enchantDamageBonus(card);
       let totalDealt = 0;
       for (const t of livingEnemies()) {
-        const r = dealDamage(source, t, eff.amount + bonus);
+        const r = dealDamage(source, t, eff.amount + bonus, undefined,
+          { cardDefId: card.defId });
         totalDealt += r.dealt;
       }
       if (totalDealt > 0) {
@@ -427,7 +430,8 @@ function applyEffect(eff, targets, card, source) {
         const pool = livingEnemies();
         if (pool.length) {
           const t = pool[Math.floor(state.rng() * pool.length)];
-          const r = dealDamage(source, t, source.juggernaut);
+          const r = dealDamage(source, t, source.juggernaut, undefined,
+            { cardDefId: 'juggernaut' });
           pushLog(`  Juggernaut: ${t.name} took ${r.dealt}.`);
         }
       }
@@ -754,7 +758,8 @@ function applyEffect(eff, targets, card, source) {
       const dmg = n * eff.amount + bonus;
       pushLog(`  Fiend Fire: discarded ${n} cards → ${dmg} damage.`);
       for (const t of targets) {
-        const r = dealDamage(source, t, dmg);
+        const r = dealDamage(source, t, dmg, undefined,
+          { cardDefId: card.defId });
         pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}).`);
       }
       break;
@@ -800,7 +805,8 @@ function applyEffect(eff, targets, card, source) {
       pushLog(`  Revealed ${CARDS[c.defId].name} (${dmg} damage).`);
       if (dmg > 0 && targets.length) {
         for (const t of targets) {
-          const r = dealDamage(source, t, dmg);
+          const r = dealDamage(source, t, dmg, undefined,
+            { cardDefId: card.defId });
           pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}).`);
         }
       } else {
@@ -827,7 +833,8 @@ function applyEffect(eff, targets, card, source) {
       exhaustCard(source, c);
       if (dmg > 0 && targets.length) {
         for (const t of targets) {
-          const r = dealDamage(source, t, dmg);
+          const r = dealDamage(source, t, dmg, undefined,
+            { cardDefId: card.defId });
           pushLog(`  ${t.name} took ${r.dealt} (blocked ${r.blocked}).`);
         }
       }
@@ -895,6 +902,7 @@ export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}
     targetUid:   state.players.includes(target)   ? `player${target.id}`   : target.uid,
     dealt, blocked,
     animation: state.currentAnimation || 'slash',
+    cardDefId: opts.cardDefId ?? null,
     isSpell,
   });
 
@@ -911,8 +919,6 @@ export function dealDamage(attacker, target, base, strengthMultiplier, opts = {}
 
 function checkEnemiesDead() {
   if (livingEnemies().length === 0) {
-    // Tutorial: let the script know the enemy is dead before the
-    // end-of-combat sequence fires.
     notifyEnemyKilled();
     pushLog('Victory.');
     endCombat(true);
@@ -924,7 +930,6 @@ function checkPlayerDead() {
 
   const modeConfig = getModeConfig(state.run?.mode ?? 'mc2');
 
-  // MC1 plot armor: fragments refuse to let their carrier die.
   if (modeConfig.plotArmor) {
     pushLog('The fragments in your pocket go cold. Something pulls you back.');
     triggerPlotArmor();
@@ -935,13 +940,9 @@ function checkPlayerDead() {
   endCombat(false);
 }
 
-// ---- Per-player end of turn ----
-
 export function beginPlayerEndTurn(playerIndex) {
   if (state.turn !== 'player' || state.over) return { allReady: false };
 
-  // Tutorial gate: block end turn if the current step does not
-  // allow it.
   const gate = gateEndTurn();
   if (gate.blocked) {
     pushLog(`(Tutorial) ${gate.reason}`);
@@ -960,7 +961,6 @@ export function beginPlayerEndTurn(playerIndex) {
     }
   }
 
-  // Scripted battle: keep the hand fixed between turns. No recycle.
   if (!isScriptActive()) {
     recycleHand(state, p);
   }
@@ -979,8 +979,6 @@ export function beginPlayerEndTurn(playerIndex) {
 
   const allReady = markPlayerEndedTurn(playerIndex);
 
-  // Tutorial: notify only when the whole party has ended, so the
-  // script advances once, not once per player.
   if (allReady) notifyTurnEnded();
 
   return { allReady };
