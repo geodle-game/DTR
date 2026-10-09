@@ -1,28 +1,98 @@
 // ============================================================
 // ui/animations.js
-// Combat feedback orchestration + the slash sprite reveal.
+// Combat feedback orchestration.
+//
+// Attack visuals are rule-based:
+//   'slash'  (default) → assets/slash.png       (static + clip reveal)
+//   'heavy'            → assets/slash-heavy.png (static + clip reveal)
+//   'pierce'           → assets/effects/slash.webp   (animated WebP)
+//   hybrid (atk+block) → assets/effects/shield.webp  (animated WebP)
+//   spell              → assets/effects/impact.webp  (animated WebP)
+//
+// Hybrid cards are detected automatically: any card whose effects
+// contain BOTH a damage effect and a block effect gets the shield
+// WebP instead of a slash.
 // ============================================================
 
-import { spawnImpactBurst } from './effects.js';
+import { CARDS } from '../data/cards.js';
 
-// Preload the spell book so it's cached before the first spell is cast.
-const _spellBookPreload = new Image();
-_spellBookPreload.src = 'assets/spell-book.png';
+// ------------------------------------------------------------
+// Effect asset table
+// ------------------------------------------------------------
 
-const rng = () => Math.random();
+const EFFECT_SRC = {
+  slash:  'assets/slash.png',
+  heavy:  'assets/slash-heavy.png',
+  pierce: 'assets/effects/slash.webp',
+  hybrid: 'assets/effects/shield.webp',
+  magic:  'assets/effects/impact.webp',
+};
 
-const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
-const easeOutQuint = x => 1 - Math.pow(1 - x, 5);
+const EFFECT_DURATION = {
+  slash:  588,
+  heavy:  588,
+  pierce: 600,
+  hybrid: 700,
+  magic:  800,
+};
+
+const EFFECT_SIZE = {
+  slash:  300,
+  heavy:  300,
+  pierce: 340,
+  hybrid: 360,
+  magic:  400,
+};
+
+// Which sprites are pre-animated WebP (auto-play, no reveal loop)
+const WEBP_KINDS = new Set(['pierce', 'hybrid', 'magic']);
+
+// Preload every WebP effect so the first hit does not stutter.
+for (const kind of WEBP_KINDS) {
+  const img = new Image();
+  img.src = EFFECT_SRC[kind];
+}
+
+// ------------------------------------------------------------
+// Card kind resolution
+// ------------------------------------------------------------
+
+function effectKindForCard(defId, animationField) {
+  const def = CARDS[defId];
+  if (!def) return animationField || 'slash';
+
+  if (def.type === 'spell') return 'magic';
+
+  const effects = def.effects || [];
+  const hasDamage = effects.some(e =>
+    e.kind === 'damage' ||
+    e.kind === 'damageRandom' ||
+    e.kind === 'damageEqualToBlock' ||
+    e.kind === 'damagePercentMaxHp' ||
+    e.kind === 'perfectedStrike' ||
+    e.kind === 'rampage' ||
+    e.kind === 'finisher' ||
+    e.kind === 'lastStand' ||
+    e.kind === 'reaper' ||
+    e.kind === 'fiendFire' ||
+    e.kind === 'necromancersPact' ||
+    e.kind === 'graveRobber'
+  );
+  const hasBlock = effects.some(e => e.kind === 'block');
+
+  // Hybrid: attack + block on the same card.
+  if (hasDamage && hasBlock) return 'hybrid';
+
+  if (animationField === 'heavy')  return 'heavy';
+  if (animationField === 'pierce') return 'pierce';
+  if (animationField === 'magic')  return 'magic';
+  return 'slash';
+}
 
 // ------------------------------------------------------------
 // Panel resolution
 // ------------------------------------------------------------
-// uids can be:
-//   'player'   → legacy single-player player panel
-//   'player0'  → co-op player 0
-//   'player1'  → co-op player 1
-//   'e0','e1'  → enemies
-// Anything else → first player panel (fallback).
+
 function panelForUid(uid) {
   if (!uid || uid === 'player') {
     return document.querySelector('[data-panel="player0"], [data-panel="player"]');
@@ -44,34 +114,35 @@ function center(el) {
   return { x: r.left + r.width / 2, y: r.top + r.height / 2, rect: r };
 }
 
-// ============================================================
-// SLASH SPRITE — tip-first reveal
-// ============================================================
+const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const easeOutQuint = x => 1 - Math.pow(1 - x, 5);
 
-const REVEAL_FROM_RIGHT = false;
-const SLASH_SIZE = 340;
+// ------------------------------------------------------------
+// Static PNG reveal (existing slash + heavy behaviour)
+// ------------------------------------------------------------
 
-export function spawnCrescent(cx, cy, opts = {}) {
+function spawnStaticSlash(src, cx, cy, opts = {}) {
   const {
     kind = 'slash',
     dirX = 1,
     duration = 588,
+    size = 340,
   } = opts;
 
   const el = document.createElement('img');
   el.className = `slash-png kind-${kind}`;
-  el.src = kind === 'heavy'
-    ? 'assets/slash-heavy.png'
-    : 'assets/slash.png';
+  el.src = src;
+  el.draggable = false;
+  el.alt = '';
 
   Object.assign(el.style, {
     position: 'fixed',
     left: cx + 'px',
     top:  cy + 'px',
-    width:  SLASH_SIZE + 'px',
-    height: SLASH_SIZE + 'px',
-    marginLeft: -SLASH_SIZE / 2 + 'px',
-    marginTop:  -SLASH_SIZE / 2 + 'px',
+    width:  size + 'px',
+    height: size + 'px',
+    marginLeft: -size / 2 + 'px',
+    marginTop:  -size / 2 + 'px',
     pointerEvents: 'none',
     zIndex: 9000,
     transformOrigin: 'center center',
@@ -100,12 +171,7 @@ export function spawnCrescent(cx, cy, opts = {}) {
     }
 
     const e = revealP * 130;
-    let clip;
-    if (!REVEAL_FROM_RIGHT) {
-      clip = `polygon(0% 0%, ${e}% 0%, ${e - 35}% 100%, 0% 100%)`;
-    } else {
-      clip = `polygon(${100 - e}% 0%, 100% 0%, 100% 100%, ${100 - e + 35}% 100%)`;
-    }
+    const clip = `polygon(0% 0%, ${e}% 0%, ${e - 35}% 100%, 0% 100%)`;
 
     el.style.clipPath = clip;
     el.style.opacity = opacity.toFixed(3);
@@ -117,16 +183,97 @@ export function spawnCrescent(cx, cy, opts = {}) {
   return el;
 }
 
-// ============================================================
-// SPELL BOOK — hovers above the caster while a spell charges
-// ============================================================
+// ------------------------------------------------------------
+// Animated WebP spawner (auto-play, no reveal loop)
+// ------------------------------------------------------------
+
+function spawnWebp(src, cx, cy, opts = {}) {
+  const {
+    size = 340,
+    duration = 600,
+    flip = false,
+    className = '',
+  } = opts;
+
+  const el = document.createElement('img');
+  el.src = src;
+  el.className = 'fx-webp ' + className;
+  el.draggable = false;
+  el.alt = '';
+
+  Object.assign(el.style, {
+    position: 'fixed',
+    left: cx + 'px',
+    top:  cy + 'px',
+    width:  size + 'px',
+    height: size + 'px',
+    marginLeft: -size / 2 + 'px',
+    marginTop:  -size / 2 + 'px',
+    pointerEvents: 'none',
+    zIndex: 9000,
+    transform: flip ? 'scaleX(-1)' : 'none',
+  });
+
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), duration);
+
+  return el;
+}
+
+// ------------------------------------------------------------
+// Public effect API
+// ------------------------------------------------------------
+
+export function spawnAttack(cx, cy, opts = {}) {
+  const kind = opts.kind || 'slash';
+  const src = EFFECT_SRC[kind] || EFFECT_SRC.slash;
+  const size = EFFECT_SIZE[kind] || 340;
+  const duration = EFFECT_DURATION[kind] || 600;
+  const flip = (opts.dirX ?? 1) < 0;
+
+  if (WEBP_KINDS.has(kind)) {
+    return spawnWebp(src, cx, cy, { size, duration, flip });
+  }
+  return spawnStaticSlash(src, cx, cy, { kind, dirX: opts.dirX, duration, size });
+}
+
+// Legacy alias.
+export function spawnCrescent(cx, cy, opts = {}) {
+  return spawnAttack(cx, cy, opts);
+}
+
+// Pure-block effect (unchanged from existing implementation).
+export function spawnBlockEffect(playerEl) {
+  if (!playerEl) return;
+  const r = playerEl.getBoundingClientRect();
+  const cx = r.right + 90;
+  const cy = r.top + r.height / 2;
+
+  const img = document.createElement('img');
+  img.src = 'assets/block.png';
+  img.className = 'block-effect';
+  img.style.left = cx + 'px';
+  img.style.top  = cy + 'px';
+  document.body.appendChild(img);
+  setTimeout(() => img.remove(), 1500);
+
+  const ring = document.createElement('div');
+  ring.className = 'block-ring';
+  ring.style.left = cx + 'px';
+  ring.style.top  = cy + 'px';
+  document.body.appendChild(ring);
+  setTimeout(() => ring.remove(), 1500);
+}
+
+// ------------------------------------------------------------
+// Spell book
+// ------------------------------------------------------------
 
 let lastBookSpawn = 0;
 
 export function spawnSpellBook(casterEl, { duration = 320, dirX = 1 } = {}) {
   if (!casterEl) return;
 
-  // Dedupe: AoE spells produce one hit per target; only show one book.
   const now = performance.now();
   if (now - lastBookSpawn < 100) return;
   lastBookSpawn = now;
@@ -159,9 +306,9 @@ export function spawnSpellBook(casterEl, { duration = 320, dirX = 1 } = {}) {
   return book;
 }
 
-// ============================================================
-// PANEL REACTIONS
-// ============================================================
+// ------------------------------------------------------------
+// Panel reactions
+// ------------------------------------------------------------
 
 function windupAttacker(el, dirX) {
   if (!el) return;
@@ -191,9 +338,9 @@ function flashPanelEl(el) {
   setTimeout(() => el.classList.remove('hit-flash'), 420);
 }
 
-// ============================================================
-// SCREEN EFFECTS
-// ============================================================
+// ------------------------------------------------------------
+// Screen effects
+// ------------------------------------------------------------
 
 export function screenShake(intensity = 1) {
   const app = document.getElementById('app');
@@ -220,14 +367,14 @@ function hitStop(ms = 70) {
   setTimeout(() => app.classList.remove('hit-stop'), ms);
 }
 
-// ============================================================
-// FLOATING TEXT
-// ============================================================
+// ------------------------------------------------------------
+// Floating text
+// ------------------------------------------------------------
 
 export function spawnDamageNumber(el, amount, { kind = 'slash' } = {}) {
   if (!el) return;
   const r = el.getBoundingClientRect();
-  const jitter = (rng() - 0.5) * 30;
+  const jitter = (Math.random() - 0.5) * 30;
   const scale = 1 + Math.min(1.2, amount / 25);
 
   const node = document.createElement('div');
@@ -252,21 +399,21 @@ export function spawnFloatText(el, text, kind = 'damage') {
   setTimeout(() => node.remove(), 950);
 }
 
-// ============================================================
-// BLOCK — PNG-based (shield.png + block.png)
-// ============================================================
+// ------------------------------------------------------------
+// Blocked indicator
+// ------------------------------------------------------------
 
 export function spawnBlockedIndicator(targetEl) {
   if (!targetEl) return;
   const c = center(targetEl);
 
-  const shield = document.createElement('img');
-  shield.src = 'assets/shield.png';
-  shield.className = 'block-impact';
-  shield.style.left = c.x + 'px';
-  shield.style.top  = c.y + 'px';
-  document.body.appendChild(shield);
-  setTimeout(() => shield.remove(), 900);
+  const img = document.createElement('img');
+  img.src = 'assets/shield.png';
+  img.className = 'block-impact';
+  img.style.left = c.x + 'px';
+  img.style.top  = c.y + 'px';
+  document.body.appendChild(img);
+  setTimeout(() => img.remove(), 900);
 
   const label = document.createElement('div');
   label.className = 'float-text blocked';
@@ -277,40 +424,21 @@ export function spawnBlockedIndicator(targetEl) {
   setTimeout(() => label.remove(), 950);
 }
 
-export function spawnBlockEffect(playerEl) {
-  if (!playerEl) return;
-  const r = playerEl.getBoundingClientRect();
-  const cx = r.right + 90;
-  const cy = r.top + r.height / 2;
-
-  const img = document.createElement('img');
-  img.src = 'assets/block.png';
-  img.className = 'block-effect';
-  img.style.left = cx + 'px';
-  img.style.top  = cy + 'px';
-  document.body.appendChild(img);
-  setTimeout(() => img.remove(), 1500);
-
-  const ring = document.createElement('div');
-  ring.className = 'block-ring';
-  ring.style.left = cx + 'px';
-  ring.style.top  = cy + 'px';
-  document.body.appendChild(ring);
-  setTimeout(() => ring.remove(), 1500);
-}
-
-// ============================================================
-// HIT ORCHESTRATOR
-// ============================================================
+// ------------------------------------------------------------
+// Hit orchestrator
+// ------------------------------------------------------------
 
 const STAGGER_MS = 190;
 const WINDUP_PHYSICAL = 130;
 const WINDUP_SPELL    = 340;
 
-function kindFor(animation) {
-  if (animation === 'heavy')  return 'heavy';
-  if (animation === 'magic')  return 'magic';
-  if (animation === 'pierce') return 'pierce';
+function kindForHit(hit) {
+  if (hit.cardDefId) {
+    return effectKindForCard(hit.cardDefId, hit.animation);
+  }
+  if (hit.animation === 'heavy')  return 'heavy';
+  if (hit.animation === 'magic')  return 'magic';
+  if (hit.animation === 'pierce') return 'pierce';
   return 'slash';
 }
 
@@ -325,7 +453,7 @@ export function playHit(hit, { delay = 0 } = {}) {
       ? (Math.sign(targetC.x - center(attackerEl).x) || 1)
       : 1;
 
-    const kind   = kindFor(hit.animation);
+    const kind   = kindForHit(hit);
     const windup = hit.isSpell ? WINDUP_SPELL : WINDUP_PHYSICAL;
 
     if (attackerEl) {
@@ -339,10 +467,7 @@ export function playHit(hit, { delay = 0 } = {}) {
     setTimeout(() => {
       const c = center(targetEl);
 
-      if (hit.dealt > 0 || hit.blocked === 0) {
-        spawnCrescent(c.x, c.y, { kind, dirX, duration: 588 });
-        spawnImpactBurst(c.x, c.y, { kind, damage: hit.dealt });
-      }
+      spawnAttack(c.x, c.y, { kind, dirX });
 
       if (hit.blocked > 0) {
         spawnBlockedIndicator(targetEl);
@@ -361,6 +486,7 @@ export function playHit(hit, { delay = 0 } = {}) {
         if (hit.dealt >= 15) {
           const tint = {
             heavy:  'rgba(255,80,80,0.35)',
+            hybrid: 'rgba(255,220,140,0.35)',
             magic:  'rgba(180,140,255,0.35)',
             pierce: 'rgba(255,255,255,0.45)',
             slash:  'rgba(255,180,120,0.35)',
@@ -378,9 +504,9 @@ export function animateHits(hits) {
   hits.forEach((hit, i) => playHit(hit, { delay: i * stagger }));
 }
 
-// ============================================================
-// LEGACY COMPAT
-// ============================================================
+// ------------------------------------------------------------
+// Legacy compat
+// ------------------------------------------------------------
 
 export function shakePanel(uid) {
   const el = panelForUid(uid);
