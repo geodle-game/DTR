@@ -15,6 +15,11 @@
 //   uncommon → rare
 //   rare     → epic
 //   status   → epic
+//
+// Paths are prefixed with ../ because they are consumed by
+// styles/cards.css via a CSS custom property. Relative URLs in
+// a stylesheet resolve against the stylesheet's location, so
+// `../assets/...` from styles/cards.css lands on /assets/...
 // ============================================================
 
 import { CARDS } from './cards.js';
@@ -40,8 +45,6 @@ export function cardVisualKind(defId) {
   const def = CARDS[defId];
   if (!def) return 'attack';
 
-  // Type field wins for spell and power — those are structurally
-  // different from the effect-based kinds.
   if (def.type === 'spell') return 'spell';
   if (def.type === 'power') return 'power';
 
@@ -65,7 +68,6 @@ export function cardVisualKind(defId) {
   if (hasDraw)   return 'draw';
   if (hasEnergy) return 'energy';
 
-  // Fallback for cards with no recognizable effect.
   return 'attack';
 }
 
@@ -83,7 +85,7 @@ export function cardVisualRarity(rarity) {
 export function cardFramePath(defId, rarity) {
   const kind = cardVisualKind(defId);
   const tier = cardVisualRarity(rarity);
-  return `assets/cards/${kind}_${tier}_front.svg`;
+  return `../assets/cards/${kind}_${tier}_front.svg`;
 }
 
-export const CARD_BACK_PATH = 'assets/cards/asterai_card_back.svg';
+export const CARD_BACK_PATH = '../assets/cards/asterai_card_back.svg';
