@@ -10,13 +10,20 @@
   min-height: 280px;
 }
 
+/* ============================================================
+   CARD BASE
+   ============================================================ */
+
 .card {
   width: 156px;
   min-height: 240px;
-  background: linear-gradient(180deg, #2a2f3a, #1e2229);
-  border: 2px solid #4a5262;
-  border-radius: 10px;
-  padding: 12px;
+  background-color: #1a1e26;
+  background-image: var(--frame-src, none);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center;
+  border: none;
+  padding: 16px 14px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -31,7 +38,7 @@
     rotate(var(--card-rot, 0deg));
   transition:
     transform .18s cubic-bezier(.2,.9,.3,1.4),
-    border-color .12s ease,
+    filter .12s ease,
     box-shadow .18s ease;
   will-change: transform;
   touch-action: manipulation;
@@ -58,24 +65,6 @@
   }
 }
 
-.card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 8px;
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(255,255,255,.06), transparent 40%);
-}
-
-.card::after {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 4px;
-  background: var(--type-color, #6b7280);
-  opacity: .8;
-}
-
 .card:hover:not(.disabled) {
   transform:
     translateY(calc(var(--card-offy, 0px) - 24px))
@@ -99,7 +88,7 @@
 }
 
 /* ============================================================
-   CARD TYPES
+   TYPE COLORS (only used by card name now — frame handles the rest)
    ============================================================ */
 
 .card.type-attack { --type-color: #ff6b6b; }
@@ -108,58 +97,24 @@
 .card.type-spell  { --type-color: #a78bfa; }
 .card.type-status { --type-color: #6b7280; }
 
-.card.type-spell {
-  background: linear-gradient(180deg, #241f3a, #18142a);
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.35),
-    0 0 0 1px rgba(167, 139, 250, 0.2) inset;
-}
-
-.card.type-spell::after { box-shadow: 0 0 12px rgba(167, 139, 250, .8); }
-.card.type-spell .cname  { color: #c9b8ff; }
-
-/* ============================================================
-   RARITY
-   ============================================================ */
-
-.card.rarity-starter { border-color: #4a5262; }
-
-.card.rarity-common {
-  border-color: #8a93a6;
-  box-shadow: 0 4px 12px rgba(0,0,0,.35), 0 0 0 1px rgba(138,147,166,.15) inset;
-}
-
-.card.rarity-rare {
-  border-color: #6f8fff;
-  box-shadow: 0 4px 16px rgba(111,143,255,.35), 0 0 0 1px rgba(111,143,255,.25) inset;
-  background: linear-gradient(180deg, #2a3350, #1d2438);
-}
-
-.card.rarity-rare::after { box-shadow: 0 0 12px rgba(111,143,255,.8); }
-
-.card.rarity-status {
-  border-color: #4a4252;
-  background: linear-gradient(180deg, #2c2a30, #1e1c22);
-  filter: grayscale(.4);
-}
-
 /* ============================================================
    STATES
    ============================================================ */
 
 .card.pending {
-  border-color: #ff8f6b;
-  box-shadow: 0 0 0 2px rgba(255,143,107,.4), 0 16px 30px rgba(255,143,107,.35);
   transform:
     translateY(calc(var(--card-offy, 0px) - 24px))
     rotate(var(--card-rot, 0deg))
     scale(1.07);
+  box-shadow:
+    0 0 0 2px rgba(255,143,107,.4),
+    0 16px 30px rgba(255,143,107,.35);
 }
 
 .card.card-small {
   width: 132px;
   min-height: 180px;
-  padding: 10px;
+  padding: 12px 10px;
   margin: 0;
   animation: none;
   transform: none;
@@ -167,21 +122,34 @@
 
 .card.card-small:hover { transform: translateY(-4px) scale(1.03); }
 
-.card.card-retain {
-  border-color: #6bff9e;
-  box-shadow: 0 4px 12px rgba(0,0,0,.35), 0 0 0 1px rgba(107,255,158,.3) inset;
+/* Retain cards — green inner glow, on top of the SVG frame. */
+.card.card-retain::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 10px;
+  border: 2px solid rgba(107,255,158,.55);
+  pointer-events: none;
+  box-shadow:
+    0 0 12px rgba(107,255,158,.35),
+    0 0 20px rgba(107,255,158,.2) inset;
+  z-index: 3;
 }
-.card.card-retain::after { background: #6bff9e; }
+
 .card.card-retain .cname { color: #6bff9e; }
 
-/* Cards disabled by the Dungeon Core this turn */
+/* Cards disabled by the Dungeon Core this turn. */
 .card.card-locked {
   opacity: .35;
   filter: grayscale(.9) brightness(.7);
-  position: relative;
 }
 
 .card.card-locked::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
   background:
     linear-gradient(
       45deg,
@@ -190,7 +158,30 @@
       rgba(255,80,80,.6) calc(50% + 1px),
       transparent calc(50% + 1px)
     );
-  z-index: 2;
+  z-index: 3;
+}
+
+/* Enchant target — purple hover glow. */
+.card.enchant-target {
+  cursor: pointer;
+}
+
+.card.enchant-target::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 10px;
+  border: 2px solid rgba(201,163,255,.55);
+  pointer-events: none;
+  box-shadow:
+    0 0 20px rgba(143,107,255,.5),
+    0 0 20px rgba(143,107,255,.3) inset;
+  z-index: 3;
+}
+
+.card.enchant-target:hover {
+  transform: translateY(-6px) scale(1.04);
+  box-shadow: 0 14px 32px rgba(143,107,255,.5);
 }
 
 .card.playing {
@@ -231,6 +222,7 @@
   font-size: 14px;
   box-shadow: 0 2px 6px rgba(255,184,0,.4);
   flex-shrink: 0;
+  z-index: 2;
 }
 
 .cname {
@@ -239,12 +231,14 @@
   letter-spacing: .01em;
   color: var(--type-color, #e8eaee);
   line-height: 1.2;
+  z-index: 2;
 }
 
 .ctext {
-  color: #b8bdc7;
+  color: #c8cdd7;
   font-size: 13px;
   line-height: 1.4;
+  z-index: 2;
 }
 
 .ctext .live {
@@ -260,11 +254,12 @@
   margin-top: auto;
   border-radius: 6px;
   padding: 5px 8px;
-  background: rgba(0,0,0,.35);
+  background: rgba(0,0,0,.55);
   display: flex;
   flex-direction: column;
   gap: 2px;
   border-left: 3px solid #8b93a1;
+  z-index: 2;
 }
 
 .card-enchant.rarity-common   { border-left-color: #8a93a6; }
@@ -292,21 +287,6 @@
 .card.card-big .card-enchant { padding: 8px 10px; }
 .card.card-big .card-enchant-name { font-size: 13px; }
 .card.card-big .card-enchant-text { font-size: 11px; }
-
-.card.enchant-target {
-  border-color: #c9a3ff;
-  box-shadow:
-    0 4px 12px rgba(0,0,0,.35),
-    0 0 0 2px rgba(201,163,255,.45) inset,
-    0 0 24px rgba(143,107,255,.35);
-  cursor: pointer;
-}
-.card.enchant-target:hover {
-  transform: translateY(-6px) scale(1.04);
-  box-shadow:
-    0 14px 32px rgba(143,107,255,.5),
-    0 0 0 2px rgba(201,163,255,.6) inset;
-}
 
 /* ============================================================
    LONG-PRESS INSPECT OVERLAY
@@ -349,18 +329,16 @@
 .card.card-big {
   width: 280px;
   min-height: 420px;
-  padding: 22px;
+  padding: 22px 20px;
   margin: 0;
   cursor: default;
   animation: none;
   transform: none !important;
-  border-radius: 16px;
   box-shadow:
     0 30px 80px rgba(0,0,0,.7),
-    0 0 0 2px rgba(143,107,255,.35) inset;
+    0 0 60px rgba(143,107,255,.2);
 }
 
-.card.card-big::after { height: 6px; }
 .card.card-big .cost { width: 44px; height: 44px; font-size: 22px; box-shadow: 0 4px 12px rgba(255,184,0,.55); }
 .card.card-big .cname { font-size: 22px; line-height: 1.15; }
 .card.card-big .ctext { font-size: 16px; line-height: 1.5; }
@@ -427,292 +405,23 @@
 }
 
 /* ============================================================
-   ATTACK SLASH
+   CARD BACK
    ============================================================ */
+/* Utility class — apply to a card that should show face-down.
+   Unused right now, ready for draw-pile previews or hidden
+   information states. */
 
-.slash-effect {
-  position: fixed;
-  width: 300px;
-  height: 300px;
-  margin-left: -150px;
-  margin-top: -150px;
-  pointer-events: none;
-  z-index: 9000;
-  background-image: url('../assets/slash.png');
-  background-size: contain;
+.card.card-back {
+  background-image: url('../assets/cards/asterai_card_back.svg');
+  background-size: 100% 100%;
   background-repeat: no-repeat;
   background-position: center;
-  opacity: 0;
-  animation: slashStrike .75s cubic-bezier(.2,.8,.35,1) forwards;
-  will-change: transform, opacity, filter;
-  transform-origin: center center;
+  background-color: transparent;
 }
 
-.slash-effect.heavy { background-image: url('../assets/slash-heavy.png'); }
-.slash-effect.magic { filter: hue-rotate(180deg); }
-
-.slash-effect.trail {
-  opacity: 0;
-  z-index: 8999;
-  animation-name: slashStrikeTrail;
-}
-
-@keyframes slashStrike {
-  0% {
-    opacity: 0;
-    filter: blur(4px) brightness(.9);
-    transform:
-      translate(var(--from-x, -170px), var(--from-y, 0))
-      rotate(calc(var(--slash-rot, -45deg) - 55deg))
-      scale(.35, .55);
-  }
-  15% {
-    opacity: .9;
-    filter: blur(2px) brightness(1.1);
-  }
-  40% {
-    opacity: 1;
-    filter: blur(0) brightness(1.35)
-      drop-shadow(0 0 18px rgba(255,220,180,.75));
-    transform:
-      translate(0, 0)
-      rotate(var(--slash-rot, -45deg))
-      scale(1.35, 1.15);
-  }
-  68% {
-    opacity: 1;
-    filter: blur(0) brightness(1.15)
-      drop-shadow(0 0 12px rgba(255,220,180,.5));
-    transform:
-      translate(
-        calc(var(--to-x, 170px) * .5),
-        calc(var(--to-y, 0) * .5)
-      )
-      rotate(calc(var(--slash-rot, -45deg) + 35deg))
-      scale(1, 1);
-  }
-  100% {
-    opacity: 0;
-    filter: blur(5px) brightness(.7);
-    transform:
-      translate(var(--to-x, 170px), var(--to-y, 0))
-      rotate(calc(var(--slash-rot, -45deg) + 75deg))
-      scale(.4, .7);
-  }
-}
-
-@keyframes slashStrikeTrail {
-  0% {
-    opacity: 0;
-    filter: blur(6px) brightness(.9);
-    transform:
-      translate(var(--from-x, -170px), var(--from-y, 0))
-      rotate(calc(var(--slash-rot, -45deg) - 55deg))
-      scale(.3, .5);
-  }
-  30% {
-    opacity: .5;
-    filter: blur(5px) brightness(1);
-  }
-  65% {
-    opacity: .4;
-    filter: blur(4px) brightness(.95);
-    transform:
-      translate(
-        calc(var(--to-x, 170px) * .45),
-        calc(var(--to-y, 0) * .45)
-      )
-      rotate(calc(var(--slash-rot, -45deg) + 35deg))
-      scale(.95, .95);
-  }
-  100% {
-    opacity: 0;
-    filter: blur(6px) brightness(.6);
-    transform:
-      translate(var(--to-x, 170px), var(--to-y, 0))
-      rotate(calc(var(--slash-rot, -45deg) + 75deg))
-      scale(.4, .65);
-  }
-}
-
-.slash-flash {
-  position: fixed;
-  width: 200px;
-  height: 200px;
-  margin-left: -100px;
-  margin-top: -100px;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 8998;
-  background: radial-gradient(
-    circle,
-    rgba(255,235,190,.85) 0%,
-    rgba(255,220,160,.55) 18%,
-    rgba(255,190,120,.22) 40%,
-    transparent 72%
-  );
-  animation: slashFlash .5s cubic-bezier(.15,.8,.3,1) forwards;
-}
-
-@keyframes slashFlash {
-  0%   { opacity: 0; transform: scale(.25); }
-  30%  { opacity: .85; transform: scale(1); }
-  70%  { opacity: .35; transform: scale(1.5); }
-  100% { opacity: 0; transform: scale(1.9); }
-}
-
-/* ============================================================
-   BLOCK GAIN EFFECT
-   ============================================================ */
-
-.block-effect {
-  position: fixed;
-  width: 130px;
-  height: 130px;
-  object-fit: contain;
-  pointer-events: none;
-  z-index: 9500;
-  transform: translate(-50%, -50%);
-  animation: blockEffect 1.4s cubic-bezier(.15,.85,.3,1) forwards;
-  filter:
-    drop-shadow(0 0 22px rgba(111,179,255,1))
-    drop-shadow(0 0 44px rgba(111,179,255,.55));
-}
-
-@keyframes blockEffect {
-  0%   { opacity: 0; transform: translate(-50%, -50%) scale(.3) rotate(-18deg); }
-  20%  { opacity: 1; transform: translate(-50%, -55%) scale(1.25) rotate(-8deg); }
-  45%  { opacity: 1; transform: translate(-50%, -70%) scale(1.05) rotate(-6deg); }
-  75%  { opacity: .85; transform: translate(-50%, -95%) scale(1) rotate(-5deg); }
-  100% { opacity: 0; transform: translate(-50%, -150%) scale(1.05) rotate(-5deg); }
-}
-
-.block-ring {
-  position: fixed;
-  width: 60px;
-  height: 60px;
-  margin-left: -30px;
-  margin-top: -30px;
-  border-radius: 50%;
-  border: 3px solid rgba(111,179,255,.95);
-  pointer-events: none;
-  z-index: 9499;
-  box-shadow:
-    0 0 24px rgba(111,179,255,.95),
-    0 0 48px rgba(111,179,255,.5) inset;
-  animation: blockRing 1.4s cubic-bezier(.15,.85,.3,1) forwards;
-}
-
-@keyframes blockRing {
-  0%   { opacity: 0; transform: scale(.3); }
-  25%  { opacity: 1; transform: scale(1.6); }
-  60%  { opacity: .55; transform: scale(2.3); }
-  100% { opacity: 0; transform: scale(3); }
-}
-
-/* ============================================================
-   BLOCKED INDICATOR + DAMAGE NUMBER + SPARK
-   ============================================================ */
-
-.block-impact {
-  position: fixed;
-  width: 110px;
-  height: 110px;
-  object-fit: contain;
-  pointer-events: none;
-  z-index: 9999;
-  transform: translate(-50%, -50%);
-  filter: drop-shadow(0 0 28px rgba(111,179,255,1));
-  animation: blockImpact .8s cubic-bezier(.2,.9,.3,1.4) forwards;
-}
-
-@keyframes blockImpact {
-  0%   { opacity: 0; transform: translate(-50%, -50%) scale(.3) rotate(-20deg); }
-  30%  { opacity: 1; transform: translate(-50%, -50%) scale(1.45) rotate(0deg); }
-  65%  { opacity: 1; transform: translate(-50%, -50%) scale(1.1) rotate(0deg); }
-  100% { opacity: 0; transform: translate(-50%, -75%) scale(1.2) rotate(0deg); }
-}
-
-.float-text {
-  position: fixed;
-  pointer-events: none;
-  font-weight: 700;
-  z-index: 9998;
-  transform: translate(-50%, 0);
-  animation: floatUp .9s ease-out forwards;
-  text-shadow: 0 2px 8px rgba(0,0,0,.8);
-}
-
-.float-text.heal  { color: #6bff9e; font-size: 24px; }
-.float-text.block { color: #6fb3ff; font-size: 22px; }
-
-.float-text.blocked {
-  color: #6fb3ff;
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  text-shadow:
-    0 0 12px rgba(111,179,255,.9),
-    0 2px 4px rgba(0,0,0,.9);
-}
-
-.float-text.damage {
-  font-size: 36px;
-  font-weight: 900;
-  letter-spacing: -0.03em;
-  color: #ff6b6b;
-  text-shadow:
-    0 0 20px rgba(255,80,80,.95),
-    0 0 8px rgba(255,150,80,.8),
-    0 2px 4px rgba(0,0,0,.95);
-}
-
-@keyframes floatUp {
-  0%   { opacity: 0; transform: translate(-50%, 0) scale(.6); }
-  20%  { opacity: 1; transform: translate(-50%, -14px) scale(1.15); }
-  100% { opacity: 0; transform: translate(-50%, -70px) scale(1); }
-}
-
-.hit-spark {
-  position: fixed;
-  width: 60px;
-  height: 60px;
-  margin-left: -30px;
-  margin-top: -30px;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(255,220,150,.95) 0%,
-    rgba(255,120,60,.7) 30%,
-    transparent 70%
-  );
-  pointer-events: none;
-  z-index: 9997;
-  animation: sparkOut .4s ease-out forwards;
-}
-
-@keyframes sparkOut {
-  0%   { transform: scale(.2); opacity: 1; }
-  100% { transform: scale(1.6); opacity: 0; }
-}
-
-.shake {
-  animation: shake .4s cubic-bezier(.36,.07,.19,.97);
-}
-
-@keyframes shake {
-  10%, 90% { transform: translateX(-2px); }
-  20%, 80% { transform: translateX(4px); }
-  30%, 50%, 70% { transform: translateX(-8px); }
-  40%, 60% { transform: translateX(8px); }
-}
-
-.hit-flash {
-  animation: hitFlash .4s ease-out;
-}
-
-@keyframes hitFlash {
-  0%   { background-color: rgba(255,80,80,.6); }
-  100% { background-color: transparent; }
+.card.card-back .cost,
+.card.card-back .cname,
+.card.card-back .ctext,
+.card.card-back .card-enchant {
+  visibility: hidden;
 }
