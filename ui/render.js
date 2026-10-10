@@ -44,6 +44,12 @@ import { cardFramePath } from '../data/cardVisuals.js';
 const LONG_PRESS_MS = 450;
 const DRAG_THRESHOLD = 14;
 
+// Flight timing: the card animation runs 450ms in CSS. We dispatch
+// the actual card effect (which pushes state.lastHits and triggers
+// the impact sprite) at the moment the card visually lands.
+const CARD_FLIGHT_MS = 450;
+const CARD_IMPACT_MS = 340;
+
 let shopRemoveMode = false;
 
 // ------------------------------------------------------------
@@ -173,7 +179,7 @@ export function render() {
 }
 
 // ============================================================
-// Tutorial modal (z-index above fragment lore)
+// Tutorial modal
 // ============================================================
 
 function renderTutorial(app) {
@@ -215,7 +221,7 @@ function renderTutorial(app) {
 }
 
 // ============================================================
-// Fragment lore modal (z-index below tutorial)
+// Fragment lore modal
 // ============================================================
 
 function renderFragmentLore(app) {
@@ -359,7 +365,7 @@ function renderMainMenu(app) {
 }
 
 // ============================================================
-// Chapter title card
+// Chapter title
 // ============================================================
 
 function renderChapterTitle(app) {
@@ -1203,7 +1209,7 @@ function renderVictory(app) {
 }
 
 // ============================================================
-// Absorption (MC1 ending)
+// Absorption
 // ============================================================
 
 const ABSORPTION_PAGES = [
@@ -1296,7 +1302,7 @@ function renderAbsorption(app) {
 }
 
 // ============================================================
-// Recall (map teleport)
+// Recall
 // ============================================================
 
 function renderRecall(app) {
@@ -1993,14 +1999,15 @@ function statusRow(statuses) {
 // ------------------------------------------------------------
 // Card flight destination
 // ------------------------------------------------------------
-// Picks the element the flying card should animate toward.
-// Priority: enemy (for enemy-targeting cards) → player (for
-// self-targeting cards) → pile (discard, draw, or exhaust).
+// Every card flies to either an enemy panel or the player's
+// own panel. No pile destinations.
+//
+// Enemy-targeting cards (attack, all-enemies, random-enemy) go
+// to the chosen enemy. Everything else goes to the player.
 function flightDestinationForCard(card, explicitTargetId) {
   const def = CARDS[card.defId];
-  if (!def) return null;
+  if (!def) return document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
 
-  // 1. Enemy-targeting → fly at the enemy panel.
   if (def.target === 'enemy' || def.target === 'all-enemies' || def.target === 'random-enemy') {
     const enemies = (state.enemies || []).filter(e => e.hp > 0);
     if (enemies.length) {
@@ -2014,21 +2021,64 @@ function flightDestinationForCard(card, explicitTargetId) {
     }
   }
 
-  // 2. Self-targeting → fly at the player panel.
-  if (def.target === 'self') {
-    const el = document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
-    if (el) return el;
-  }
-
-  // 3. No target → fly at the destination pile.
-  const pileName = def.destination === 'exhaust' ? 'exhaust'
-                 : def.destination === 'draw'    ? 'draw'
-                 : 'discard';
-  const pileEl = document.querySelector(`[data-pile="${pileName}"]`);
-  if (pileEl) return pileEl;
-
-  // Fallback — player panel.
   return document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
+}
+
+// ------------------------------------------------------------
+// Effect text for a played card
+// ------------------------------------------------------------
+// Returns an array of { text, kind, where } entries describing
+// the secondary effects of a card — everything that is not
+// damage or block, which are already shown by the hit pipeline.
+//
+//   kind   → CSS class suffix for color
+//   where  → 'player' | 'enemy' — which panel to float over
+function effectTextsForCard(def) {
+  const out = [];
+  for (const eff of def.effects || []) {
+    switch (eff.kind) {
+      case 'heal':
+        out.push({ text: `+${eff.amount} HP`, kind: 'heal', where: 'player' });
+        break;
+      case 'gainEnergy':
+        out.push({ text: `+${eff.amount} Energy`, kind: 'energy', where: 'player' });
+        break;
+      case 'gainEnergyNextTurn':
+        out.push({ text: `+${eff.amount} Energy next turn`, kind: 'energy', where: 'player' });
+        break;
+      case 'draw':
+        out.push({ text: `Draw ${eff.amount}`, kind: 'draw', where: 'player' });
+        break;
+      case 'applyStatus':
+        if (eff.status === 'strength') {
+          out.push({ text: `+${eff.amount} Strength`, kind: 'strength', where: 'player' });
+        } else if (eff.status === 'focus') {
+          out.push({ text: `+${eff.amount} Focus`, kind: 'focus', where: 'player' });
+        } else if (eff.status === 'weak') {
+          out.push({ text: `Weak ${eff.amount}`, kind: 'weak', where: 'enemy' });
+        } else if (eff.status === 'vulnerable') {
+          out.push({ text: `Vulnerable ${eff.amount}`, kind: 'vulnerable', where: 'enemy' });
+        }
+        break;
+      case 'loseHpSelf':
+        out.push({ text: `-${eff.amount} HP`, kind: 'damage', where: 'player' });
+        break;
+      case 'exhaustRandom':
+      case 'exhaustRandomHand': {
+        const n = eff.amount ?? 1;
+        out.push({ text: `Exhaust ${n}`, kind: 'draw', where: 'player' });
+        break;
+      }
+      case 'discardRandom':
+        out.push({ text: `Discard ${eff.amount}`, kind: 'draw', where: 'player' });
+        break;
+      case 'addCardToPlayerDraw':
+      case 'addCardToDraw':
+        out.push({ text: 'Dazed', kind: 'debuff', where: 'player' });
+        break;
+    }
+  }
+  return out;
 }
 
 function tryPlayCard(card, sourceEl, player) {
@@ -2139,20 +2189,60 @@ function doPlayCard(card, sourceEl, targetUid) {
   const def = CARDS[card.defId];
   const targetEl = flightDestinationForCard(card, targetUid);
 
-  if (sourceEl) {
-    // Flourish first — behind the flying card, at its origin.
+  // Pre-compute effect text entries while the card data is in hand.
+  const effectTexts = effectTextsForCard(def);
+
+  // Remember where to float the effect texts. Target panel if the
+  // card hits an enemy, else the player's own panel.
+  const isEnemyTargeted = def.target === 'enemy'
+    || def.target === 'all-enemies'
+    || def.target === 'random-enemy';
+  const enemyEl = isEnemyTargeted
+    ? (targetUid
+        ? document.querySelector(`[data-panel="enemy"][data-uid="${targetUid}"]`)
+        : document.querySelector('[data-panel="enemy"]'))
+    : null;
+  const playerEl = document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
+
+  // Card flight — clone onto body so it survives the render() that
+  // fires when the card dispatches.
+  if (sourceEl && targetEl) {
     spawnFlourish(sourceEl, flourishKindForCard(card.defId));
 
-    // Then the flight itself.
     const sRect = sourceEl.getBoundingClientRect();
-    const tRect = targetEl ? targetEl.getBoundingClientRect() : sRect;
+    const tRect = targetEl.getBoundingClientRect();
     const dx = (tRect.left + tRect.width / 2) - (sRect.left + sRect.width / 2);
     const dy = (tRect.top + tRect.height / 2) - (sRect.top + sRect.height / 2);
-    sourceEl.style.setProperty('--fly-x', `${dx}px`);
-    sourceEl.style.setProperty('--fly-y', `${dy}px`);
-    sourceEl.classList.add('playing');
+
+    const clone = sourceEl.cloneNode(true);
+    clone.classList.remove('drawing', 'disabled', 'card-locked', 'pending');
+    clone.classList.add('playing');
+
+    Object.assign(clone.style, {
+      position: 'fixed',
+      left: sRect.left + 'px',
+      top:  sRect.top + 'px',
+      width:  sRect.width + 'px',
+      height: sRect.height + 'px',
+      margin: '0',
+      transformOrigin: 'center center',
+      pointerEvents: 'none',
+      zIndex: '9000',
+    });
+
+    clone.style.setProperty('--card-offy', '30px');
+    clone.style.setProperty('--card-rot',  '0deg');
+    clone.style.setProperty('--fly-x', dx + 'px');
+    clone.style.setProperty('--fly-y', dy + 'px');
+
+    document.body.appendChild(clone);
+    setTimeout(() => clone.remove(), CARD_FLIGHT_MS + 80);
+
+    sourceEl.style.visibility = 'hidden';
   }
 
+  // Card impact — dispatch at CARD_IMPACT_MS so the sprite fires
+  // just as the card visually lands.
   setTimeout(() => {
     state.lastHits = [];
     dispatch({ type: 'PLAY_CARD', cardUid: card.uid, targetUid });
@@ -2163,16 +2253,21 @@ function doPlayCard(card, sourceEl, targetUid) {
     state.lastHits = [];
     animateHits(hits);
 
-    const playerEl = document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
+    // Float effect text — one per effect, staggered.
+    effectTexts.forEach((t, i) => {
+      setTimeout(() => {
+        const el = t.where === 'enemy' ? enemyEl : playerEl;
+        if (el) spawnFloatText(el, t.text, t.kind);
+      }, i * 130);
+    });
 
+    // Existing block/heal indicators still fire from the render
+    // path, but heal is now covered by effectTexts, so we only
+    // keep block here.
     const hasBlock = def.effects.some(e => e.kind === 'block');
     if (hasBlock && playerEl) {
-      spawnFloatText(playerEl, '+BLOCK', 'block');
       setTimeout(() => spawnBlockEffect(playerEl), 60);
     }
-
-    const hasHeal = def.effects.some(e => e.kind === 'heal' || e.kind === 'reaper');
-    if (hasHeal && playerEl) spawnFloatText(playerEl, '+HP', 'heal');
 
     if (def.endsTurn && !state.over) {
       state.pendingCardUid = null;
@@ -2185,7 +2280,7 @@ function doPlayCard(card, sourceEl, targetUid) {
         animateHits(enemyHits);
       }, 300);
     }
-  }, 220);
+  }, CARD_IMPACT_MS);
 }
 
 function cardFace(defId, { disabled = false, small = false, big = false, enchant = null } = {}) {
@@ -2208,7 +2303,6 @@ function cardFace(defId, { disabled = false, small = false, big = false, enchant
   el.classList.add(`type-${def.type || 'skill'}`);
   if (def.retain) el.classList.add('card-retain');
 
-  // SVG card frame — resolved per card from kind + rarity.
   el.style.setProperty('--frame-src', `url(${cardFramePath(defId, def.rarity)})`);
 
   const ctx = playerCardContext();
@@ -2375,7 +2469,7 @@ function renderPlotArmor(card) {
 }
 
 // ============================================================
-// Death pages (real death, MC2)
+// Death pages
 // ============================================================
 
 const DEATH_PAGES = [
