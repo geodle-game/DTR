@@ -16,6 +16,32 @@
 
 
 /* ============================================================
+   1b. CARD PLAY FLOURISH (static SVG, fade + scale)
+   ============================================================ */
+
+.fx-flourish {
+  width: 200px;
+  height: 200px;
+  margin-left: -100px;
+  margin-top: -100px;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  opacity: 0;
+  transform: scale(0.4) rotate(0deg);
+  animation: flourishInOut 500ms cubic-bezier(.2, .9, .3, 1.1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes flourishInOut {
+  0%   { opacity: 0; transform: scale(0.4) rotate(0deg); }
+  25%  { opacity: 1; transform: scale(1.15) rotate(-4deg); }
+  55%  { opacity: 1; transform: scale(1.25) rotate(2deg); }
+  100% { opacity: 0; transform: scale(1.55) rotate(0deg); }
+}
+
+
+/* ============================================================
    2. PNG SLASH (static + clip-path reveal)
    ============================================================ */
 
@@ -40,7 +66,7 @@
 
 
 /* ============================================================
-   3. SPELL BOOK — appears above caster during a spell windup
+   3. SPELL BOOK
    ============================================================ */
 
 .spell-book-cast {
@@ -53,13 +79,11 @@
   z-index: 12000;
   transform-origin: center center;
   opacity: 0;
-
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
   background-color: rgba(140, 100, 255, 0.18);
   border-radius: 50%;
-
   animation: spellBookCast 320ms cubic-bezier(.2, .9, .3, 1.15) forwards;
   filter:
     drop-shadow(0 0 16px rgba(167, 139, 250, 1))
@@ -91,33 +115,11 @@
 }
 
 @keyframes spellBookCast {
-  0% {
-    opacity: 0;
-    transform: scale(.15) rotate(-40deg) translateY(30px);
-  }
-  22% {
-    opacity: 1;
-    transform: scale(1.08) rotate(-12deg) translateY(0);
-  }
-  45% {
-    opacity: 1;
-    transform: scale(1.22) rotate(0deg) translateY(-10px);
-    filter:
-      drop-shadow(0 0 24px rgba(200, 180, 255, 1))
-      drop-shadow(0 0 48px rgba(167, 139, 250, .9))
-      drop-shadow(0 4px 8px rgba(0, 0, 0, .5));
-  }
-  72% {
-    opacity: 1;
-    transform: scale(1.10) rotate(6deg) translateY(-18px);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.95) rotate(0deg) translateY(-44px);
-    filter:
-      drop-shadow(0 0 44px rgba(200, 180, 255, 1))
-      drop-shadow(0 0 88px rgba(167, 139, 250, .6));
-  }
+  0%   { opacity: 0; transform: scale(.15) rotate(-40deg) translateY(30px); }
+  22%  { opacity: 1; transform: scale(1.08) rotate(-12deg) translateY(0); }
+  45%  { opacity: 1; transform: scale(1.22) rotate(0deg) translateY(-10px); }
+  72%  { opacity: 1; transform: scale(1.10) rotate(6deg) translateY(-18px); }
+  100% { opacity: 0; transform: scale(1.95) rotate(0deg) translateY(-44px); }
 }
 
 .spell-book-ring {
@@ -146,7 +148,7 @@
 
 
 /* ============================================================
-   4. BLOCK PNG (pure block cards)
+   4. BLOCK PNG
    ============================================================ */
 
 .block-effect {
@@ -164,26 +166,11 @@
 }
 
 @keyframes blockEffect {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(.3) rotate(-18deg);
-  }
-  20% {
-    opacity: 1;
-    transform: translate(-50%, -55%) scale(1.25) rotate(-8deg);
-  }
-  45% {
-    opacity: 1;
-    transform: translate(-50%, -70%) scale(1.05) rotate(-6deg);
-  }
-  75% {
-    opacity: .85;
-    transform: translate(-50%, -95%) scale(1) rotate(-5deg);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -150%) scale(1.05) rotate(-5deg);
-  }
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(.3) rotate(-18deg); }
+  20%  { opacity: 1; transform: translate(-50%, -55%) scale(1.25) rotate(-8deg); }
+  45%  { opacity: 1; transform: translate(-50%, -70%) scale(1.05) rotate(-6deg); }
+  75%  { opacity: .85; transform: translate(-50%, -95%) scale(1) rotate(-5deg); }
+  100% { opacity: 0; transform: translate(-50%, -150%) scale(1.05) rotate(-5deg); }
 }
 
 .block-ring {
@@ -203,22 +190,10 @@
 }
 
 @keyframes blockRing {
-  0% {
-    opacity: 0;
-    transform: scale(.3);
-  }
-  25% {
-    opacity: 1;
-    transform: scale(1.6);
-  }
-  60% {
-    opacity: .55;
-    transform: scale(2.3);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(3);
-  }
+  0%   { opacity: 0; transform: scale(.3); }
+  25%  { opacity: 1; transform: scale(1.6); }
+  60%  { opacity: .55; transform: scale(2.3); }
+  100% { opacity: 0; transform: scale(3); }
 }
 
 .block-impact {
@@ -234,22 +209,10 @@
 }
 
 @keyframes blockImpact {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(.3) rotate(-20deg);
-  }
-  30% {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1.45) rotate(0deg);
-  }
-  65% {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1.1) rotate(0deg);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -75%) scale(1.2) rotate(0deg);
-  }
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(.3) rotate(-20deg); }
+  30%  { opacity: 1; transform: translate(-50%, -50%) scale(1.45) rotate(0deg); }
+  65%  { opacity: 1; transform: translate(-50%, -50%) scale(1.1) rotate(0deg); }
+  100% { opacity: 0; transform: translate(-50%, -75%) scale(1.2) rotate(0deg); }
 }
 
 
@@ -262,21 +225,9 @@
 }
 
 @keyframes attackerWindup {
-  0% {
-    transform: translate(0, 0) rotate(0deg) scale(1);
-  }
-  70% {
-    transform:
-      translate(var(--windup-x, 10px), 0)
-      rotate(var(--windup-rot, 2.5deg))
-      scale(0.97);
-  }
-  100% {
-    transform:
-      translate(calc(var(--windup-x, 10px) * 0.3), 0)
-      rotate(calc(var(--windup-rot, 2.5deg) * 0.3))
-      scale(1);
-  }
+  0%   { transform: translate(0, 0) rotate(0deg) scale(1); }
+  70%  { transform: translate(var(--windup-x, 10px), 0) rotate(var(--windup-rot, 2.5deg)) scale(0.97); }
+  100% { transform: translate(calc(var(--windup-x, 10px) * 0.3), 0) rotate(calc(var(--windup-rot, 2.5deg) * 0.3)) scale(1); }
 }
 
 .panel.knocked {
@@ -284,22 +235,10 @@
 }
 
 @keyframes targetKnockback {
-  0% {
-    transform: translate(0, 0) scale(1);
-  }
-  25% {
-    transform:
-      translate(var(--kb-x, 8px), 0)
-      scale(0.96);
-  }
-  55% {
-    transform:
-      translate(calc(var(--kb-x, 8px) * -0.2), 0)
-      scale(1.03);
-  }
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
+  0%   { transform: translate(0, 0) scale(1); }
+  25%  { transform: translate(var(--kb-x, 8px), 0) scale(0.96); }
+  55%  { transform: translate(calc(var(--kb-x, 8px) * -0.2), 0) scale(1.03); }
+  100% { transform: translate(0, 0) scale(1); }
 }
 
 .panel.hit-flash {
@@ -307,15 +246,9 @@
 }
 
 @keyframes hitFlash {
-  0% {
-    background-color: rgba(255, 220, 180, 0.85);
-  }
-  40% {
-    background-color: rgba(255, 120, 80, 0.35);
-  }
-  100% {
-    background-color: transparent;
-  }
+  0%   { background-color: rgba(255, 220, 180, 0.85); }
+  40%  { background-color: rgba(255, 120, 80, 0.35); }
+  100% { background-color: transparent; }
 }
 
 
@@ -417,24 +350,11 @@
 }
 
 @keyframes damagePop {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, 0) scale(0.25);
-  }
-  18% {
-    opacity: 1;
-    transform: translate(-50%, -18px) scale(1.35);
-  }
-  35% {
-    transform: translate(-50%, -26px) scale(0.95);
-  }
-  55% {
-    transform: translate(-50%, -34px) scale(1.05);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -80px) scale(0.9);
-  }
+  0%   { opacity: 0; transform: translate(-50%, 0) scale(0.25); }
+  18%  { opacity: 1; transform: translate(-50%, -18px) scale(1.35); }
+  35%  { transform: translate(-50%, -26px) scale(0.95); }
+  55%  { transform: translate(-50%, -34px) scale(1.05); }
+  100% { opacity: 0; transform: translate(-50%, -80px) scale(0.9); }
 }
 
 .float-text.block {
@@ -462,18 +382,9 @@
 }
 
 @keyframes floatUp {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, 0) scale(0.6);
-  }
-  20% {
-    opacity: 1;
-    transform: translate(-50%, -14px) scale(1.1);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -70px) scale(1);
-  }
+  0%   { opacity: 0; transform: translate(-50%, 0) scale(0.6); }
+  20%  { opacity: 1; transform: translate(-50%, -14px) scale(1.1); }
+  100% { opacity: 0; transform: translate(-50%, -70px) scale(1); }
 }
 
 
