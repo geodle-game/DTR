@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="1200" viewBox="0 0 780 1200">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#12151d"/><stop offset=".57" stop-color="#10131a"/><stop offset=".75" stop-color="#0c0f15"/><stop offset="1" stop-color="#07090e"/></linearGradient>
+<linearGradient id="edgeGrad" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#9bd9ef" stop-opacity="1"/><stop offset=".5" stop-color="#9bd9ef" stop-opacity="0.48"/><stop offset="1" stop-color="#9bd9ef" stop-opacity="0.92"/></linearGradient>
+<linearGradient id="bottom" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#07090e" stop-opacity="0"/><stop offset=".25" stop-color="#07090e" stop-opacity=".35"/><stop offset="1" stop-color="#04060a" stop-opacity=".92"/></linearGradient>
+<filter id="glow" x="-.3" y="-.3" width="1.6" height="1.6"><feGaussianBlur stdDeviation="5.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<pattern id="engrave" width="72" height="72" patternUnits="userSpaceOnUse"><path d="M8 25L19 14L30 25 M45 56L56 45L67 56" fill="none" stroke="#9bd9ef" stroke-opacity="0.1" stroke-width="1.5"/><circle cx="36" cy="36" r="1.2" fill="#9bd9ef" fill-opacity="0.08000000000000002"/></pattern>
+</defs>
+<rect width="780" height="1200" rx="34" fill="url(#bg)"/><rect x="28" y="28" width="724" height="1144" rx="24" fill="url(#engrave)"/>
+<rect x="18" y="18" width="744" height="1164" rx="30" fill="none" stroke="#a78a56" stroke-opacity=".20" stroke-width="2"/>
+<rect x="27" y="27" width="726" height="1146" rx="25" fill="none" stroke="url(#edgeGrad)" stroke-width="5.5" filter="url(#glow)"/>
+<rect x="40" y="40" width="700" height="1120" rx="19" fill="none" stroke="#9bd9ef" stroke-opacity="0.135" stroke-width="1.5"/>
+<g fill="none" stroke="#9bd9ef" stroke-opacity="0.34" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M53 160V77Q53 53 77 53H160 M67 132V87Q67 67 87 67H132"/><path d="M620 53H703Q727 53 727 77V160 M648 67H693Q713 67 713 87V132"/><path d="M53 1040V1123Q53 1147 77 1147H160 M67 1068V1113Q67 1133 87 1133H132"/><path d="M620 1147H703Q727 1147 727 1123V1040 M648 1133H693Q713 1133 713 1113V1068"/></g>
+<path d="M82 235l14 14-14 14 M698 235l-14 14 14 14 M82 935l14 14-14 14 M698 935l-14 14 14 14" fill="none" stroke="#9bd9ef" stroke-opacity="0.255" stroke-width="2.5"/><path d="M125 55h18v18 M655 55h-18v18 M125 1145h18v-18 M655 1145h-18v-18" fill="none" stroke="#9bd9ef" stroke-opacity="0.34" stroke-width="3"/><circle cx="390" cy="39" r="5" fill="#9bd9ef" fill-opacity="0.34"/><circle cx="390" cy="1161" r="5" fill="#9bd9ef" fill-opacity="0.34"/><rect x="30" y="900" width="720" height="270" rx="16" fill="url(#bottom)"/>
+</svg>
