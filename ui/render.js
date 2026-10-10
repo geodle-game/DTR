@@ -17,8 +17,8 @@ import {
 } from '../systems/combat.js';
 import {
   animateHits,
-  spawnFloatText,
-  spawnBlockEffect,
+  spawnFloatTextAt,
+  spawnBlockEffectAt,
   spawnFlourish,
   flourishKindForCard,
 } from './animations.js';
@@ -44,11 +44,12 @@ import { cardFramePath } from '../data/cardVisuals.js';
 const LONG_PRESS_MS = 450;
 const DRAG_THRESHOLD = 14;
 
-// Flight timing: the card animation runs 450ms in CSS. We dispatch
-// the actual card effect (which pushes state.lastHits and triggers
-// the impact sprite) at the moment the card visually lands.
+// Card flight: the CSS cardFly animation runs 450ms. Impact fires
+// at CARD_IMPACT_MS, just before the card visually lands, so the
+// attack sprite, damage number, and effect text all appear the
+// moment the card connects.
 const CARD_FLIGHT_MS = 450;
-const CARD_IMPACT_MS = 340;
+const CARD_IMPACT_MS = 420;
 
 let shopRemoveMode = false;
 
@@ -1999,8 +2000,6 @@ function statusRow(statuses) {
 // ------------------------------------------------------------
 // Card flight destination
 // ------------------------------------------------------------
-// Every card flies to either an enemy panel or the player's
-// own panel.
 function flightDestinationForCard(card, explicitTargetId) {
   const def = CARDS[card.defId];
   if (!def) return document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
@@ -2185,6 +2184,19 @@ function doPlayCard(card, sourceEl, targetUid) {
     || def.target === 'all-enemies'
     || def.target === 'random-enemy';
 
+  // Capture panel positions NOW, before any re-render happens.
+  // getBoundingClientRect() returns all zeros for detached nodes,
+  // so we must read these while the panels are still attached.
+  const playerElRef = document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
+  const enemyElRef = isEnemyTargeted
+    ? (targetUid
+        ? document.querySelector(`[data-panel="enemy"][data-uid="${targetUid}"]`)
+        : document.querySelector('[data-panel="enemy"]'))
+    : null;
+
+  const playerRect = playerElRef ? playerElRef.getBoundingClientRect() : null;
+  const enemyRect  = enemyElRef  ? enemyElRef.getBoundingClientRect()  : null;
+
   // Card flight — clone onto body so it survives the render() that
   // fires when the card dispatches.
   if (sourceEl && targetEl) {
@@ -2234,30 +2246,31 @@ function doPlayCard(card, sourceEl, targetUid) {
     state.lastHits = [];
     animateHits(hits);
 
-    // Re-query panels AFTER dispatch. render() wipes #app inside
-    // dispatch, so any pre-dispatch element references are now
-    // detached. Looking up fresh nodes here guarantees the effect
-    // text and block sprite land on the current DOM.
-    const freshPlayerEl = document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
-    const freshEnemyEl = isEnemyTargeted
-      ? (targetUid
-          ? document.querySelector(`[data-panel="enemy"][data-uid="${targetUid}"]`)
-          : document.querySelector('[data-panel="enemy"]'))
-      : null;
-
-    // Float effect text — one per effect, staggered.
+    // Float effect text — using panel coordinates captured before
+    // dispatch. These are screen-fixed positions and remain valid
+    // even after the panels themselves have been re-rendered.
     effectTexts.forEach((t, i) => {
       setTimeout(() => {
-        const el = t.where === 'enemy' ? freshEnemyEl : freshPlayerEl;
-        if (el) spawnFloatText(el, t.text, t.kind);
+        const rect = t.where === 'enemy' ? enemyRect : playerRect;
+        if (!rect) return;
+        spawnFloatTextAt(
+          rect.left + rect.width / 2,
+          rect.top + 20,
+          t.text,
+          t.kind,
+        );
       }, i * 130);
     });
 
-    // Block effect — only on cards that grant block, always on the
-    // player's own panel.
+    // Block effect — at player panel, offset to the right.
     const hasBlock = def.effects.some(e => e.kind === 'block');
-    if (hasBlock && freshPlayerEl) {
-      setTimeout(() => spawnBlockEffect(freshPlayerEl), 60);
+    if (hasBlock && playerRect) {
+      setTimeout(() => {
+        spawnBlockEffectAt(
+          playerRect.right + 90,
+          playerRect.top + playerRect.height / 2,
+        );
+      }, 60);
     }
 
     if (def.endsTurn && !state.over) {
