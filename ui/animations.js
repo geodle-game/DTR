@@ -9,6 +9,9 @@
 //   hybrid (atk+block) → assets/effects/shield.webp  (animated WebP)
 //   spell              → assets/effects/impact.webp  (animated WebP)
 //
+// Card play flourish: static SVGs at assets/icons/flourish-*.svg.
+// Spawn behind the flying card, expand and fade over 500ms.
+//
 // WebP durations below are measured from the actual files. If you
 // re-export them, re-measure and update EFFECT_DURATION.
 // ============================================================
@@ -16,7 +19,7 @@
 import { CARDS } from '../data/cards.js';
 
 // ------------------------------------------------------------
-// Effect asset table
+// Attack sprite table
 // ------------------------------------------------------------
 
 const EFFECT_SRC = {
@@ -49,9 +52,7 @@ const EFFECT_SIZE = {
 
 const WEBP_KINDS = new Set(['pierce', 'hybrid', 'magic']);
 
-// Preload + fully decode every WebP so the first play has no
-// decode delay. img.decode() forces the browser to expand all
-// frames into memory immediately.
+// Preload + fully decode every WebP so the first play has no delay.
 for (const kind of WEBP_KINDS) {
   const img = new Image();
   img.src = EFFECT_SRC[kind];
@@ -59,7 +60,29 @@ for (const kind of WEBP_KINDS) {
 }
 
 // ------------------------------------------------------------
-// Card kind resolution
+// Flourish SVG table (card play icons)
+// ------------------------------------------------------------
+
+const FLOURISH_SRC = {
+  attack: 'assets/icons/flourish-attack.svg',
+  heal:   'assets/icons/flourish-heal.svg',
+  block:  'assets/icons/flourish-block.svg',
+  hybrid: 'assets/icons/flourish-hybrid.svg',
+  spell:  'assets/icons/flourish-spell.svg',
+  power:  'assets/icons/flourish-power.svg',
+  draw:   'assets/icons/flourish-draw.svg',
+  debuff: 'assets/icons/flourish-debuff.svg',
+  energy: 'assets/icons/flourish-energy.svg',
+};
+
+// Preload all flourishes so first-play has no fetch delay.
+for (const src of Object.values(FLOURISH_SRC)) {
+  const img = new Image();
+  img.src = src;
+}
+
+// ------------------------------------------------------------
+// Card kind resolution (attack sprite)
 // ------------------------------------------------------------
 
 function effectKindForCard(defId, animationField) {
@@ -94,6 +117,54 @@ function effectKindForCard(defId, animationField) {
 }
 
 // ------------------------------------------------------------
+// Flourish kind resolution
+// ------------------------------------------------------------
+// Called from render.js when a card starts flying. Returns one of
+// the nine FLOURISH_SRC keys.
+export function flourishKindForCard(defId) {
+  const def = CARDS[defId];
+  if (!def) return 'attack';
+
+  if (def.type === 'spell')  return 'spell';
+  if (def.type === 'power')  return 'power';
+
+  const effects = def.effects || [];
+  const hasDamage = effects.some(e =>
+    e.kind === 'damage' ||
+    e.kind === 'damageRandom' ||
+    e.kind === 'damageEqualToBlock' ||
+    e.kind === 'damagePercentMaxHp' ||
+    e.kind === 'perfectedStrike' ||
+    e.kind === 'rampage' ||
+    e.kind === 'finisher' ||
+    e.kind === 'lastStand' ||
+    e.kind === 'reaper' ||
+    e.kind === 'fiendFire' ||
+    e.kind === 'necromancersPact' ||
+    e.kind === 'graveRobber'
+  );
+  const hasBlock = effects.some(e => e.kind === 'block');
+  const hasHeal  = effects.some(e => e.kind === 'heal' || e.kind === 'feed');
+  const hasDraw  = effects.some(e => e.kind === 'draw');
+  const hasEnergy = effects.some(e =>
+    e.kind === 'gainEnergy' || e.kind === 'gainEnergyNextTurn'
+  );
+  const hasDebuff = effects.some(e =>
+    e.kind === 'applyStatus' &&
+    (e.status === 'weak' || e.status === 'vulnerable')
+  );
+
+  if (hasDamage && hasBlock) return 'hybrid';
+  if (hasDamage) return 'attack';
+  if (hasHeal)   return 'heal';
+  if (hasBlock)  return 'block';
+  if (hasDebuff) return 'debuff';
+  if (hasDraw)   return 'draw';
+  if (hasEnergy) return 'energy';
+  return 'attack';
+}
+
+// ------------------------------------------------------------
 // Panel resolution
 // ------------------------------------------------------------
 
@@ -122,7 +193,7 @@ const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
 const easeOutQuint = x => 1 - Math.pow(1 - x, 5);
 
 // ------------------------------------------------------------
-// Static PNG reveal
+// Static PNG slash (existing slash + heavy)
 // ------------------------------------------------------------
 
 function spawnStaticSlash(src, cx, cy, opts = {}) {
@@ -210,7 +281,7 @@ function spawnWebp(src, cx, cy, opts = {}) {
 }
 
 // ------------------------------------------------------------
-// Public effect API
+// Public attack API
 // ------------------------------------------------------------
 
 export function spawnAttack(cx, cy, opts = {}) {
@@ -229,6 +300,44 @@ export function spawnAttack(cx, cy, opts = {}) {
 export function spawnCrescent(cx, cy, opts = {}) {
   return spawnAttack(cx, cy, opts);
 }
+
+// ------------------------------------------------------------
+// Card play flourish
+// ------------------------------------------------------------
+// Spawns the flourish SVG centered on the source element's
+// current position. Sits behind the flying card (z-index 8500 vs
+// card at 8800+). Fades in and out over 500ms via CSS animation.
+export function spawnFlourish(sourceEl, kind) {
+  if (!sourceEl) return null;
+  const src = FLOURISH_SRC[kind];
+  if (!src) return null;
+
+  const r = sourceEl.getBoundingClientRect();
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+
+  const el = document.createElement('img');
+  el.src = src;
+  el.className = `fx-flourish fx-flourish-${kind}`;
+  el.draggable = false;
+  el.alt = '';
+
+  Object.assign(el.style, {
+    position: 'fixed',
+    left: cx + 'px',
+    top:  cy + 'px',
+    pointerEvents: 'none',
+    zIndex: 8500,
+  });
+
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 520);
+  return el;
+}
+
+// ------------------------------------------------------------
+// Block effect
+// ------------------------------------------------------------
 
 export function spawnBlockEffect(playerEl) {
   if (!playerEl) return;
