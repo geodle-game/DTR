@@ -6,6 +6,12 @@
 //   blockBonus  — added to every 'block' effect on the card
 //   costDelta   — added to the card's cost (min 0)
 //   onPlay      — a list of extra effects that fire once when the card resolves
+//
+// Note on target-relative enchants: Venomous and Weakening use the
+// SAME target list as the base card. On an attack, that means the
+// enemy. On a self-target card like Defend, that means the player.
+// This is intentional — random enchants from event nodes can
+// backfire, and that is part of the risk/reward of the event.
 
 export const ENCHANTS = {
   // ============================================================
@@ -37,12 +43,12 @@ export const ENCHANTS = {
   // ============================================================
   venomous: {
     id: 'venomous', name: 'Venomous', rarity: 'uncommon',
-    text: 'Apply 1 Vulnerable when played.',
+    text: 'Apply 1 Vulnerable to the card\'s target when played.',
     onPlay: [{ kind: 'applyStatus', status: 'vulnerable', amount: 1 }],
   },
   weakening: {
     id: 'weakening', name: 'Weakening', rarity: 'uncommon',
-    text: 'Apply 1 Weak when played.',
+    text: 'Apply 1 Weak to the card\'s target when played.',
     onPlay: [{ kind: 'applyStatus', status: 'weak', amount: 1 }],
   },
   swift: {
