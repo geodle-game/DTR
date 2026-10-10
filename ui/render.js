@@ -39,6 +39,7 @@ import { loadMeta } from '../data/meta.js';
 import { TUTORIALS } from '../data/tutorials.js';
 import { FRAGMENT_LORE } from '../data/fragmentLore.js';
 import { mountTutorialOverlay, ensureTutorialStyles } from './tutorialOverlay.js';
+import { cardFramePath } from '../data/cardVisuals.js';
 
 const LONG_PRESS_MS = 450;
 const DRAG_THRESHOLD = 14;
@@ -2206,6 +2207,9 @@ function cardFace(defId, { disabled = false, small = false, big = false, enchant
   el.classList.add(`rarity-${def.rarity || 'common'}`);
   el.classList.add(`type-${def.type || 'skill'}`);
   if (def.retain) el.classList.add('card-retain');
+
+  // SVG card frame — resolved per card from kind + rarity.
+  el.style.setProperty('--frame-src', `url(${cardFramePath(defId, def.rarity)})`);
 
   const ctx = playerCardContext();
   const text = resolveCardText(def, ctx);
