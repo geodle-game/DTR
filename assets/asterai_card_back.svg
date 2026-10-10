@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="750" height="1050" viewBox="0 0 750 1050">
+  <defs>
+    <linearGradient id="obsidian" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#343038"/><stop offset=".42" stop-color="#101116"/><stop offset="1" stop-color="#242027"/></linearGradient>
+    <radialGradient id="core"><stop stop-color="#7b3b56" stop-opacity=".35"/><stop offset="1" stop-color="#0b0c10" stop-opacity="0"/></radialGradient>
+    <pattern id="stonegrain" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M5 10 L18 7 M40 30 L54 27 M12 51 L23 48" stroke="#c1b49a" stroke-width="1" opacity=".08"/><circle cx="29" cy="14" r="1" fill="#fff" opacity=".08"/></pattern>
+  </defs>
+  <rect width="750" height="1050" rx="34" fill="url(#obsidian)"/><rect width="750" height="1050" rx="34" fill="url(#core)"/><rect width="750" height="1050" rx="34" fill="url(#stonegrain)"/>
+  
+    <rect x="22" y="22" width="706" height="1006" rx="20" fill="none" stroke="#c6a56a" stroke-width="3" opacity=".85"/>
+    <rect x="32" y="32" width="686" height="986" rx="15" fill="none" stroke="#c6a56a" stroke-width="1.5" opacity=".5"/>
+    <g fill="none" stroke="#c6a56a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity=".9">
+      <path d="M32 94 V40 H94 M50 50 L80 80"/>
+      <path d="M718 94 V40 H656 M700 50 L670 80"/>
+      <path d="M32 956 V1010 H94 M50 1000 L80 970"/>
+      <path d="M718 956 V1010 H656 M700 1000 L670 970"/>
+    </g>
+  <g fill="none" stroke="#c6a56a" stroke-width="3" opacity=".85">
+    <path d="M375 170 L530 260 V430 C530 550 455 640 375 690 C295 640 220 550 220 430 V260Z"/>
+    <path d="M375 205 L495 275 V425 C495 520 438 585 375 628 C312 585 255 520 255 425 V275Z" stroke-width="1.5" opacity=".6"/>
+    <circle cx="375" cy="410" r="104" stroke-dasharray="7 11"/>
+    <circle cx="375" cy="410" r="78"/>
+    <path d="M375 300 L399 378 L478 410 L399 435 L375 514 L351 435 L272 410 L351 378Z" stroke-width="4"/>
+    <path d="M375 335 V485 M300 410 H450 M322 357 L428 463 M428 357 L322 463" stroke-width="1.5" opacity=".55"/>
+    <path d="M375 135 V175 M375 645 V705 M185 410 H220 M530 410 H565" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <g fill="#c6a56a">
+    <path d="M375 237 L385 257 L407 267 L385 277 L375 299 L365 277 L343 267 L365 257Z"/>
+    <path d="M290 730 L300 750 L322 760 L300 770 L290 792 L280 770 L258 760 L280 750Z" opacity=".65"/>
+    <path d="M460 730 L470 750 L492 760 L470 770 L460 792 L450 770 L428 760 L450 750Z" opacity=".65"/>
+  </g>
+  <text x="375" y="825" text-anchor="middle" fill="#dfc99b" font-family="Georgia,serif" font-size="38" letter-spacing="8">ASTERAI</text>
+  <text x="375" y="870" text-anchor="middle" fill="#a99a7b" font-family="Georgia,serif" font-size="15" letter-spacing="5">ANCIENT SCRIPT</text>
+  <path d="M245 904 H505" stroke="#c6a56a" opacity=".5"/>
+  <text x="375" y="952" text-anchor="middle" fill="#9a8b72" font-family="Georgia,serif" font-size="13" letter-spacing="4">DRAWN TO RUIN</text>
+</svg>
