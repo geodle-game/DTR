@@ -11,9 +11,6 @@
 //
 // Card play flourish: static SVGs at assets/icons/flourish-*.svg.
 // Spawn behind the flying card, expand and fade over 500ms.
-//
-// WebP durations below are measured from the actual files. If you
-// re-export them, re-measure and update EFFECT_DURATION.
 // ============================================================
 
 import { CARDS } from '../data/cards.js';
@@ -30,10 +27,6 @@ const EFFECT_SRC = {
   magic:  'assets/effects/impact.webp',
 };
 
-// Measured cycle lengths:
-//   slash.webp  → 8 frames, 710ms
-//   shield.webp → 11 frames, 220ms
-//   impact.webp → 11 frames, 440ms
 const EFFECT_DURATION = {
   slash:  588,
   heavy:  588,
@@ -52,7 +45,6 @@ const EFFECT_SIZE = {
 
 const WEBP_KINDS = new Set(['pierce', 'hybrid', 'magic']);
 
-// Preload + fully decode every WebP so the first play has no delay.
 for (const kind of WEBP_KINDS) {
   const img = new Image();
   img.src = EFFECT_SRC[kind];
@@ -60,7 +52,7 @@ for (const kind of WEBP_KINDS) {
 }
 
 // ------------------------------------------------------------
-// Flourish SVG table (card play icons)
+// Flourish SVG table
 // ------------------------------------------------------------
 
 const FLOURISH_SRC = {
@@ -75,7 +67,6 @@ const FLOURISH_SRC = {
   energy: 'assets/icons/flourish-energy.svg',
 };
 
-// Preload all flourishes so first-play has no fetch delay.
 for (const src of Object.values(FLOURISH_SRC)) {
   const img = new Image();
   img.src = src;
@@ -116,11 +107,6 @@ function effectKindForCard(defId, animationField) {
   return 'slash';
 }
 
-// ------------------------------------------------------------
-// Flourish kind resolution
-// ------------------------------------------------------------
-// Called from render.js when a card starts flying. Returns one of
-// the nine FLOURISH_SRC keys.
 export function flourishKindForCard(defId) {
   const def = CARDS[defId];
   if (!def) return 'attack';
@@ -193,7 +179,7 @@ const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
 const easeOutQuint = x => 1 - Math.pow(1 - x, 5);
 
 // ------------------------------------------------------------
-// Static PNG slash (existing slash + heavy)
+// Static PNG slash
 // ------------------------------------------------------------
 
 function spawnStaticSlash(src, cx, cy, opts = {}) {
@@ -304,9 +290,7 @@ export function spawnCrescent(cx, cy, opts = {}) {
 // ------------------------------------------------------------
 // Card play flourish
 // ------------------------------------------------------------
-// Spawns the flourish SVG centered on the source element's
-// current position. Sits behind the flying card (z-index 8500 vs
-// card at 8800+). Fades in and out over 500ms via CSS animation.
+
 export function spawnFlourish(sourceEl, kind) {
   if (!sourceEl) return null;
   const src = FLOURISH_SRC[kind];
@@ -336,29 +320,53 @@ export function spawnFlourish(sourceEl, kind) {
 }
 
 // ------------------------------------------------------------
-// Block effect
+// Position-based spawners
 // ------------------------------------------------------------
+// These take raw screen coordinates instead of an element.
+// Use them when the element reference might be detached by the
+// time the effect fires (e.g. after a re-render).
 
-export function spawnBlockEffect(playerEl) {
-  if (!playerEl) return;
-  const r = playerEl.getBoundingClientRect();
-  const cx = r.right + 90;
-  const cy = r.top + r.height / 2;
+export function spawnFloatTextAt(x, y, text, kind = 'damage') {
+  const node = document.createElement('div');
+  node.className = `float-text ${kind}`;
+  node.textContent = text;
+  node.style.left = x + 'px';
+  node.style.top  = y + 'px';
+  document.body.appendChild(node);
+  setTimeout(() => node.remove(), 950);
+}
 
+export function spawnBlockEffectAt(x, y) {
   const img = document.createElement('img');
   img.src = 'assets/block.png';
   img.className = 'block-effect';
-  img.style.left = cx + 'px';
-  img.style.top  = cy + 'px';
+  img.style.left = x + 'px';
+  img.style.top  = y + 'px';
   document.body.appendChild(img);
   setTimeout(() => img.remove(), 1500);
 
   const ring = document.createElement('div');
   ring.className = 'block-ring';
-  ring.style.left = cx + 'px';
-  ring.style.top  = cy + 'px';
+  ring.style.left = x + 'px';
+  ring.style.top  = y + 'px';
   document.body.appendChild(ring);
   setTimeout(() => ring.remove(), 1500);
+}
+
+// ------------------------------------------------------------
+// Element-based spawners (kept for compatibility)
+// ------------------------------------------------------------
+
+export function spawnFloatText(el, text, kind = 'damage') {
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  spawnFloatTextAt(r.left + r.width / 2, r.top + 20, text, kind);
+}
+
+export function spawnBlockEffect(playerEl) {
+  if (!playerEl) return;
+  const r = playerEl.getBoundingClientRect();
+  spawnBlockEffectAt(r.right + 90, r.top + r.height / 2);
 }
 
 // ------------------------------------------------------------
@@ -463,7 +471,7 @@ function hitStop(ms = 70) {
 }
 
 // ------------------------------------------------------------
-// Floating text
+// Damage number
 // ------------------------------------------------------------
 
 export function spawnDamageNumber(el, amount, { kind = 'slash' } = {}) {
@@ -480,18 +488,6 @@ export function spawnDamageNumber(el, amount, { kind = 'slash' } = {}) {
   node.style.fontSize = `${Math.round(38 * scale)}px`;
   document.body.appendChild(node);
   setTimeout(() => node.remove(), 1000);
-}
-
-export function spawnFloatText(el, text, kind = 'damage') {
-  if (!el) return;
-  const r = el.getBoundingClientRect();
-  const node = document.createElement('div');
-  node.className = `float-text ${kind}`;
-  node.textContent = text;
-  node.style.left = (r.left + r.width / 2) + 'px';
-  node.style.top  = (r.top + 20) + 'px';
-  document.body.appendChild(node);
-  setTimeout(() => node.remove(), 950);
 }
 
 // ------------------------------------------------------------
