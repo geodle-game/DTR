@@ -387,7 +387,71 @@
   100% { opacity: 0; transform: translate(-50%, -70px) scale(1); }
 }
 
+/* ============================================================
+   EFFECT TEXT — status / resource / draw indicators
+   ============================================================ */
+/* Fired from doPlayCard() for card effects that aren't damage
+   or block. Each one floats up from the relevant panel. */
 
+.float-text.energy {
+  color: #ffd166;
+  font-size: 20px;
+  font-weight: 800;
+  animation: floatUp 900ms ease-out forwards;
+  text-shadow:
+    0 0 16px rgba(255,209,102,.85),
+    0 2px 4px rgba(0,0,0,.95);
+}
+
+.float-text.draw {
+  color: #a7b0be;
+  font-size: 18px;
+  font-weight: 700;
+  animation: floatUp 900ms ease-out forwards;
+  text-shadow:
+    0 0 12px rgba(167,176,190,.6),
+    0 2px 4px rgba(0,0,0,.95);
+}
+
+.float-text.strength {
+  color: #ff9b6b;
+  font-size: 20px;
+  font-weight: 800;
+  animation: floatUp 900ms ease-out forwards;
+  text-shadow:
+    0 0 16px rgba(255,155,107,.85),
+    0 2px 4px rgba(0,0,0,.95);
+}
+
+.float-text.focus {
+  color: #a78bfa;
+  font-size: 20px;
+  font-weight: 800;
+  animation: floatUp 900ms ease-out forwards;
+  text-shadow:
+    0 0 16px rgba(167,139,250,.85),
+    0 2px 4px rgba(0,0,0,.95);
+}
+
+.float-text.weak {
+  color: #ff6b9b;
+  font-size: 18px;
+  font-weight: 700;
+  animation: floatUp 900ms ease-out forwards;
+  text-shadow:
+    0 0 14px rgba(255,107,155,.85),
+    0 2px 4px rgba(0,0,0,.95);
+}
+
+.float-text.vulnerable {
+  color: #ff9b6b;
+  font-size: 18px;
+  font-weight: 700;
+  animation: floatUp 900ms ease-out forwards;
+  text-shadow:
+    0 0 14px rgba(255,155,107,.85),
+    0 2px 4px rgba(0,0,0,.95);
+}
 /* ============================================================
    8. DEPRECATED FALLBACKS
    ============================================================ */
