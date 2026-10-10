@@ -2000,10 +2000,7 @@ function statusRow(statuses) {
 // Card flight destination
 // ------------------------------------------------------------
 // Every card flies to either an enemy panel or the player's
-// own panel. No pile destinations.
-//
-// Enemy-targeting cards (attack, all-enemies, random-enemy) go
-// to the chosen enemy. Everything else goes to the player.
+// own panel.
 function flightDestinationForCard(card, explicitTargetId) {
   const def = CARDS[card.defId];
   if (!def) return document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
@@ -2027,12 +2024,6 @@ function flightDestinationForCard(card, explicitTargetId) {
 // ------------------------------------------------------------
 // Effect text for a played card
 // ------------------------------------------------------------
-// Returns an array of { text, kind, where } entries describing
-// the secondary effects of a card — everything that is not
-// damage or block, which are already shown by the hit pipeline.
-//
-//   kind   → CSS class suffix for color
-//   where  → 'player' | 'enemy' — which panel to float over
 function effectTextsForCard(def) {
   const out = [];
   for (const eff of def.effects || []) {
@@ -2189,20 +2180,10 @@ function doPlayCard(card, sourceEl, targetUid) {
   const def = CARDS[card.defId];
   const targetEl = flightDestinationForCard(card, targetUid);
 
-  // Pre-compute effect text entries while the card data is in hand.
   const effectTexts = effectTextsForCard(def);
-
-  // Remember where to float the effect texts. Target panel if the
-  // card hits an enemy, else the player's own panel.
   const isEnemyTargeted = def.target === 'enemy'
     || def.target === 'all-enemies'
     || def.target === 'random-enemy';
-  const enemyEl = isEnemyTargeted
-    ? (targetUid
-        ? document.querySelector(`[data-panel="enemy"][data-uid="${targetUid}"]`)
-        : document.querySelector('[data-panel="enemy"]'))
-    : null;
-  const playerEl = document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
 
   // Card flight — clone onto body so it survives the render() that
   // fires when the card dispatches.
@@ -2253,20 +2234,30 @@ function doPlayCard(card, sourceEl, targetUid) {
     state.lastHits = [];
     animateHits(hits);
 
+    // Re-query panels AFTER dispatch. render() wipes #app inside
+    // dispatch, so any pre-dispatch element references are now
+    // detached. Looking up fresh nodes here guarantees the effect
+    // text and block sprite land on the current DOM.
+    const freshPlayerEl = document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
+    const freshEnemyEl = isEnemyTargeted
+      ? (targetUid
+          ? document.querySelector(`[data-panel="enemy"][data-uid="${targetUid}"]`)
+          : document.querySelector('[data-panel="enemy"]'))
+      : null;
+
     // Float effect text — one per effect, staggered.
     effectTexts.forEach((t, i) => {
       setTimeout(() => {
-        const el = t.where === 'enemy' ? enemyEl : playerEl;
+        const el = t.where === 'enemy' ? freshEnemyEl : freshPlayerEl;
         if (el) spawnFloatText(el, t.text, t.kind);
       }, i * 130);
     });
 
-    // Existing block/heal indicators still fire from the render
-    // path, but heal is now covered by effectTexts, so we only
-    // keep block here.
+    // Block effect — only on cards that grant block, always on the
+    // player's own panel.
     const hasBlock = def.effects.some(e => e.kind === 'block');
-    if (hasBlock && playerEl) {
-      setTimeout(() => spawnBlockEffect(playerEl), 60);
+    if (hasBlock && freshPlayerEl) {
+      setTimeout(() => spawnBlockEffect(freshPlayerEl), 60);
     }
 
     if (def.endsTurn && !state.over) {
