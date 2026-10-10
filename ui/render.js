@@ -19,6 +19,8 @@ import {
   animateHits,
   spawnFloatText,
   spawnBlockEffect,
+  spawnFlourish,
+  flourishKindForCard,
 } from './animations.js';
 import {
   autoSave, hasSave, loadSave, restoreRun, clearSave,
@@ -1801,9 +1803,10 @@ function renderCombat(app) {
   if (state.over) app.appendChild(endBanner());
 }
 
-function pileEl(label, count, onClick) {
+function pileEl(label, count, onClick, pileName) {
   const el = document.createElement('button');
   el.className = 'pile pile-bottom';
+  if (pileName) el.dataset.pile = pileName;
   el.innerHTML = `<div class="pile-label">${label}</div><div class="pile-count">${count}</div>`;
   if (onClick) {
     el.classList.add('pile-clickable');
@@ -1986,6 +1989,47 @@ function statusRow(statuses) {
     .join('')}</div>`;
 }
 
+// ------------------------------------------------------------
+// Card flight destination
+// ------------------------------------------------------------
+// Picks the element the flying card should animate toward.
+// Priority: enemy (for enemy-targeting cards) → player (for
+// self-targeting cards) → pile (discard, draw, or exhaust).
+function flightDestinationForCard(card, explicitTargetId) {
+  const def = CARDS[card.defId];
+  if (!def) return null;
+
+  // 1. Enemy-targeting → fly at the enemy panel.
+  if (def.target === 'enemy' || def.target === 'all-enemies' || def.target === 'random-enemy') {
+    const enemies = (state.enemies || []).filter(e => e.hp > 0);
+    if (enemies.length) {
+      const target = explicitTargetId
+        ? enemies.find(e => e.uid === explicitTargetId)
+        : enemies.find(e => e.uid === state.selectedEnemyId) || enemies[0];
+      if (target) {
+        const el = document.querySelector(`[data-panel="enemy"][data-uid="${target.uid}"]`);
+        if (el) return el;
+      }
+    }
+  }
+
+  // 2. Self-targeting → fly at the player panel.
+  if (def.target === 'self') {
+    const el = document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
+    if (el) return el;
+  }
+
+  // 3. No target → fly at the destination pile.
+  const pileName = def.destination === 'exhaust' ? 'exhaust'
+                 : def.destination === 'draw'    ? 'draw'
+                 : 'discard';
+  const pileEl = document.querySelector(`[data-pile="${pileName}"]`);
+  if (pileEl) return pileEl;
+
+  // Fallback — player panel.
+  return document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
+}
+
 function tryPlayCard(card, sourceEl, player) {
   const def = CARDS[card.defId];
   if (!canPlay(card, player)) return;
@@ -2092,11 +2136,13 @@ function cardInHand(card, player) {
 
 function doPlayCard(card, sourceEl, targetUid) {
   const def = CARDS[card.defId];
-  const targetEl = targetUid
-    ? document.querySelector(`[data-panel="enemy"][data-uid="${targetUid}"]`)
-    : document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
+  const targetEl = flightDestinationForCard(card, targetUid);
 
   if (sourceEl) {
+    // Flourish first — behind the flying card, at its origin.
+    spawnFlourish(sourceEl, flourishKindForCard(card.defId));
+
+    // Then the flight itself.
     const sRect = sourceEl.getBoundingClientRect();
     const tRect = targetEl ? targetEl.getBoundingClientRect() : sRect;
     const dx = (tRect.left + tRect.width / 2) - (sRect.left + sRect.width / 2);
@@ -2192,7 +2238,7 @@ function bottomBar(handPlayer) {
   bar.appendChild(pileEl('Draw', handPlayer?.drawPile.length ?? 0, () => {
     setMetaFocus(meIdx);
     toggleDrawOverlay(); render();
-  }));
+  }, 'draw'));
 
   const btn = document.createElement('button');
   btn.className = 'btn';
@@ -2222,13 +2268,13 @@ function bottomBar(handPlayer) {
   bar.appendChild(pileEl('Discard', handPlayer?.discardPile.length ?? 0, () => {
     setMetaFocus(meIdx);
     toggleDiscardOverlay(); render();
-  }));
+  }, 'discard'));
 
   if ((handPlayer?.exhaustPile.length ?? 0) > 0) {
     bar.appendChild(pileEl('Exhaust', handPlayer.exhaustPile.length, () => {
       setMetaFocus(meIdx);
       toggleExhaustOverlay(); render();
-    }));
+    }, 'exhaust'));
   }
 
   return bar;
