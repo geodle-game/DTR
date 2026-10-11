@@ -33,6 +33,7 @@ import {
   clearScriptedBattle,
   SCRIPTED_BATTLE_ID,
 } from './tutorial.js';
+import { createResearcherPlayer } from '../data/researcher.js';
 
 // Register tutorial-only enemy cards into the shared ENEMY_CARDS
 // object so intent rendering (ui/render.js) can find them. ES
@@ -104,6 +105,7 @@ export const state = {
   tutorial: null,
   fragmentLore: null,
   scriptBattle: null,
+  turnId: 0,
 };
 
 export function activePlayer() {
@@ -594,6 +596,7 @@ export function newRun(seed = Date.now()) {
   state.tutorial = null;
   state.fragmentLore = null;
   state.scriptBattle = null;
+  state.turnId = 0;
 
   updateMeta({ totalRuns: (loadMeta().totalRuns || 0) + 1 });
 
@@ -1024,6 +1027,7 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
   state.activePlayerIndex = 0;
   state.combatActivePlayers = state.players.map((_, i) => i);
   state.endedTurn = state.players.map(() => false);
+  state.turnId = (state.turnId || 0) + 1;
   setPhase(null);
 
   state.run.researcherFight =
@@ -1410,6 +1414,12 @@ export function resetBossScript(enemy) {
 export function startPlayerTurnFor(playerIndex, isFirstTurn = false) {
   checkIntegrity(state);
 
+  // Bump the turn counter whenever the first player of a new turn
+  // begins. The ally AI watches this to time its first play.
+  if (playerIndex === state.combatActivePlayers[0]) {
+    state.turnId = (state.turnId || 0) + 1;
+  }
+
   const p = state.players[playerIndex];
   if (!p) return;
   if (p.hp <= 0) { p.endedTurn = true; return; }
@@ -1733,6 +1743,14 @@ export function debugFightPredecessor() { newCombat('predecessor', 'boss'); }
 export function debugFightForgeWarden() { newCombat('forge-warden', 'boss'); }
 export function debugFightTutorial() {
   newCombat(TUTORIAL_ENCOUNTER_ID, 'monster');
+}
+
+export function debugSpawnResearcherAlly() {
+  if (!state.players.length) return;
+  if (state.players.some(p => p.isAlly)) return;
+  const ally = createResearcherPlayer();
+  state.players.push(ally);
+  pushLog('The Researcher joins as an ally.');
 }
 
 // ---- Combat turn bookkeeping ----
