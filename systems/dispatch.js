@@ -37,6 +37,7 @@ function isMyAction(action) {
   const slot = localSlot();
   if (slot == null) return true;
   if (action.actorId == null) return true;
+  if (action.isAlly) return false;
   return action.actorId === slot;
 }
 
@@ -48,11 +49,22 @@ export function dispatch(action) {
   const mode = getMode();
 
   const tagged = { ...action };
-  if (tagged.actorId == null && localSlot() != null) {
+  if (tagged.actorId == null && !tagged.isAlly && localSlot() != null) {
     tagged.actorId = localSlot();
   }
 
   console.log('[dispatch]', mode, 'slot=', localSlot(), 'action=', tagged);
+
+  // Ally actions are driven by systems/ally-ai.js. They run locally
+  // on the host (or single-player). Guests receive the resulting
+  // snapshot from the host.
+  if (tagged.isAlly) {
+    if (mode === 'guest') return;
+    applyAction(tagged, false);
+    if (mode === 'host') sendSnapshot(snapshotState());
+    render();
+    return;
+  }
 
   if (mode === 'guest') {
     if (!isMyAction(tagged)) {
@@ -81,7 +93,7 @@ onAction(action => {
   console.log('[onAction] host received from guest:', action);
 
   const slot = localSlot();
-  if (slot != null && action.actorId != null && action.actorId === slot) {
+  if (slot != null && action.actorId != null && !action.isAlly && action.actorId === slot) {
     console.warn('[onAction] host rejected echo of own action');
     return;
   }
@@ -129,7 +141,7 @@ function applyAction(action, fromNetwork = false) {
   const mode = getMode();
   const slot = localSlot();
 
-  if (!fromNetwork && mode !== 'guest' && slot != null && action.actorId != null) {
+  if (!fromNetwork && !action.isAlly && mode !== 'guest' && slot != null && action.actorId != null) {
     if (action.actorId !== slot) {
       console.warn('[applyAction] local slot mismatch, dropping', action);
       return;
@@ -194,6 +206,18 @@ function applyAction(action, fromNetwork = false) {
       console.log('[END_TURN] P' + actorIdx + ' ending');
       const { allReady } = beginPlayerEndTurn(actorIdx);
       console.log('[END_TURN] allReady=', allReady);
+      if (state.over) return true;
+      if (allReady) {
+        beginEnemyTurn();
+        resolveEnemyTurn();
+      }
+      return true;
+    }
+
+    case 'ALLY_END_TURN': {
+      if (state.turn !== 'player' || state.over) return false;
+      const actorIdx = action.actorId ?? 1;
+      const { allReady } = beginPlayerEndTurn(actorIdx);
       if (state.over) return true;
       if (allReady) {
         beginEnemyTurn();
