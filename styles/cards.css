@@ -23,6 +23,7 @@
   background-repeat: no-repeat;
   background-position: center;
   border: none;
+  border-radius: 10px;
   padding: 16px 14px;
   cursor: pointer;
   display: flex;
@@ -70,7 +71,9 @@
     translateY(calc(var(--card-offy, 0px) - 24px))
     rotate(var(--card-rot, 0deg))
     scale(1.07);
-  box-shadow: 0 18px 36px rgba(143,107,255,.45);
+  box-shadow:
+    0 0 0 2px rgba(143,107,255,.55),
+    0 18px 36px rgba(143,107,255,.45);
   z-index: 40;
 }
 
@@ -88,7 +91,7 @@
 }
 
 /* ============================================================
-   TYPE COLORS (only used by card name now — frame handles the rest)
+   TYPE COLORS
    ============================================================ */
 
 .card.type-attack { --type-color: #ff6b6b; }
@@ -107,7 +110,7 @@
     rotate(var(--card-rot, 0deg))
     scale(1.07);
   box-shadow:
-    0 0 0 2px rgba(255,143,107,.4),
+    0 0 0 2px rgba(255,143,107,.5),
     0 16px 30px rgba(255,143,107,.35);
 }
 
@@ -122,18 +125,12 @@
 
 .card.card-small:hover { transform: translateY(-4px) scale(1.03); }
 
-/* Retain cards — green inner glow, on top of the SVG frame. */
-.card.card-retain::before {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-radius: 10px;
-  border: 2px solid rgba(107,255,158,.55);
-  pointer-events: none;
+/* Retain — green ring around the card edge. */
+.card.card-retain {
   box-shadow:
-    0 0 12px rgba(107,255,158,.35),
-    0 0 20px rgba(107,255,158,.2) inset;
-  z-index: 3;
+    0 0 0 2px rgba(107,255,158,.55),
+    0 0 18px rgba(107,255,158,.35),
+    0 4px 12px rgba(0,0,0,.35);
 }
 
 .card.card-retain .cname { color: #6bff9e; }
@@ -161,27 +158,21 @@
   z-index: 3;
 }
 
-/* Enchant target — purple hover glow. */
+/* Enchant target — purple ring + glow around the card edge. */
 .card.enchant-target {
   cursor: pointer;
-}
-
-.card.enchant-target::before {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-radius: 10px;
-  border: 2px solid rgba(201,163,255,.55);
-  pointer-events: none;
   box-shadow:
-    0 0 20px rgba(143,107,255,.5),
-    0 0 20px rgba(143,107,255,.3) inset;
-  z-index: 3;
+    0 0 0 2px rgba(201,163,255,.65),
+    0 0 24px rgba(143,107,255,.5),
+    0 4px 12px rgba(0,0,0,.35);
 }
 
 .card.enchant-target:hover {
   transform: translateY(-6px) scale(1.04);
-  box-shadow: 0 14px 32px rgba(143,107,255,.5);
+  box-shadow:
+    0 0 0 3px rgba(201,163,255,.85),
+    0 0 32px rgba(143,107,255,.65),
+    0 14px 32px rgba(143,107,255,.5);
 }
 
 .card.playing {
@@ -223,6 +214,7 @@
   box-shadow: 0 2px 6px rgba(255,184,0,.4);
   flex-shrink: 0;
   z-index: 2;
+  align-self: flex-start;
 }
 
 .cname {
@@ -232,6 +224,8 @@
   color: var(--type-color, #e8eaee);
   line-height: 1.2;
   z-index: 2;
+  text-align: center;
+  margin-top: 2px;
 }
 
 .ctext {
@@ -239,6 +233,7 @@
   font-size: 13px;
   line-height: 1.4;
   z-index: 2;
+  text-align: center;
 }
 
 .ctext .live {
@@ -260,6 +255,8 @@
   gap: 2px;
   border-left: 3px solid #8b93a1;
   z-index: 2;
+  text-align: center;
+  align-items: center;
 }
 
 .card-enchant.rarity-common   { border-left-color: #8a93a6; }
@@ -272,6 +269,7 @@
   letter-spacing: .04em;
   text-transform: uppercase;
   color: #c9a3ff;
+  text-align: center;
 }
 
 .card-enchant.rarity-common   .card-enchant-name { color: #a7b0be; }
@@ -282,6 +280,7 @@
   font-size: 10px;
   line-height: 1.25;
   color: #b8bdc7;
+  text-align: center;
 }
 
 .card.card-big .card-enchant { padding: 8px 10px; }
@@ -407,9 +406,6 @@
 /* ============================================================
    CARD BACK
    ============================================================ */
-/* Utility class — apply to a card that should show face-down.
-   Unused right now, ready for draw-pile previews or hidden
-   information states. */
 
 .card.card-back {
   background-image: url('../assets/cards/asterai_card_back.svg');
