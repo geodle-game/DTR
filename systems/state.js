@@ -108,6 +108,14 @@ export const state = {
   turnId: 0,
 };
 
+// Meta screens (rewards, shops, events, rests, treasures, act rewards)
+// only care about real players. The ally travels with the party but
+// does not get a slot to fill — otherwise every completion check
+// waits on him forever.
+export function realPlayers() {
+  return state.players.filter(p => !p.isAlly);
+}
+
 export function activePlayer() {
   return state.players[state.metaFocusIndex] || state.players[0] || null;
 }
@@ -787,7 +795,7 @@ export function startNode(nodeId) {
     state.screen = 'event';
   } else if (node.type === 'shop') {
     state.shop = {
-      perPlayer: state.players.map((p) => ({
+      perPlayer: realPlayers().map((p) => ({
         items: rollShop(state.rng, 5, p.classId),
         healPrice: 60,
         removePrice: 30,
@@ -803,7 +811,7 @@ export function startNode(nodeId) {
     setPhase(null);
     state.screen = 'rest';
   } else if (node.type === 'treasure') {
-    const perPlayer = state.players.map((p) => {
+    const perPlayer = realPlayers().map((p) => {
       const relicChoices = rollRelicChoices(state.rng, p.relics, 3);
       const gold = 30 + Math.floor(state.rng() * 20);
       return { relicChoices, gold, taken: false };
@@ -1131,7 +1139,8 @@ export function endCombat(win) {
       return;
     }
 
-    const coins = state.players.map(() => {
+    const rp = realPlayers();
+    const coins = rp.map(() => {
       let c = rollCoins(state.rng, kind);
       forEachRelic('onGoldGain', (r) => {
         if (r.doubleChance && state.rng() < r.doubleChance) {
@@ -1142,7 +1151,7 @@ export function endCombat(win) {
       return c;
     });
     state.reward = {
-      perPlayer: state.players.map((p, i) => ({
+      perPlayer: rp.map((p, i) => ({
         coins: coins[i],
         cardChoices: rollCardChoices(state.rng, 3, p.classId),
         cardTaken: false,
@@ -1188,7 +1197,7 @@ export function nextAct() {
   state.run.floor = -1;
 
   state.actReward = {
-    perPlayer: state.players.map((p) => ({
+    perPlayer: realPlayers().map((p) => ({
       coins: 50 + Math.floor(state.rng() * 30),
       cardChoices: rollCardChoices(state.rng, 3, p.classId),
       relicChoices: rollRelicChoices(state.rng, p.relics, 3),
@@ -1507,7 +1516,7 @@ export function pickEventChoice(index, actorId) {
   pushLog(`Event (${p.name}): ${ev.name} → ${choice.label}`);
   state.event.done[focus] = true;
 
-  if (state.players.every((_, i) => state.event.done[i])) {
+  if (realPlayers().every((_, i) => state.event.done[i])) {
     if (state.event.nodeId) markCompleted(state.event.nodeId);
     setPhase(null);
     backToMap();
@@ -1673,7 +1682,7 @@ export function restHeal(actorId) {
 
 function finishRest(focus) {
   if (!state.rest) return;
-  if (state.players.every((_, i) => state.rest.done[i])) {
+  if (realPlayers().every((_, i) => state.rest.done[i])) {
     if (state.rest.nodeId) markCompleted(state.rest.nodeId);
     state.rest = null;
     backToMap();
