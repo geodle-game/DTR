@@ -1823,9 +1823,34 @@ function pileEl(label, count, onClick, pileName) {
   return el;
 }
 
+// ------------------------------------------------------------
+// Ally intent — shows what the researcher is about to play.
+// ------------------------------------------------------------
+function buildAllyIntentHtml(p) {
+  if (!p.intentCardUid) return '';
+  const card = p.hand.find(c => c.uid === p.intentCardUid);
+  if (!card) return '';
+  const def = CARDS[card.defId];
+  if (!def) return '';
+
+  const ctx = {
+    attacker: p,
+    target: state.enemies.find(e => e.hp > 0) || null,
+  };
+  const text = resolveCardText(def, ctx);
+
+  return `
+    <div class="ally-intent">
+      <div class="ally-intent-label">Next</div>
+      <div class="ally-intent-name">${def.name}</div>
+      <div class="ally-intent-text">${text}</div>
+    </div>
+  `;
+}
+
 function playerPanel(p) {
   const el = document.createElement('div');
-  el.className = 'panel player';
+  el.className = 'panel player' + (p.isAlly ? ' panel-ally' : '');
   el.dataset.panel = `player${p.id}`;
   el.dataset.playerId = String(p.id);
 
@@ -1845,6 +1870,8 @@ function playerPanel(p) {
     ? `<div class="player-ready">Ready</div>`
     : '';
 
+  const allyIntentHtml = p.isAlly ? buildAllyIntentHtml(p) : '';
+
   el.innerHTML = `
     <div class="panel-name-row">
       <span class="panel-portrait-slot"></span>
@@ -1859,6 +1886,7 @@ function playerPanel(p) {
     ${statusRow(p.statuses)}
     ${downTag}
     ${endedTag}
+    ${allyIntentHtml}
   `;
 
   const cls = p.classId ? getClass(p.classId) : null;
@@ -2185,8 +2213,6 @@ function doPlayCard(card, sourceEl, targetUid) {
     || def.target === 'random-enemy';
 
   // Capture panel positions NOW, before any re-render happens.
-  // getBoundingClientRect() returns all zeros for detached nodes,
-  // so we must read these while the panels are still attached.
   const playerElRef = document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
   const enemyElRef = isEnemyTargeted
     ? (targetUid
@@ -2197,8 +2223,6 @@ function doPlayCard(card, sourceEl, targetUid) {
   const playerRect = playerElRef ? playerElRef.getBoundingClientRect() : null;
   const enemyRect  = enemyElRef  ? enemyElRef.getBoundingClientRect()  : null;
 
-  // Card flight — clone onto body so it survives the render() that
-  // fires when the card dispatches.
   if (sourceEl && targetEl) {
     spawnFlourish(sourceEl, flourishKindForCard(card.defId));
 
@@ -2234,8 +2258,6 @@ function doPlayCard(card, sourceEl, targetUid) {
     sourceEl.style.visibility = 'hidden';
   }
 
-  // Card impact — dispatch at CARD_IMPACT_MS so the sprite fires
-  // just as the card visually lands.
   setTimeout(() => {
     state.lastHits = [];
     dispatch({ type: 'PLAY_CARD', cardUid: card.uid, targetUid });
@@ -2246,9 +2268,6 @@ function doPlayCard(card, sourceEl, targetUid) {
     state.lastHits = [];
     animateHits(hits);
 
-    // Float effect text — using panel coordinates captured before
-    // dispatch. These are screen-fixed positions and remain valid
-    // even after the panels themselves have been re-rendered.
     effectTexts.forEach((t, i) => {
       setTimeout(() => {
         const rect = t.where === 'enemy' ? enemyRect : playerRect;
@@ -2262,7 +2281,6 @@ function doPlayCard(card, sourceEl, targetUid) {
       }, i * 130);
     });
 
-    // Block effect — at player panel, offset to the right.
     const hasBlock = def.effects.some(e => e.kind === 'block');
     if (hasBlock && playerRect) {
       setTimeout(() => {
