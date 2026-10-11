@@ -10,9 +10,8 @@
 // the hypothetical result and pick the highest. No lookahead —
 // the scoring function is heuristic, not a full simulation.
 //
-// All actions go through dispatch({ isAlly: true }) so the host
-// can broadcast them to guests and the local applyAction path
-// handles turn-end logic uniformly.
+// Every tick also refreshes ally.intentCardUid so the panel can
+// display what he intends to play next.
 // ============================================================
 
 import { state } from './state.js';
@@ -27,10 +26,6 @@ let tickHandle = null;
 let lastPlayAt = 0;
 let lastTurnId = -1;
 
-// ------------------------------------------------------------
-// Public API
-// ------------------------------------------------------------
-
 export function startAllyAI() {
   if (tickHandle) return;
   tickHandle = setInterval(tick, TICK_MS);
@@ -42,8 +37,6 @@ export function stopAllyAI() {
   tickHandle = null;
 }
 
-// Called by state.js on every new player turn so the AI waits a
-// beat before acting.
 export function resetAllyTimer() {
   lastPlayAt = performance.now();
   lastTurnId = state.turnId ?? -1;
@@ -63,18 +56,23 @@ function tick() {
   if (!ally) return;
 
   if (ally.hp <= 0) {
+    ally.intentCardUid = null;
     if (!ally.endedTurn) {
       dispatch({ type: 'ALLY_END_TURN', actorId: ally.id, isAlly: true });
     }
     return;
   }
-  if (ally.endedTurn) return;
+  if (ally.endedTurn) {
+    ally.intentCardUid = null;
+    return;
+  }
 
   // Turn change detection: reset the play timer when state.turnId
   // increments so the ally doesn't fire instantly on turn start.
   if (state.turnId !== lastTurnId) {
     lastTurnId = state.turnId;
     lastPlayAt = performance.now();
+    refreshIntent(ally);
     return;
   }
 
@@ -83,11 +81,13 @@ function tick() {
 
   const card = chooseBestCard(ally);
   if (!card) {
+    ally.intentCardUid = null;
     dispatch({ type: 'ALLY_END_TURN', actorId: ally.id, isAlly: true });
     return;
   }
 
-  lastPlayAt = now;
+  // Show the card he's about to play. Cleared right after.
+  ally.intentCardUid = card.uid;
   dispatch({
     type: 'PLAY_CARD',
     cardUid: card.uid,
@@ -95,6 +95,13 @@ function tick() {
     actorId: ally.id,
     isAlly: true,
   });
+  ally.intentCardUid = null;
+  lastPlayAt = now;
+}
+
+function refreshIntent(ally) {
+  const card = chooseBestCard(ally);
+  ally.intentCardUid = card ? card.uid : null;
 }
 
 // ------------------------------------------------------------
@@ -137,8 +144,6 @@ function scoreCard(card, ally) {
     score += scoreEffect(eff, ally, targets);
   }
 
-  // Small penalty for spending energy so the AI prefers efficient
-  // plays when scores are close.
   score -= cost * 0.05;
 
   return score;
@@ -151,9 +156,6 @@ function resolveScoringTargets(targetKind, source, livingEnemies) {
     if (!livingEnemies.length) return [];
     return [livingEnemies[0]];
   }
-  // Single-enemy target. For scoring purposes, assume the highest-HP
-  // enemy is the target. Actual play leaves targeting to combat.js
-  // which uses selectedEnemyId.
   if (!livingEnemies.length) return [];
   return [livingEnemies.reduce((a, b) => (a.hp > b.hp ? a : b))];
 }
