@@ -1,7 +1,11 @@
 import { state } from './systems/state.js';
 import { render } from './ui/render.js';
+import { startAllyAI } from './systems/ally-ai.js';
 
 state.screen = 'mainMenu';
+
+startAllyAI();
+
 render();
 
 if (typeof window !== 'undefined') {
