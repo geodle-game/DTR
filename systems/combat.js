@@ -154,6 +154,7 @@ export function playCard(card, player = activePlayer(), explicitTargetId = null)
     }
   }
 
+  // Enchant onPlay effects fire once per card play.
   if (enchant?.onPlay) {
     for (const eff of enchant.onPlay) applyEffect(eff, targets, card, player);
   }
@@ -448,6 +449,57 @@ function applyEffect(eff, targets, card, source) {
       pushLog(`  ${source.name || 'You'} healed ${amount}.`);
       break;
     }
+
+    // ---- Researcher-only effects ----
+
+    case 'healAll': {
+      // Heals every living player, ignoring the target list. Used by
+      // Reconstruction so the ally can top up the whole party.
+      for (const p of state.players) {
+        if (p.hp <= 0) continue;
+        let amount = eff.amount;
+        if (p.classId) {
+          const mods = getClassMods(p.classId);
+          amount = Math.floor(amount * mods.healPower);
+        }
+        p.hp = Math.min(p.maxHp, p.hp + amount);
+        pushLog(`  ${p.name} healed ${amount}.`);
+      }
+      break;
+    }
+
+    case 'giveEnergy': {
+      // Gives energy to every other living player, ignoring the
+      // target list. Used by Researcher's Gift.
+      for (const p of state.players) {
+        if (p === source) continue;
+        if (p.hp <= 0) continue;
+        p.energy += eff.amount;
+        pushLog(`  ${p.name} gained ${eff.amount} Energy.`);
+      }
+      break;
+    }
+
+    case 'clearDebuffs': {
+      // Removes N stacks of each listed status from each target.
+      // Used by Mend Script.
+      for (const t of targets) {
+        if (!state.players.includes(t)) continue;
+        if (!t.statuses) continue;
+        for (const st of eff.statuses || []) {
+          const have = t.statuses[st] || 0;
+          const remove = Math.min(have, eff.amount ?? 1);
+          if (remove > 0) {
+            t.statuses[st] -= remove;
+            if (t.statuses[st] <= 0) delete t.statuses[st];
+          }
+        }
+      }
+      pushLog(`  Cleared debuffs.`);
+      break;
+    }
+
+    // ---- End researcher-only ----
 
     case 'loseHpSelf': {
       const before = source.hp;
