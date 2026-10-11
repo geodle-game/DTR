@@ -1758,6 +1758,29 @@ export function debugSpawnResearcherAlly() {
   if (!state.players.length) return;
   if (state.players.some(p => p.isAlly)) return;
   const ally = createResearcherPlayer();
+
+  // If combat is already running, fully initialize the ally's
+  // combat state so he can actually play. Otherwise newCombat will
+  // set him up when the next fight starts.
+  if (state.screen === 'combat' && !state.over) {
+    ally.drawPile = shuffle(
+      ally.deck.map(entry => makeCard(entry.defId, entry.enchant)),
+      state.rng
+    );
+    ally.hand = [];
+    ally.discardPile = [];
+    ally.exhaustPile = [];
+    ally.block = 0;
+    ally.statuses = {};
+    ally.energy = ally.maxEnergy;
+    ally.endedTurn = false;
+    draw(state, ally, 5);
+
+    if (!state.combatActivePlayers.includes(ally.id)) {
+      state.combatActivePlayers.push(ally.id);
+    }
+  }
+
   state.players.push(ally);
   pushLog('The Researcher joins as an ally.');
 }
