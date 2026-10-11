@@ -6,12 +6,16 @@
 // He plays one card per PLAY_INTERVAL_MS until no card scores
 // above zero, then marks his turn ended via the dispatcher.
 //
-// Decision logic: depth-1 min-max. For each playable card, predict
-// the resulting score and pick the highest. No lookahead — the
-// scoring function is heuristic, not a full simulation.
+// Decision logic: depth-1 min-max. For each playable card, score
+// the hypothetical result and pick the highest. No lookahead —
+// the scoring function is heuristic, not a full simulation.
+//
+// All actions go through dispatch({ isAlly: true }) so the host
+// can broadcast them to guests and the local applyAction path
+// handles turn-end logic uniformly.
 // ============================================================
 
-import { state, beginPlayerEndTurn, beginEnemyTurn, resolveEnemyTurn } from './state.js';
+import { state } from './state.js';
 import { dispatch } from './dispatch.js';
 import { CARDS } from '../data/cards.js';
 import { canPlay, costOf } from './combat.js';
@@ -59,7 +63,9 @@ function tick() {
   if (!ally) return;
 
   if (ally.hp <= 0) {
-    if (!ally.endedTurn) ally.endedTurn = true;
+    if (!ally.endedTurn) {
+      dispatch({ type: 'ALLY_END_TURN', actorId: ally.id, isAlly: true });
+    }
     return;
   }
   if (ally.endedTurn) return;
