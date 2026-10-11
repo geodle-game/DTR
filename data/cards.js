@@ -11,6 +11,7 @@
 // Empty string hides the placeholder.
 
 import { getClassMods } from './classes.js';
+import { RESEARCHER_CARDS } from './researcher-cards.js';
 
 // --- Damage math shared by player AND enemy cards ---
 // `isSpell` swaps the flat stat bonus from Strength → Focus.
@@ -827,6 +828,10 @@ export const CARDS = {
     effects: [{ kind: 'loseEnergy', amount: 1 }],
   },
 };
+
+// Merge researcher ally cards into the shared CARDS table so
+// combat lookups (CARDS[card.defId]) resolve for the ally too.
+Object.assign(CARDS, RESEARCHER_CARDS);
 
 export function starterDeck() {
   return [
