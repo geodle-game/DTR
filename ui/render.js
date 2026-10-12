@@ -9,6 +9,7 @@ import {
   dismissFragmentLore,
   RECALL_GOLD_COST,
   RECALL_FRAGMENT_THRESHOLD,
+  canSpare,
 } from '../systems/state.js';
 import { dispatch } from '../systems/dispatch.js';
 import { getMode, isGuest, mySlot } from '../systems/net.js';
@@ -40,22 +41,15 @@ import { TUTORIALS } from '../data/tutorials.js';
 import { FRAGMENT_LORE } from '../data/fragmentLore.js';
 import { mountTutorialOverlay, ensureTutorialStyles } from './tutorialOverlay.js';
 import { cardFramePath } from '../data/cardVisuals.js';
+import { SPARE_PAGES, SPARE_PAGES_TOTAL } from '../data/spareSequence.js';
 
 const LONG_PRESS_MS = 450;
 const DRAG_THRESHOLD = 14;
 
-// Card flight: the CSS cardFly animation runs 450ms. Impact fires
-// at CARD_IMPACT_MS, just before the card visually lands, so the
-// attack sprite, damage number, and effect text all appear the
-// moment the card connects.
 const CARD_FLIGHT_MS = 450;
 const CARD_IMPACT_MS = 420;
 
 let shopRemoveMode = false;
-
-// ------------------------------------------------------------
-// Focus helpers
-// ------------------------------------------------------------
 
 function localViewIndex() {
   const slot = mySlot();
@@ -72,10 +66,6 @@ function localHandPlayer() {
   return state.players[slot] || null;
 }
 
-// ------------------------------------------------------------
-// Portrait helper
-// ------------------------------------------------------------
-
 function classPortraitImg(cls, { small = false } = {}) {
   if (!cls?.portrait) return null;
   const img = document.createElement('img');
@@ -90,9 +80,6 @@ function classPortraitImg(cls, { small = false } = {}) {
   return img;
 }
 
-// ------------------------------------------------------------
-// Dispatch wrappers
-// ------------------------------------------------------------
 const pickClass           = (id)  => dispatch({ type: 'PICK_CLASS', classId: id });
 const chooseRelic         = (id)  => dispatch({ type: 'CHOOSE_RELIC', relicId: id });
 const confirmDeck         = ()    => dispatch({ type: 'CONFIRM_DECK' });
@@ -129,10 +116,6 @@ const openRecall          = ()    => dispatch({ type: 'OPEN_RECALL' });
 const closeRecall         = ()    => dispatch({ type: 'CLOSE_RECALL' });
 const recallTo            = (act, nodeId) => dispatch({ type: 'RECALL_TO', act, nodeId });
 
-// ============================================================
-// Main render entry
-// ============================================================
-
 export function render() {
   const app = document.getElementById('app');
   document.querySelectorAll('.card-preview-overlay').forEach(el => el.remove());
@@ -157,6 +140,7 @@ export function render() {
     case 'enchantPick':  renderEnchantPick(app);  break;
     case 'victory':      renderVictory(app);      break;
     case 'absorption':   renderAbsorption(app);   break;
+    case 'spare':        renderSpare(app);        break;
     case 'recall':       renderRecall(app);       break;
     case 'mpHost':       renderMpHost(app);       break;
     case 'mpGuest':      renderMpGuest(app);      break;
@@ -178,10 +162,6 @@ export function render() {
 
   autoSave(state);
 }
-
-// ============================================================
-// Tutorial modal
-// ============================================================
 
 function renderTutorial(app) {
   const t = TUTORIALS[state.tutorial.id];
@@ -220,10 +200,6 @@ function renderTutorial(app) {
   overlay.appendChild(panel);
   app.appendChild(overlay);
 }
-
-// ============================================================
-// Fragment lore modal
-// ============================================================
 
 function renderFragmentLore(app) {
   const entry = FRAGMENT_LORE[state.fragmentLore.number];
@@ -266,10 +242,6 @@ function renderFragmentLore(app) {
   overlay.appendChild(panel);
   app.appendChild(overlay);
 }
-
-// ============================================================
-// Main menu
-// ============================================================
 
 function renderMainMenu(app) {
   const meta = loadMeta();
@@ -365,10 +337,6 @@ function renderMainMenu(app) {
   app.appendChild(wrap);
 }
 
-// ============================================================
-// Chapter title
-// ============================================================
-
 function renderChapterTitle(app) {
   const meta = loadMeta();
   const wrap = document.createElement('div');
@@ -417,10 +385,6 @@ function renderChapterTitle(app) {
   app.appendChild(wrap);
 }
 
-// ============================================================
-// Boss lore modal
-// ============================================================
-
 function renderBossLore(app) {
   const overlay = document.createElement('div');
   overlay.className = 'boss-lore-overlay';
@@ -448,10 +412,6 @@ function renderBossLore(app) {
   overlay.appendChild(panel);
   app.appendChild(overlay);
 }
-
-// ============================================================
-// Card text resolution
-// ============================================================
 
 function resolveCardText(def, ctx) {
   let text = def.text;
@@ -546,10 +506,6 @@ function topButtons() {
 
   return wrap;
 }
-
-// ============================================================
-// Overlays
-// ============================================================
 
 function renderDeckOverlay(app) {
   const overlay = cardGridOverlay(`${me().name}'s Deck`, sortDeckEntries(me().deck));
@@ -656,10 +612,6 @@ function relicCard(r, onClick) {
   return el;
 }
 
-// ============================================================
-// Class pick
-// ============================================================
-
 function renderClassPick(app) {
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
@@ -737,10 +689,6 @@ function classStatsLines(cls) {
   if (cls.bannedTypes?.includes('spell')) lines.push(`Cannot use Spells`);
   return lines;
 }
-
-// ============================================================
-// Relic pick / deck view
-// ============================================================
 
 function renderRelicPick(app) {
   const wrap = document.createElement('div');
@@ -835,10 +783,6 @@ function renderDeckView(app) {
 
   app.appendChild(wrap);
 }
-
-// ============================================================
-// Map
-// ============================================================
 
 function renderMap(app) {
   const map = state.run.map;
@@ -980,10 +924,6 @@ function renderMap(app) {
 // — the developer
 // ============================================================
 
-// ============================================================
-// Reward
-// ============================================================
-
 function renderReward(app) {
   const r = state.reward;
   const wrap = document.createElement('div');
@@ -1045,10 +985,6 @@ function renderReward(app) {
 
   app.appendChild(wrap);
 }
-
-// ============================================================
-// Act reward
-// ============================================================
 
 function renderActReward(app) {
   const r = state.actReward;
@@ -1130,10 +1066,6 @@ function renderActReward(app) {
   app.appendChild(wrap);
 }
 
-// ============================================================
-// Treasure
-// ============================================================
-
 function renderTreasure(app) {
   const t = state.treasure;
   const wrap = document.createElement('div');
@@ -1180,10 +1112,6 @@ function renderTreasure(app) {
   app.appendChild(wrap);
 }
 
-// ============================================================
-// Victory
-// ============================================================
-
 function renderVictory(app) {
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center';
@@ -1208,10 +1136,6 @@ function renderVictory(app) {
 
   app.appendChild(wrap);
 }
-
-// ============================================================
-// Absorption
-// ============================================================
 
 const ABSORPTION_PAGES = [
   [
@@ -1303,8 +1227,43 @@ function renderAbsorption(app) {
 }
 
 // ============================================================
-// Recall
+// Spare sequence
 // ============================================================
+
+function renderSpare(app) {
+  const scene = state.spareSequence;
+  if (!scene) { renderMainMenu(app); return; }
+
+  const pageIndex = scene.page;
+  const paragraphs = SPARE_PAGES[pageIndex];
+
+  const wrap = document.createElement('div');
+  wrap.className = 'screen screen-center';
+
+  const panel = document.createElement('div');
+  panel.className = 'spare-panel';
+
+  for (const p of paragraphs) {
+    const el = document.createElement('p');
+    el.className = 'spare-line' + (p.cls ? ' ' + p.cls : '');
+    el.textContent = p.text;
+    panel.appendChild(el);
+  }
+
+  wrap.appendChild(panel);
+
+  const isLast = pageIndex >= SPARE_PAGES_TOTAL - 1;
+
+  const btn = document.createElement('button');
+  btn.className = 'btn spare-btn';
+  btn.textContent = isLast ? 'Take the key' : 'Continue';
+  btn.addEventListener('click', () => {
+    dispatch({ type: 'ADVANCE_SPARE' });
+  });
+  wrap.appendChild(btn);
+
+  app.appendChild(wrap);
+}
 
 function renderRecall(app) {
   const wrap = document.createElement('div');
@@ -1430,10 +1389,6 @@ function confirmRecall(act, nodeId) {
   recallTo(act, nodeId);
 }
 
-// ============================================================
-// Event
-// ============================================================
-
 function renderEvent(app) {
   const ev = state.event.data;
   const wrap = document.createElement('div');
@@ -1478,10 +1433,6 @@ function renderEvent(app) {
 
   app.appendChild(wrap);
 }
-
-// ============================================================
-// Shop
-// ============================================================
 
 function renderShop(app) {
   const s = state.shop;
@@ -1623,10 +1574,6 @@ function renderShopRemoveMode(app, wrap, inv, focus) {
   app.appendChild(wrap);
 }
 
-// ============================================================
-// Rest
-// ============================================================
-
 function renderRest(app) {
   const wrap = document.createElement('div');
   wrap.className = 'screen screen-center rest-screen';
@@ -1665,10 +1612,6 @@ function renderRest(app) {
 
   app.appendChild(wrap);
 }
-
-// ============================================================
-// Enchant pick
-// ============================================================
 
 function renderEnchantPick(app) {
   const pe = state.pendingEnchant;
@@ -1730,10 +1673,6 @@ function renderEnchantPick(app) {
 
   app.appendChild(wrap);
 }
-
-// ============================================================
-// Combat
-// ============================================================
 
 function renderCombat(app) {
   const c = document.createElement('div');
@@ -1806,6 +1745,22 @@ function renderCombat(app) {
 
   c.appendChild(bottomBar(handPlayer));
 
+  // Spare button — appears when the player has full memory, the
+  // researcher is nearly down, and they haven't spared him yet.
+  if (canSpare()) {
+    const spareWrap = document.createElement('div');
+    spareWrap.className = 'spare-wrap';
+    const spareBtn = document.createElement('button');
+    spareBtn.className = 'btn btn-spare';
+    spareBtn.textContent = 'Spare the Researcher';
+    spareBtn.title = 'Lower your hand. End this.';
+    spareBtn.addEventListener('click', () => {
+      dispatch({ type: 'SPARE_RESEARCHER' });
+    });
+    spareWrap.appendChild(spareBtn);
+    c.appendChild(spareWrap);
+  }
+
   app.appendChild(c);
 
   if (state.over) app.appendChild(endBanner());
@@ -1823,9 +1778,6 @@ function pileEl(label, count, onClick, pileName) {
   return el;
 }
 
-// ------------------------------------------------------------
-// Ally intent — shows what the researcher is about to play.
-// ------------------------------------------------------------
 function buildAllyIntentHtml(p) {
   if (!p.intentCardUid) return '';
   const card = p.hand.find(c => c.uid === p.intentCardUid);
@@ -2025,9 +1977,6 @@ function statusRow(statuses) {
     .join('')}</div>`;
 }
 
-// ------------------------------------------------------------
-// Card flight destination
-// ------------------------------------------------------------
 function flightDestinationForCard(card, explicitTargetId) {
   const def = CARDS[card.defId];
   if (!def) return document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
@@ -2048,9 +1997,6 @@ function flightDestinationForCard(card, explicitTargetId) {
   return document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
 }
 
-// ------------------------------------------------------------
-// Effect text for a played card
-// ------------------------------------------------------------
 function effectTextsForCard(def) {
   const out = [];
   for (const eff of def.effects || []) {
@@ -2212,7 +2158,6 @@ function doPlayCard(card, sourceEl, targetUid) {
     || def.target === 'all-enemies'
     || def.target === 'random-enemy';
 
-  // Capture panel positions NOW, before any re-render happens.
   const playerElRef = document.querySelector(`[data-panel="player${mySlot() ?? 0}"]`);
   const enemyElRef = isEnemyTargeted
     ? (targetUid
@@ -2400,10 +2345,6 @@ function bottomBar(handPlayer) {
   return bar;
 }
 
-// ============================================================
-// End-of-combat banner
-// ============================================================
-
 function endBanner() {
   const overlay = document.createElement('div');
   overlay.className = 'victory-overlay';
@@ -2413,6 +2354,10 @@ function endBanner() {
 
   if (state.result === 'plot-armor') {
     renderPlotArmor(card);
+  } else if (state.result === 'spared') {
+    // The spare sequence handles its own UI. Show nothing here so
+    // the overlay does not flash before the sequence mounts.
+    return overlay;
   } else if (state.result === 'win') {
     const title = document.createElement('h1');
     title.className = 'victory-title win';
@@ -2445,10 +2390,6 @@ function endBanner() {
   overlay.appendChild(card);
   return overlay;
 }
-
-// ============================================================
-// Plot armor overlay
-// ============================================================
 
 function renderPlotArmor(card) {
   const scene = state.plotArmorScene || {};
@@ -2489,10 +2430,6 @@ function renderPlotArmor(card) {
   btn.addEventListener('click', () => restartAct());
   card.appendChild(btn);
 }
-
-// ============================================================
-// Death pages
-// ============================================================
 
 const DEATH_PAGES = [
   [
@@ -2566,10 +2503,6 @@ function renderGameOver(app) {
   el.textContent = 'Game over.';
   app.appendChild(el);
 }
-
-// ============================================================
-// MULTIPLAYER — HOST
-// ============================================================
 
 let mpHostState = {
   offerBlob: '',
@@ -2733,10 +2666,6 @@ function renderMpHost(app) {
 
   app.appendChild(wrap);
 }
-
-// ============================================================
-// MULTIPLAYER — GUEST
-// ============================================================
 
 let mpGuestState = {
   pastedOffer: '',
