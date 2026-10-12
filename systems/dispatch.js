@@ -14,6 +14,7 @@ import {
   startCoopRun, restartAct, triggerPlotArmor,
   advanceAbsorption, completeAbsorption,
   recallTo, openRecallScreen, closeRecallScreen,
+  spareResearcher, advanceSpare, completeSpare,
 } from './state.js';
 import {
   playCard, beginPlayerEndTurn, beginEnemyTurn, resolveEnemyTurn,
@@ -24,10 +25,6 @@ import {
 import { snapshotState, restoreSnapshot } from './snapshot.js';
 import { render } from '../ui/render.js';
 import { animateHits } from '../ui/animations.js';
-
-// ------------------------------------------------------------
-// Local slot / network helpers
-// ------------------------------------------------------------
 
 function localSlot() {
   return state.localSlot;
@@ -41,10 +38,6 @@ function isMyAction(action) {
   return action.actorId === slot;
 }
 
-// ------------------------------------------------------------
-// Public dispatch
-// ------------------------------------------------------------
-
 export function dispatch(action) {
   const mode = getMode();
 
@@ -55,9 +48,6 @@ export function dispatch(action) {
 
   console.log('[dispatch]', mode, 'slot=', localSlot(), 'action=', tagged);
 
-  // Ally actions are driven by systems/ally-ai.js. They run locally
-  // on the host (or single-player). Guests receive the resulting
-  // snapshot from the host.
   if (tagged.isAlly) {
     if (mode === 'guest') return;
     applyAction(tagged, false);
@@ -84,10 +74,6 @@ export function dispatch(action) {
 
   render();
 }
-
-// ------------------------------------------------------------
-// Network callbacks
-// ------------------------------------------------------------
 
 onAction(action => {
   console.log('[onAction] host received from guest:', action);
@@ -133,10 +119,6 @@ onSnapshot(snap => {
   if (hits.length) setTimeout(() => animateHits(hits), 30);
 });
 
-// ------------------------------------------------------------
-// Action handler
-// ------------------------------------------------------------
-
 function applyAction(action, fromNetwork = false) {
   const mode = getMode();
   const slot = localSlot();
@@ -169,6 +151,11 @@ function applyAction(action, fromNetwork = false) {
     // ---- Focus ----
     case 'SET_META_FOCUS':       setMetaFocus(action.index); break;
     case 'SET_DECKVIEW_FOCUS':   setDeckViewFocus(action.index); break;
+
+    // ---- Spare sequence ----
+    case 'SPARE_RESEARCHER':     spareResearcher(); break;
+    case 'ADVANCE_SPARE':        advanceSpare(); break;
+    case 'COMPLETE_SPARE':       completeSpare(); break;
 
     // ---- Combat ----
     case 'PLAY_CARD': {
@@ -203,9 +190,7 @@ function applyAction(action, fromNetwork = false) {
         return false;
       }
       const actorIdx = action.actorId ?? 0;
-      console.log('[END_TURN] P' + actorIdx + ' ending');
       const { allReady } = beginPlayerEndTurn(actorIdx);
-      console.log('[END_TURN] allReady=', allReady);
       if (state.over) return true;
       if (allReady) {
         beginEnemyTurn();
