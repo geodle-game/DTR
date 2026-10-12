@@ -34,11 +34,8 @@ import {
   SCRIPTED_BATTLE_ID,
 } from './tutorial.js';
 import { createResearcherPlayer } from '../data/researcher.js';
+import { SPARE_PAGES, SPARE_PAGES_TOTAL } from '../data/spareSequence.js';
 
-// Register tutorial-only enemy cards into the shared ENEMY_CARDS
-// object so intent rendering (ui/render.js) can find them. ES
-// modules are singletons, so mutating this object here is visible
-// everywhere ENEMY_CARDS is imported.
 for (const [id, def] of Object.entries(TUTORIAL_ENEMY_CARD)) {
   ENEMY_CARDS[id] = def;
 }
@@ -54,11 +51,9 @@ export function getBossLore(enemyId) {
   return BOSS_LORE[enemyId] || null;
 }
 
-// Recall: unlocked at 5 fragments, costs this much gold per use.
 export const RECALL_FRAGMENT_THRESHOLD = 5;
 export const RECALL_GOLD_COST = 100;
 
-// Special encounter id used only during the MC1 scripted battle.
 export const TUTORIAL_ENCOUNTER_ID = 'tutorial:driftwood';
 
 export const state = {
@@ -106,12 +101,9 @@ export const state = {
   fragmentLore: null,
   scriptBattle: null,
   turnId: 0,
+  spareSequence: null,
 };
 
-// Meta screens (rewards, shops, events, rests, treasures, act rewards)
-// only care about real players. The ally travels with the party but
-// does not get a slot to fill — otherwise every completion check
-// waits on him forever.
 export function realPlayers() {
   return state.players.filter(p => !p.isAlly);
 }
@@ -413,7 +405,7 @@ export function grantFragment(source = 'unknown') {
   return true;
 }
 
-// ---- Recall (map teleport) ----
+// ---- Recall ----
 
 export function canRecall() {
   if (!state.run) return false;
@@ -553,6 +545,7 @@ export function newRun(seed = Date.now()) {
     exploredMaps: {},
     researcherFight: false,
     pendingActRestart: false,
+    sparedResearcher: false,
   };
   state.players = [makePlayer(0, 70, 70)];
   state.metaFocusIndex = 0;
@@ -605,6 +598,7 @@ export function newRun(seed = Date.now()) {
   state.fragmentLore = null;
   state.scriptBattle = null;
   state.turnId = 0;
+  state.spareSequence = null;
 
   updateMeta({ totalRuns: (loadMeta().totalRuns || 0) + 1 });
 
@@ -979,9 +973,6 @@ export function newCombat(encounterId = 'act1-basic', sourceKind = 'monster') {
     });
   }
 
-  // MC1 researcher weakening — the tutorial boss is a scripted
-  // pushover. 25 HP, weak attacks, no block, no Strength, no
-  // phase shifts. The player is meant to win.
   if (state.run.mode === 'mc1' && encounterId === 'researcher') {
     for (const e of state.enemies) {
       e.hp = 25;
@@ -1319,6 +1310,85 @@ export function completeAbsorption() {
   state.screen = 'mainMenu';
 }
 
+// ---- Spare sequence ----
+
+// Can the player choose to spare the researcher this turn?
+export function canSpare() {
+  if (!state.run) return false;
+  if (state.run.mode !== 'mc2') return false;
+  if (!state.run.fullMemory) return false;
+  if (state.run.sparedResearcher) return false;
+  if (state.screen !== 'combat') return false;
+  if (state.over) return false;
+  if (state.turn !== 'player') return false;
+  const researcher = state.enemies.find(e => e.id === 'researcher' && e.hp > 0);
+  if (!researcher) return false;
+  if (researcher.hp / researcher.maxHp > 0.15) return false;
+  return true;
+}
+
+// Player chose to spare. Ends the combat with a 'spared' result and
+// opens the spare sequence.
+export function spareResearcher() {
+  if (!canSpare()) return false;
+
+  state.over = true;
+  state.result = 'spared';
+  state.turn = 'over';
+  state.previewCardUid = null;
+  state.combatActivePlayers = [];
+  setPhase(null);
+
+  const researcher = state.enemies.find(e => e.id === 'researcher');
+  if (researcher) {
+    researcher.loreTriggered.onDeath = true;  // suppress death lore
+    researcher.loreTriggered.onSpare = true;
+  }
+
+  state.spareSequence = { page: 0 };
+  state.screen = 'spare';
+
+  pushLog('You lower your hand. The researcher does not.');
+  return true;
+}
+
+export function advanceSpare() {
+  if (!state.spareSequence) return;
+  state.spareSequence.page += 1;
+  if (state.spareSequence.page >= SPARE_PAGES_TOTAL) {
+    completeSpare();
+  }
+}
+
+// Final page finished. Add the researcher as an ally, mark the run
+// as spared, and send the player back to the map.
+export function completeSpare() {
+  if (!state.run) return;
+
+  state.run.sparedResearcher = true;
+
+  // Remove the researcher from the enemy list.
+  state.enemies = state.enemies.filter(e => e.id !== 'researcher');
+
+  // Add him as an ally if not already present.
+  if (!state.players.some(p => p.isAlly)) {
+    const ally = createResearcherPlayer();
+    state.players.push(ally);
+    pushLog('The Researcher joins you.');
+  }
+
+  state.spareSequence = null;
+  state.over = false;
+  state.result = null;
+  state.turn = 'player';
+  state.selectedEnemyId = null;
+  state.lastHits = [];
+  state.log = [];
+
+  setPhase(null);
+  state.screen = 'map';
+}
+
 // ---- Act reward ----
 
 export function takeActRewardCard(defId, actorId) {
@@ -1396,6 +1466,7 @@ export function returnToMainMenu() {
   state.tutorial = null;
   state.fragmentLore = null;
   state.scriptBattle = null;
+  state.spareSequence = null;
 }
 
 export function rollIntent(enemy) {
@@ -1423,8 +1494,6 @@ export function resetBossScript(enemy) {
 export function startPlayerTurnFor(playerIndex, isFirstTurn = false) {
   checkIntegrity(state);
 
-  // Bump the turn counter whenever the first player of a new turn
-  // begins. The ally AI watches this to time its first play.
   if (playerIndex === state.combatActivePlayers[0]) {
     state.turnId = (state.turnId || 0) + 1;
   }
@@ -1759,9 +1828,6 @@ export function debugSpawnResearcherAlly() {
   if (state.players.some(p => p.isAlly)) return;
   const ally = createResearcherPlayer();
 
-  // If combat is already running, fully initialize the ally's
-  // combat state so he can actually play. Otherwise newCombat will
-  // set him up when the next fight starts.
   if (state.screen === 'combat' && !state.over) {
     ally.drawPile = shuffle(
       ally.deck.map(entry => makeCard(entry.defId, entry.enchant)),
