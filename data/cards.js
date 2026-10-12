@@ -320,7 +320,7 @@ export const CARDS = {
     liveValues: liveDamage(5),
   },
   uppercut: {
-    id: 'uppercut', name: 'Uppercut', cost: 2, rarity: 'common',
+    id: 'uppercut', name: 'Uppercut', cost: 2, rarity: 'rare',
     type: 'attack', target: 'enemy', destination: 'exhaust',
     animation: 'heavy',
     text: 'Deal 13 damage.{live} Apply 2 Weak and 2 Vulnerable. Exhaust.',
