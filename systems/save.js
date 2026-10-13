@@ -8,11 +8,13 @@ import { CARDS } from '../data/cards.js';
 import { RELICS } from '../data/relics.js';
 
 const SAVE_KEY = 'drawnToRuin.save';
-const SAVE_VERSION = 5;   // bumped: per-player relic/reward state
+const SAVE_VERSION = 6;   // v6: bumped act cap, veil fields, veilDoor screen
+const MIGRATABLE_VERSIONS = new Set([5]);
 
 const SAFE_SCREENS = new Set([
   'map', 'shop', 'rest', 'event', 'treasure', 'reward',
   'actReward', 'enchantPick', 'deckView', 'relicPick',
+  'veilDoor',
 ]);
 
 const MAX_STAT = 9999;
@@ -22,6 +24,12 @@ const MAX_STATUS = 999;
 const MAX_DECK_SIZE = 200;
 const MAX_RELIC_COUNT = 50;
 const MAX_GRANT_USED_KEYS = 500;
+// MC2 has 15 acts, veil adds 3 (tracked via veilAct, not act).
+// Act is capped well above 15 to survive future expansion, but
+// never at 5 — that was the original bug.
+const MAX_ACT = 30;
+const MAX_FLOOR = 40;
+const MAX_FRAGMENTS = 15;
 
 let lastSavedJson = null;
 
@@ -66,8 +74,11 @@ export function sanitizePlayer(raw) {
   }
 
   return {
-    id: clampInt(raw.id, 0, 1, 0),
+    id: clampInt(raw.id, 0, 3, 0),
     name: typeof raw.name === 'string' ? raw.name.slice(0, 32) : 'Player',
+    classId: typeof raw.classId === 'string' ? raw.classId : null,
+    isAlly: !!raw.isAlly,
+    portrait: typeof raw.portrait === 'string' ? raw.portrait : null,
     hp: clampInt(raw.hp, 1, MAX_STAT, 70),
     maxHp: clampInt(raw.maxHp, 1, MAX_STAT, 70),
     block: clampInt(raw.block, 0, MAX_STAT, 0),
@@ -83,7 +94,61 @@ export function sanitizePlayer(raw) {
     relics,
     deck,
     endedTurn: false,
+    // Ally bookkeeping (only meaningful if isAlly).
+    points: clampInt(raw.points, 0, MAX_STAT, 0),
+    upgrades: (raw.upgrades && typeof raw.upgrades === 'object')
+      ? { ...raw.upgrades }
+      : {},
   };
+}
+
+// ------------------------------------------------------------
+// Run sanitization
+// ------------------------------------------------------------
+// This is what was broken before. The act clamp was hardcoded to
+// 5, which silently reset any MC2 save past Act 5. Floor clamp
+// is generous enough for MC2 (16 floors) and veil (9 floors).
+//
+// Veil fields are top-level on run (not a mode) so they need
+// explicit defaults. Full memory and sparedResearcher determine
+// whether the veil door is open.
+// ------------------------------------------------------------
+export function sanitizeRun(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const run = { ...raw };
+
+  run.act = clampInt(run.act, 1, MAX_ACT, 1);
+  run.realAct = clampInt(run.realAct ?? run.act, 1, MAX_ACT, run.act);
+  run.actsTotal = clampInt(run.actsTotal, 1, MAX_ACT, 15);
+  run.floor = clampInt(run.floor, -1, MAX_FLOOR, -1);
+
+  run.fragmentsCollected = clampInt(run.fragmentsCollected, 0, MAX_FRAGMENTS, 1);
+  run.fullMemory = !!run.fullMemory;
+  run.recallUnlocked = !!run.recallUnlocked;
+  run.researcherFight = !!run.researcherFight;
+  run.pendingActRestart = !!run.pendingActRestart;
+  run.sparedResearcher = !!run.sparedResearcher;
+  run.cleared = !!run.cleared;
+  run.victory = !!run.victory;
+
+  // Veil path fields. Defaults are safe: inactive, act 1, 3 acts.
+  run.veilActive = !!run.veilActive;
+  run.veilAct = clampInt(run.veilAct, 1, 3, 1);
+  run.veilActsTotal = clampInt(run.veilActsTotal, 1, 3, 3);
+
+  if (!Array.isArray(run.bossesBeaten)) run.bossesBeaten = [];
+  if (!run.exploredMaps || typeof run.exploredMaps !== 'object') {
+    run.exploredMaps = {};
+  }
+  if (!run._grantUsed || typeof run._grantUsed !== 'object') {
+    run._grantUsed = {};
+  }
+
+  if (run.phase !== null && typeof run.phase !== 'string') {
+    run.phase = null;
+  }
+
+  return run;
 }
 
 export function checkIntegrity(state) {
@@ -189,6 +254,7 @@ function snapshot(state) {
     actReward: state.actReward,
     pendingEnchant: state.pendingEnchant,
     localSlot: state.localSlot,
+    spareSequence: state.spareSequence,
   };
 }
 
@@ -210,14 +276,37 @@ export function hasSave() {
   catch { return false; }
 }
 
+// ------------------------------------------------------------
+// Migration — v5 → v6
+// ------------------------------------------------------------
+// v5 saves are structurally compatible except for the veil
+// fields. Add defaults so the run loads cleanly.
+// ------------------------------------------------------------
+function migrateSave(data) {
+  if (!data || typeof data !== 'object') return data;
+  if (data.version === 5) {
+    if (data.run && typeof data.run === 'object') {
+      if (data.run.veilActive === undefined) data.run.veilActive = false;
+      if (data.run.veilAct === undefined) data.run.veilAct = 1;
+      if (data.run.veilActsTotal === undefined) data.run.veilActsTotal = 3;
+    }
+    data.version = SAVE_VERSION;
+  }
+  return data;
+}
+
 export function loadSave() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
-    const data = JSON.parse(raw);
+    let data = JSON.parse(raw);
     if (data.version !== SAVE_VERSION) {
-      localStorage.removeItem(SAVE_KEY);
-      return null;
+      if (MIGRATABLE_VERSIONS.has(data.version)) {
+        data = migrateSave(data);
+      } else {
+        localStorage.removeItem(SAVE_KEY);
+        return null;
+      }
     }
     return data;
   } catch (e) {
@@ -240,20 +329,18 @@ export function restoreRun(state, save) {
   state.rng = makeRng(1);
   if (save.rngState != null) state.rng.setState(save.rngState);
 
-  state.run = save.run || {};
-  state.run.act = clampInt(state.run.act, 1, 5, 1);
-  state.run.floor = clampInt(state.run.floor, -1, 15, -1);
+  state.run = sanitizeRun(save.run) || {};
 
   state.players = Array.isArray(save.players)
-    ? save.players.map(sanitizePlayer).filter(Boolean).slice(0, 2)
+    ? save.players.map(sanitizePlayer).filter(Boolean).slice(0, 3)
     : [];
 
   state.metaFocusIndex = save.metaFocusIndex ?? 0;
   state.activePlayerIndex = save.activePlayerIndex ?? state.metaFocusIndex;
   state.combatActivePlayers = Array.isArray(save.combatActivePlayers)
-    ? save.combatActivePlayers.slice(0, 2)
+    ? save.combatActivePlayers.slice(0, 3)
     : [];
-  state.endedTurn = Array.isArray(save.endedTurn) ? save.endedTurn.slice(0, 2) : [];
+  state.endedTurn = Array.isArray(save.endedTurn) ? save.endedTurn.slice(0, 3) : [];
   state.localSlot = save.localSlot ?? null;
 
   if (state.players[0]) {
@@ -289,6 +376,7 @@ export function restoreRun(state, save) {
   state.treasure = save.treasure ?? null;
   state.actReward = save.actReward ?? null;
   state.pendingEnchant = save.pendingEnchant ?? null;
+  state.spareSequence = save.spareSequence ?? null;
 
   state.enemies = [];
   state.turn = 'player';
