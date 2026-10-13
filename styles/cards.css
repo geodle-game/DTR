@@ -114,16 +114,57 @@
     0 16px 30px rgba(255,143,107,.35);
 }
 
+/* ------------------------------------------------------------
+   SMALL VARIANT
+   ------------------------------------------------------------
+   Every dimension here is the hand-card value × 0.846, so the
+   internal layout (cost circle, name, text, enchant badge)
+   sits at the same relative position as in the hand. Change
+   one number here and you change the scale — do NOT mix
+   hand-card pixel values into this block.
+   ------------------------------------------------------------ */
 .card.card-small {
-  width: 132px;
-  min-height: 180px;
-  padding: 12px 10px;
+  width: 132px;              /* 156 × 0.846 */
+  min-height: 204px;         /* 240 × 0.846 */
+  padding: 14px 12px;        /* 16/14 × 0.846 → rounded */
+  gap: 7px;                  /* 8 × 0.846 → rounded */
   margin: 0;
   animation: none;
   transform: none;
 }
 
 .card.card-small:hover { transform: translateY(-4px) scale(1.03); }
+
+/* Scale the child elements proportionally. */
+.card.card-small .cost {
+  width: 24px;               /* 28 × 0.846 */
+  height: 24px;
+  font-size: 12px;           /* 14 × 0.846 */
+}
+
+.card.card-small .cname {
+  font-size: 13px;           /* 15 × 0.846 */
+}
+
+.card.card-small .ctext {
+  font-size: 11px;           /* 13 × 0.846 */
+  line-height: 1.4;
+}
+
+.card.card-small .card-enchant {
+  padding: 4px 7px;          /* 5/8 × 0.846 */
+  gap: 2px;
+  border-left-width: 2px;    /* 3 × 0.846 */
+}
+
+.card.card-small .card-enchant-name {
+  font-size: 9px;            /* 11 × 0.846 */
+}
+
+.card.card-small .card-enchant-text {
+  font-size: 9px;            /* 10 × 0.846 → rounded */
+  line-height: 1.25;
+}
 
 /* Retain — green ring around the card edge. */
 .card.card-retain {
