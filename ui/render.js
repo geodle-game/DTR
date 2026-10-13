@@ -30,7 +30,7 @@ import {
   hostStart, hostAcceptAnswer, guestStart, onStatus, isChannelOpen,
 } from '../systems/net.js';
 import { CARDS } from '../data/cards.js';
-import { RELICS } from '../data/relics.js';
+import { RELICS, RELIC_GOLD_FALLBACK } from '../data/relics.js';
 import { ENEMY_CARDS } from '../data/enemy-cards.js';
 import { NODE_TYPES } from '../data/maps.js';
 import { getNode, reachableFrom, startingNodes } from '../systems/map.js';
@@ -986,6 +986,13 @@ function renderReward(app) {
   app.appendChild(wrap);
 }
 
+// ------------------------------------------------------------
+// ACT REWARD
+// ------------------------------------------------------------
+// Soft-lock fix: when the player already owns every relic, the
+// relic step is auto-resolved to a gold fallback. We render a
+// fallback panel instead of an empty relic row.
+// ------------------------------------------------------------
 function renderActReward(app) {
   const r = state.actReward;
   const wrap = document.createElement('div');
@@ -1030,42 +1037,67 @@ function renderActReward(app) {
       row.appendChild(relicCard(relic, () => takeActRewardRelic(id)));
     }
     wrap.appendChild(row);
-  } else if (!slot.cardTaken) {
-    const taken = document.createElement('p');
-    taken.className = 'muted';
-    taken.textContent = `Relic chosen: ${RELICS[slot.relicTaken].name}`;
-    wrap.appendChild(taken);
-
-    const sub = document.createElement('p');
-    sub.className = 'muted';
-    sub.textContent = `Add a card to ${p.name}'s deck:`;
-    wrap.appendChild(sub);
-
-    const grid = document.createElement('div');
-    grid.className = 'deck-grid';
-    for (const id of slot.cardChoices) {
-      const el = cardFace(id, { small: true });
-      el.addEventListener('click', () => takeActRewardCard(id));
-      grid.appendChild(el);
-    }
-    wrap.appendChild(grid);
-
-    const skip = document.createElement('button');
-    skip.className = 'btn';
-    skip.textContent = 'Skip Card';
-    skip.addEventListener('click', () => skipActRewardCard());
-    wrap.appendChild(skip);
   } else {
-    const btn = document.createElement('button');
-    btn.className = 'btn';
-    btn.textContent = 'Onward';
-    btn.addEventListener('click', () => claimActReward());
-    wrap.appendChild(btn);
+    if (slot.relicTaken === '__gold__') {
+      const fallback = document.createElement('div');
+      fallback.className = 'relic-fallback-panel';
+      fallback.innerHTML = `
+        <div class="relic-fallback-title">All Relics Collected</div>
+        <div class="relic-fallback-text">
+          There is nothing left for you to claim from the ruins.
+          Your relic has been converted to gold.
+        </div>
+        <div class="relic-fallback-gold">
+          +${slot.goldFallback || RELIC_GOLD_FALLBACK} bonus gold
+        </div>
+      `;
+      wrap.appendChild(fallback);
+    } else {
+      const taken = document.createElement('p');
+      taken.className = 'muted';
+      taken.textContent = `Relic chosen: ${RELICS[slot.relicTaken].name}`;
+      wrap.appendChild(taken);
+    }
+
+    if (!slot.cardTaken) {
+      const sub = document.createElement('p');
+      sub.className = 'muted';
+      sub.textContent = `Add a card to ${p.name}'s deck:`;
+      wrap.appendChild(sub);
+
+      const grid = document.createElement('div');
+      grid.className = 'deck-grid';
+      for (const id of slot.cardChoices) {
+        const el = cardFace(id, { small: true });
+        el.addEventListener('click', () => takeActRewardCard(id));
+        grid.appendChild(el);
+      }
+      wrap.appendChild(grid);
+
+      const skip = document.createElement('button');
+      skip.className = 'btn';
+      skip.textContent = 'Skip Card';
+      skip.addEventListener('click', () => skipActRewardCard());
+      wrap.appendChild(skip);
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = 'Onward';
+      btn.addEventListener('click', () => claimActReward());
+      wrap.appendChild(btn);
+    }
   }
 
   app.appendChild(wrap);
 }
 
+// ------------------------------------------------------------
+// TREASURE
+// ------------------------------------------------------------
+// Soft-lock fix: when the player already owns every relic, the
+// pool is empty. We render a fallback panel with a Claim button
+// instead of an empty relic row that can never resolve.
+// ------------------------------------------------------------
 function renderTreasure(app) {
   const t = state.treasure;
   const wrap = document.createElement('div');
@@ -1088,26 +1120,53 @@ function renderTreasure(app) {
     wait.className = 'muted';
     wait.textContent = 'You already chose. Sit tight.';
     wrap.appendChild(wait);
-  } else {
-    const sub = document.createElement('p');
-    sub.className = 'muted';
-    sub.textContent = `Choose a relic for ${p.name}:`;
-    wrap.appendChild(sub);
-
-    const row = document.createElement('div');
-    row.className = 'relic-row';
-    for (const id of slot.relicChoices) {
-      const relic = RELICS[id];
-      row.appendChild(relicCard(relic, () => pickTreasureRelic(id)));
-    }
-    wrap.appendChild(row);
-
-    const skip = document.createElement('button');
-    skip.className = 'btn';
-    skip.textContent = 'Skip Relic';
-    skip.addEventListener('click', () => skipTreasure());
-    wrap.appendChild(skip);
+    app.appendChild(wrap);
+    return;
   }
+
+  if (slot.relicChoices.length === 0) {
+    const fallbackPanel = document.createElement('div');
+    fallbackPanel.className = 'relic-fallback-panel';
+    fallbackPanel.innerHTML = `
+      <div class="relic-fallback-title">All Relics Collected</div>
+      <div class="relic-fallback-text">
+        There is nothing left in the ruins you have not already claimed.
+        Your share of this treasure has been converted to gold.
+      </div>
+      <div class="relic-fallback-gold">
+        +${slot.goldFallback || RELIC_GOLD_FALLBACK} bonus gold
+      </div>
+    `;
+    wrap.appendChild(fallbackPanel);
+
+    const claim = document.createElement('button');
+    claim.className = 'btn';
+    claim.textContent = `Claim ${slot.gold} Gold`;
+    claim.addEventListener('click', () => skipTreasure());
+    wrap.appendChild(claim);
+
+    app.appendChild(wrap);
+    return;
+  }
+
+  const sub = document.createElement('p');
+  sub.className = 'muted';
+  sub.textContent = `Choose a relic for ${p.name}:`;
+  wrap.appendChild(sub);
+
+  const row = document.createElement('div');
+  row.className = 'relic-row';
+  for (const id of slot.relicChoices) {
+    const relic = RELICS[id];
+    row.appendChild(relicCard(relic, () => pickTreasureRelic(id)));
+  }
+  wrap.appendChild(row);
+
+  const skip = document.createElement('button');
+  skip.className = 'btn';
+  skip.textContent = 'Skip Relic';
+  skip.addEventListener('click', () => skipTreasure());
+  wrap.appendChild(skip);
 
   app.appendChild(wrap);
 }
@@ -1745,8 +1804,6 @@ function renderCombat(app) {
 
   c.appendChild(bottomBar(handPlayer));
 
-  // Spare button — appears when the player has full memory, the
-  // researcher is nearly down, and they haven't spared him yet.
   if (canSpare()) {
     const spareWrap = document.createElement('div');
     spareWrap.className = 'spare-wrap';
@@ -2355,8 +2412,6 @@ function endBanner() {
   if (state.result === 'plot-armor') {
     renderPlotArmor(card);
   } else if (state.result === 'spared') {
-    // The spare sequence handles its own UI. Show nothing here so
-    // the overlay does not flash before the sequence mounts.
     return overlay;
   } else if (state.result === 'win') {
     const title = document.createElement('h1');
