@@ -4,7 +4,9 @@ import { ENEMY_CARDS } from '../data/enemy-cards.js';
 import {
   makeCard, shuffle, draw, makeRng, makeEnemyCard, drawEnemyCard,
 } from './deck.js';
-import { RELICS, rollRelicChoices } from '../data/relics.js';
+import {
+  RELICS, rollRelicChoices, allRelicsOwned, RELIC_GOLD_FALLBACK,
+} from '../data/relics.js';
 import { generateMap, getNode, reachableFrom, startingNodes } from './map.js';
 import { rollCoins, rollCardChoices, rollActTransition } from './rewards.js';
 import { randomEvent } from '../data/events.js';
@@ -805,10 +807,29 @@ export function startNode(nodeId) {
     setPhase(null);
     state.screen = 'rest';
   } else if (node.type === 'treasure') {
+    // ------------------------------------------------------------
+    // SOFT-LOCK FIX: Treasure node with empty relic pool.
+    // If the player already owns every relic, we grant bonus gold
+    // instead of showing an empty relic row that can never resolve.
+    // ------------------------------------------------------------
     const perPlayer = realPlayers().map((p) => {
       const relicChoices = rollRelicChoices(state.rng, p.relics, 3);
-      const gold = 30 + Math.floor(state.rng() * 20);
-      return { relicChoices, gold, taken: false };
+      const baseGold = 30 + Math.floor(state.rng() * 20);
+
+      if (relicChoices.length === 0) {
+        return {
+          relicChoices: [],
+          gold: baseGold + RELIC_GOLD_FALLBACK,
+          goldFallback: RELIC_GOLD_FALLBACK,
+          taken: false,
+        };
+      }
+      return {
+        relicChoices,
+        gold: baseGold,
+        goldFallback: 0,
+        taken: false,
+      };
     });
     state.treasure = { perPlayer, nodeId };
     setPhase(null);
@@ -855,7 +876,11 @@ export function skipTreasure(actorId) {
   if (!slot || slot.taken) return;
   const p = state.players[focus];
   if (p) p.gold += slot.gold;
-  pushLog(`Skipped treasure (${p?.name}). +${slot.gold} gold.`);
+  if (slot.goldFallback > 0) {
+    pushLog(`Treasure (${p?.name}): all relics collected, gained ${slot.gold} gold instead.`);
+  } else {
+    pushLog(`Skipped treasure (${p?.name}). +${slot.gold} gold.`);
+  }
   slot.taken = true;
   advanceTreasure();
 }
@@ -1187,15 +1212,38 @@ export function nextAct() {
   state.run.currentNodeId = null;
   state.run.floor = -1;
 
+  // ------------------------------------------------------------
+  // SOFT-LOCK FIX: Act reward with empty relic pool.
+  // If the player already owns every relic, we grant bonus gold
+  // and auto-resolve the relic step so the screen never waits on
+  // a choice that can't be made.
+  // ------------------------------------------------------------
   state.actReward = {
-    perPlayer: realPlayers().map((p) => ({
-      coins: 50 + Math.floor(state.rng() * 30),
-      cardChoices: rollCardChoices(state.rng, 3, p.classId),
-      relicChoices: rollRelicChoices(state.rng, p.relics, 3),
-      cardTaken: false,
-      relicTaken: null,
-      done: false,
-    })),
+    perPlayer: realPlayers().map((p) => {
+      const relicChoices = rollRelicChoices(state.rng, p.relics, 3);
+      const baseCoins = 50 + Math.floor(state.rng() * 30);
+
+      if (relicChoices.length === 0) {
+        return {
+          coins: baseCoins + RELIC_GOLD_FALLBACK,
+          cardChoices: rollCardChoices(state.rng, 3, p.classId),
+          relicChoices: [],
+          goldFallback: RELIC_GOLD_FALLBACK,
+          cardTaken: false,
+          relicTaken: '__gold__',
+          done: false,
+        };
+      }
+      return {
+        coins: baseCoins,
+        cardChoices: rollCardChoices(state.rng, 3, p.classId),
+        relicChoices,
+        goldFallback: 0,
+        cardTaken: false,
+        relicTaken: null,
+        done: false,
+      };
+    }),
   };
   setPhase('actReward');
   state.screen = 'actReward';
@@ -1312,7 +1360,6 @@ export function completeAbsorption() {
 
 // ---- Spare sequence ----
 
-// Can the player choose to spare the researcher this turn?
 export function canSpare() {
   if (!state.run) return false;
   if (state.run.mode !== 'mc2') return false;
@@ -1327,8 +1374,6 @@ export function canSpare() {
   return true;
 }
 
-// Player chose to spare. Ends the combat with a 'spared' result and
-// opens the spare sequence.
 export function spareResearcher() {
   if (!canSpare()) return false;
 
@@ -1341,7 +1386,7 @@ export function spareResearcher() {
 
   const researcher = state.enemies.find(e => e.id === 'researcher');
   if (researcher) {
-    researcher.loreTriggered.onDeath = true;  // suppress death lore
+    researcher.loreTriggered.onDeath = true;
     researcher.loreTriggered.onSpare = true;
   }
 
@@ -1360,17 +1405,13 @@ export function advanceSpare() {
   }
 }
 
-// Final page finished. Add the researcher as an ally, mark the run
-// as spared, and send the player back to the map.
 export function completeSpare() {
   if (!state.run) return;
 
   state.run.sparedResearcher = true;
 
-  // Remove the researcher from the enemy list.
   state.enemies = state.enemies.filter(e => e.id !== 'researcher');
 
-  // Add him as an ally if not already present.
   if (!state.players.some(p => p.isAlly)) {
     const ally = createResearcherPlayer();
     state.players.push(ally);
@@ -1643,9 +1684,14 @@ function applyMetaEffect(eff, recipientIndex) {
     }
 
     case 'addRandomRelic': {
+      // ------------------------------------------------------------
+      // SOFT-LOCK FIX: event relic grant with empty pool.
+      // If the player owns every relic, grant gold instead.
+      // ------------------------------------------------------------
       const pool = rollRelicChoices(state.rng, p.relics, 1);
       if (!pool.length) {
-        pushLog(`${p.name} has every relic already.`);
+        p.gold += RELIC_GOLD_FALLBACK;
+        pushLog(`${p.name} has every relic already. Gained ${RELIC_GOLD_FALLBACK} gold instead.`);
         break;
       }
       p.relics.push(pool[0]);
