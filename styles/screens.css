@@ -1854,6 +1854,7 @@
     0 2px 12px rgba(0,0,0,.9),
     0 0 24px rgba(143,107,255,.4);
 }
+
 /* ============================================================
    SPARE SEQUENCE
    ============================================================ */
@@ -1960,4 +1961,52 @@
       0 0 0 4px rgba(255,209,102,.5),
       0 6px 30px rgba(255,209,102,.75);
   }
+}
+
+/* ============================================================
+   RELIC FALLBACK PANEL
+   Shown when the player already owns every relic and a reward
+   would otherwise offer an empty pool. Prevents the treasure /
+   act-reward soft-lock.
+   ============================================================ */
+
+.relic-fallback-panel {
+  background: linear-gradient(180deg, #2a2414, #1a1608);
+  border: 2px solid #ffd166;
+  border-radius: 14px;
+  padding: 24px 32px;
+  max-width: 420px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow:
+    0 8px 24px rgba(0,0,0,.5),
+    0 0 0 1px rgba(255,209,102,.2) inset,
+    0 0 40px rgba(255,209,102,.15);
+}
+
+.relic-fallback-title {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #ffd166;
+  text-shadow: 0 0 16px rgba(255,209,102,.5);
+}
+
+.relic-fallback-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #c8cdd7;
+}
+
+.relic-fallback-gold {
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffd166;
+  letter-spacing: .04em;
+  text-shadow: 0 0 18px rgba(255,209,102,.7);
+  margin-top: 4px;
 }
