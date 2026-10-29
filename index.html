@@ -2,9 +2,82 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Drawn to Ruin</title>
-  <meta name="description" content="The dungeon gave us cards. Now it wants them back." />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+  <!-- ============================================================
+       PRIMARY META
+       ============================================================ -->
+  <title>Drawn to Ruin — A Deckbuilding Roguelike in a Buried City</title>
+  <meta name="title" content="Drawn to Ruin — A Deckbuilding Roguelike in a Buried City" />
+  <meta name="description" content="Descend into a buried Asteri city. Build a deck of Script fragments, fight monsters, and uncover why an entire civilization vanished a thousand years ago." />
+  <meta name="keywords" content="deckbuilder, roguelike, card game, roguelike deckbuilder, browser game, indie game, slay the spire, dungeon crawler, turn-based, free game, drawn to ruin" />
+  <meta name="author" content="geodle-game" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <meta name="theme-color" content="#8f6bff" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="rating" content="general" />
+
+  <!-- ============================================================
+       CANONICAL
+       ============================================================ -->
+  <link rel="canonical" href="https://geodle-game.github.io/DTR/" />
+
+  <!-- ============================================================
+       OPEN GRAPH (Discord, Facebook, LinkedIn, Slack, iMessage)
+       ============================================================ -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://geodle-game.github.io/DTR/" />
+  <meta property="og:title" content="Drawn to Ruin — A Deckbuilding Roguelike in a Buried City" />
+  <meta property="og:description" content="Descend into a buried Asteri city. Build a deck of Script fragments, fight monsters, and uncover why an entire civilization vanished a thousand years ago." />
+  <meta property="og:image" content="https://geodle-game.github.io/DTR/assets/banner1.jpg" />
+  <meta property="og:image:alt" content="Drawn to Ruin — a card in a ruined Asteri chamber" />
+  <meta property="og:site_name" content="Drawn to Ruin" />
+  <meta property="og:locale" content="en_US" />
+
+  <!-- ============================================================
+       TWITTER / X
+       ============================================================ -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://geodle-game.github.io/DTR/" />
+  <meta name="twitter:title" content="Drawn to Ruin — A Deckbuilding Roguelike in a Buried City" />
+  <meta name="twitter:description" content="Descend into a buried Asteri city. Build a deck of Script fragments, fight monsters, and uncover why an entire civilization vanished a thousand years ago." />
+  <meta name="twitter:image" content="https://geodle-game.github.io/DTR/assets/banner1.jpg" />
+  <meta name="twitter:image:alt" content="Drawn to Ruin — a card in a ruined Asteri chamber" />
+
+  <!-- ============================================================
+       JSON-LD STRUCTURED DATA (Google, Bing)
+       ============================================================ -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "VideoGame",
+    "name": "Drawn to Ruin",
+    "url": "https://geodle-game.github.io/DTR/",
+    "description": "A deckbuilding roguelike set in a buried Asteri city. Collect Script fragments, build your deck, and descend past monsters and the Researcher himself.",
+    "image": "https://geodle-game.github.io/DTR/assets/banner1.jpg",
+    "genre": ["Deckbuilding", "Roguelike", "Card Game"],
+    "gamePlatform": ["Web Browser"],
+    "playMode": ["SinglePlayer", "MultiPlayer"],
+    "applicationCategory": "Game",
+    "operatingSystem": "Any",
+    "inLanguage": "en",
+    "publisher": {
+      "@type": "Organization",
+      "name": "geodle-game",
+      "url": "https://github.com/geodle-game"
+    },
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD",
+      "availability": "https://schema.org/InStock"
+    }
+  }
+  </script>
+
+  <!-- ============================================================
+       STYLES
+       ============================================================ -->
   <link rel="stylesheet" href="./styles/base.css" />
   <link rel="stylesheet" href="./styles/cards.css" />
   <link rel="stylesheet" href="./styles/combat.css" />
@@ -13,6 +86,12 @@
 </head>
 <body>
   <div id="app"></div>
+  <noscript>
+    <div style="padding: 40px; text-align: center; font-family: system-ui, sans-serif; color: #c8cdd7; background: #14161a; min-height: 100vh;">
+      <h1 style="color:#ffd166;">Drawn to Ruin</h1>
+      <p>This game requires JavaScript to run. Please enable JavaScript and reload.</p>
+    </div>
+  </noscript>
   <script type="module" src="./main.js"></script>
 </body>
 </html>
